@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KyanetWorkStation 反馈 | Kyanetwork</title>
+  <style>
+    :root {
+      --bg-1: #eaf4ff;
+      --bg-2: #f8fbff;
+      --card: #ffffff;
+      --brand: #1b6ef3;
+      --brand-2: #3b82f6;
+      --text: #10233f;
+      --muted: #5e7394;
+      --border: #d8e6ff;
+      --danger: #cc3344;
+      --ok: #1f8c5b;
+    }
+    body[data-theme="dark"] {
+      --bg-1: #0f1728;
+      --bg-2: #111d34;
+      --card: #17233c;
+      --text: #ecf3ff;
+      --muted: #9cb2d9;
+      --border: #2d3f62;
+      --danger: #ff8898;
+      --ok: #7de4b0;
+      --brand: #4f9dff;
+      --brand-2: #7ab4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+    }
+    .wrap { max-width: 840px; margin: 0 auto; padding: 28px 16px 40px; }
+    .hero {
+      margin-bottom: 16px;
+      padding: 22px;
+      border-radius: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(31, 85, 168, 0.08);
+    }
+    .topbar { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+    .hero-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--brand);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .theme-btn {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 28px; }
+    .hero p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .hero p + p { margin-top: 8px; font-size: 13px; }
+    .link-entry { margin-top: 14px; }
+    .link-entry a { color: var(--brand); font-size: 13px; font-weight: 600; text-decoration: none; }
+    .link-entry a:hover { text-decoration: underline; }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 30px rgba(18, 64, 145, 0.1);
+      padding: 20px;
+    }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+    .hint { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 5px; }
+    .image-tip {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      background: color-mix(in srgb, var(--card) 88%, var(--bg-1) 12%);
+    }
+    select,input,textarea,button { width: 100%; font: inherit; }
+    input,textarea,select {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 12px;
+      outline: none;
+      background: var(--card);
+      color: var(--text);
+    }
+    input:focus,textarea:focus,select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(27, 110, 243, 0.15);
+    }
+    textarea { min-height: 150px; resize: vertical; }
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+    }
+    .btn[disabled] { opacity: 0.65; cursor: not-allowed; }
+    .msg { margin-top: 14px; font-size: 14px; border-radius: 8px; padding: 10px 12px; display: none; }
+    .msg.ok { color: var(--ok); border: 1px solid #b8e9cc; display: block; }
+    .msg.error { color: var(--danger); border: 1px solid #f6c4cd; display: block; }
+    .site-footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .site-footer p { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="topbar">
+        <div class="hero-badge">KyanetWorkStation Feedback</div>
+        <button id="themeToggle" class="theme-btn">切换深色</button>
+      </div>
+      <h1>KyanetWorkStation 反馈</h1>
+      <p>欢迎提交问题、建议或体验反馈。请尽量描述清楚实际情况、预期结果和复现方式；如果有截图，也可以将图片链接一并写在详细内容中，便于更快定位问题。</p>
+      <p>若你要提交的是“需要排期执行”的任务，请前往 WorkTask 提交页。</p>
+      <div class="link-entry">
+        <a href="/worktask/">前往 WorkTask 提交 / 任务安排页面</a>
+        <span> · </span>
+        <a href="/">返回首页入口</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <form id="feedbackForm">
+        <div class="field">
+          <label for="type">反馈类型</label>
+          <select id="type" name="type" required>
+            <option value="Bug">Bug</option>
+            <option value="功能建议">功能建议</option>
+            <option value="体验问题">体验问题</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="title">标题</label>
+          <input id="title" name="title" maxlength="80" required placeholder="请简要描述问题或建议">
+          <div class="hint"><span>最多 80 字</span><span id="titleCount">0/80</span></div>
+        </div>
+
+        <div class="field">
+          <label for="content">详细内容</label>
+          <textarea id="content" name="content" maxlength="2000" required placeholder="请尽量描述清楚发生了什么、你的预期是什么、你想提出什么建议；如有截图，请将图片链接一并粘贴在这里。"></textarea>
+          <div class="hint"><span>最多 2000 字</span><span id="contentCount">0/2000</span></div>
+          <p class="image-tip">如需附带截图，请先将图片上传到图床（如：S.​​EE、路过图床等），再把图片链接粘贴到详细内容中，并尽量写在对应说明旁边。</p>
+        </div>
+
+        <div class="field">
+          <label for="contact">联系方式</label>
+          <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱 / Telegram 等">
+          <div class="hint"><span>仅用于必要沟通</span><span id="contactCount">0/100</span></div>
+        </div>
+
+        <button class="btn" id="submitBtn" type="submit">提交反馈</button>
+      </form>
+      <div id="message" class="msg"></div>
+    </section>
+
+    <footer class="site-footer">
+      <p>© 2026 Kyanetwork All rights reserved.</p>
+      <p>反馈内容仅用于问题排查、体验优化与功能改进。</p>
+      <p>请勿填写敏感信息；联系方式仅用于必要时沟通反馈内容。</p>
+    </footer>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/feedback/main.js"></script>
+</body>
+</html>
+

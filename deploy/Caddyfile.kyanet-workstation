@@ -1,0 +1,22 @@
+workstation.example.com {
+    encode zstd gzip
+
+    reverse_proxy 127.0.0.1:3000 {
+        header_up Host {host}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+
+    @static {
+        path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.ico *.webp *.woff *.woff2
+    }
+    header @static Cache-Control "public, max-age=604800, immutable"
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+

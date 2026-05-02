@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KyanetWorkStation WorkTask | Kyanetwork</title>
+  <style>
+    :root {
+      --bg-1: #eaf4ff;
+      --bg-2: #f8fbff;
+      --card: #ffffff;
+      --brand: #1b6ef3;
+      --brand-2: #3b82f6;
+      --text: #10233f;
+      --muted: #5e7394;
+      --border: #d8e6ff;
+      --danger: #cc3344;
+      --ok: #1f8c5b;
+    }
+    body[data-theme="dark"] {
+      --bg-1: #0f1728;
+      --bg-2: #111d34;
+      --card: #17233c;
+      --text: #ecf3ff;
+      --muted: #9cb2d9;
+      --border: #2d3f62;
+      --danger: #ff8898;
+      --ok: #7de4b0;
+      --brand: #4f9dff;
+      --brand-2: #7ab4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 16px 40px; }
+    .hero {
+      margin-bottom: 16px;
+      padding: 22px;
+      border-radius: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(31, 85, 168, 0.08);
+    }
+    .topbar { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; }
+    .hero-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--brand);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .theme-btn {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 28px; }
+    .hero p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .hero p + p { margin-top: 8px; font-size: 13px; }
+    .hero a { color: var(--brand); font-size: 13px; font-weight: 600; text-decoration: none; }
+    .hero a:hover { text-decoration: underline; }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 30px rgba(18, 64, 145, 0.1);
+      padding: 20px;
+    }
+    .row { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+    .hint { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 5px; }
+    select,input,textarea,button { width: 100%; font: inherit; }
+    input,textarea,select {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 12px;
+      outline: none;
+      background: var(--card);
+      color: var(--text);
+    }
+    input:focus,textarea:focus,select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(27, 110, 243, 0.15);
+    }
+    textarea { min-height: 150px; resize: vertical; }
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+    }
+    .btn[disabled] { opacity: 0.65; cursor: not-allowed; }
+    .msg { margin-top: 14px; font-size: 14px; border-radius: 8px; padding: 10px 12px; display: none; }
+    .msg.ok { color: var(--ok); border: 1px solid #b8e9cc; display: block; }
+    .msg.error { color: var(--danger); border: 1px solid #f6c4cd; display: block; }
+    .site-footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .site-footer p { margin: 2px 0; }
+    @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="topbar">
+        <div class="hero-badge">KyanetWorkStation WorkTask</div>
+        <button id="themeToggle" class="theme-btn">切换深色</button>
+      </div>
+      <h1>WorkTask 提交 / 任务安排</h1>
+      <p>适用于需要排期处理、协作分配或执行跟踪的事项。你可以填写优先级和期望时间，我会在统一面板安排和处理任务。</p>
+      <p><a href="/feedback/">返回反馈页</a> · <a href="/">返回首页入口</a></p>
+    </section>
+
+    <section class="card">
+      <form id="worktaskForm">
+        <div class="row">
+          <div class="field">
+            <label for="type">WorkTask 类型</label>
+            <select id="type" name="type" required>
+              <option value="WorkTask提交">WorkTask提交</option>
+              <option value="任务安排">任务安排</option>
+              <option value="协作请求">协作请求</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="priority">优先级</label>
+            <select id="priority" name="priority" required>
+              <option value="medium">中</option>
+              <option value="low">低</option>
+              <option value="high">高</option>
+              <option value="urgent">紧急</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="contact">联系方式</label>
+            <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱 / Telegram 等">
+            <div class="hint"><span>必填</span><span id="contactCount">0/100</span></div>
+          </div>
+          <div class="field">
+            <label for="expectedAt">期望处理时间（可选）</label>
+            <input id="expectedAt" name="expectedAt" type="datetime-local">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="title">标题</label>
+          <input id="title" name="title" maxlength="100" required placeholder="请简要描述任务目标">
+          <div class="hint"><span>最多 100 字</span><span id="titleCount">0/100</span></div>
+        </div>
+
+        <div class="field">
+          <label for="content">详细说明</label>
+          <textarea id="content" name="content" maxlength="3000" required placeholder="请描述任务背景、目标、交付要求、依赖和截止预期等"></textarea>
+          <div class="hint"><span>最多 3000 字</span><span id="contentCount">0/3000</span></div>
+        </div>
+
+        <div class="field">
+          <label for="tags">标签（可选）</label>
+          <input id="tags" name="tags" maxlength="200" placeholder="例如：前端,运营,脚本优化">
+          <div class="hint"><span>用于后续检索</span><span id="tagsCount">0/200</span></div>
+        </div>
+
+        <button class="btn" id="submitBtn" type="submit">提交 WorkTask</button>
+      </form>
+      <div id="message" class="msg"></div>
+    </section>
+
+    <footer class="site-footer">
+      <p>© 2026 Kyanetwork All rights reserved.</p>
+      <p>WorkTask 内容仅用于任务安排、执行跟踪与协作处理。</p>
+      <p>请勿填写敏感信息；联系方式仅用于必要时沟通任务内容。</p>
+    </footer>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/worktask/main.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <allowedServerVariables>
+        <add name="HTTP_X_FORWARDED_PROTO" />
+        <add name="HTTP_X_FORWARDED_HOST" />
+      </allowedServerVariables>
+      <rules>
+        <rule name="ReverseProxyToNode" stopProcessing="true">
+          <match url="(.*)" />
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_PROTO" value="https" />
+            <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
+          </serverVariables>
+          <action type="Rewrite" url="http://127.0.0.1:3000/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+    <httpProtocol>
+      <customHeaders>
+        <add name="X-Content-Type-Options" value="nosniff" />
+        <add name="X-Frame-Options" value="SAMEORIGIN" />
+        <add name="Referrer-Policy" value="strict-origin-when-cross-origin" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>

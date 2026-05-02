@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KyanetWorkStation 入口 | Kyanetwork</title>
+  <style>
+    :root {
+      --bg-1: #eef6ff;
+      --bg-2: #f9fcff;
+      --card: #ffffff;
+      --text: #122848;
+      --muted: #5f769a;
+      --border: #d8e6ff;
+      --brand: #1b6ef3;
+      --brand-2: #4e95ff;
+    }
+    body[data-theme="dark"] {
+      --bg-1: #0f1728;
+      --bg-2: #111d34;
+      --card: #17233c;
+      --text: #ecf3ff;
+      --muted: #9cb2d9;
+      --border: #2d3f62;
+      --brand: #4f9dff;
+      --brand-2: #7ab4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 16px 44px;
+    }
+    .hero {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 14px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .theme-btn {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+    }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    p { margin: 0; color: var(--muted); line-height: 1.7; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .entry {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .entry h2 { margin: 0 0 6px; font-size: 20px; }
+    .entry p { font-size: 13px; }
+    .entry:hover { border-color: var(--brand); }
+    .entry .go {
+      margin-top: 10px;
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .showcase {
+      margin-top: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .showcase h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+    }
+    .showcase p {
+      margin: 0;
+      font-size: 13px;
+    }
+    .show-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .show-col {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--card) 86%, var(--bg-1) 14%);
+      min-height: 150px;
+    }
+    .show-col h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+    .show-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .show-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      background: var(--card);
+    }
+    .show-item strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+    .show-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .show-reply {
+      margin-top: 6px;
+      border-top: 1px dashed var(--border);
+      padding-top: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .footer {
+      margin-top: 14px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .footer p { margin: 2px 0; }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      .show-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="topbar">
+        <span class="badge">Kyanet Simple Entry</span>
+        <button id="themeToggle" class="theme-btn">切换深色</button>
+      </div>
+      <h1>KyanetWorkStation 入口</h1>
+      <p>提供简洁入口结构，后续会进行扩展。你可以从这里进入反馈提交与 WorkTask 提交/任务安排。</p>
+    </section>
+
+    <section class="grid">
+      <a class="entry" href="/feedback/">
+        <h2>反馈系统</h2>
+        <p>问题反馈、建议收集、体验意见。</p>
+        <div class="go">进入 /feedback/</div>
+      </a>
+      <a class="entry" href="/worktask/">
+        <h2>WorkTask 系统</h2>
+        <p>工单提交、任务安排、执行追踪。</p>
+        <div class="go">进入 /worktask/</div>
+      </a>
+    </section>
+
+    <section class="showcase">
+      <h2>当前处理进展</h2>
+      <p>这里展示被设置为允许在主页显示的正在处理的反馈与进行中的任务。</p>
+      <div class="show-grid">
+        <article class="show-col">
+          <h3>正在处理的反馈</h3>
+          <ul id="homeFeedbackList" class="show-list"></ul>
+        </article>
+        <article class="show-col">
+          <h3>正在进行的任务</h3>
+          <ul id="homeWorktaskList" class="show-list"></ul>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>© 2026 Kyanetwork All rights reserved.</p>
+      <p>该入口页用于快速访问系统各模块。</p>
+    </footer>
+  </main>
+  <script src="/theme.js"></script>
+  <script src="/index/main.js"></script>
+</body>
+</html>
+

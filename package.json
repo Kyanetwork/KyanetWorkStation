@@ -1,0 +1,35 @@
+{
+  "name": "kyanet-workstation",
+  "version": "1.0.0",
+  "description": "Lightweight feedback system migrated from CloudBase to self-hosted stack.",
+  "private": true,
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "node --watch server/app.js",
+    "test": "node --test tests/*.test.js",
+    "init-admin": "node scripts/init-admin.js",
+    "backup-db:core": "node scripts/backup-db.js",
+    "backup-db:rdbms": "node scripts/backup-db-rdbms.js",
+    "backup-db": "bash scripts/backup-db.sh",
+    "backup-db:linux": "bash scripts/backup-db.sh",
+    "backup-db:win": "powershell -ExecutionPolicy Bypass -File .\\scripts\\backup-db.ps1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.9.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "mysql2": "^3.15.2",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.16.3",
+    "pino": "^9.14.0"
+  }
+}
+
