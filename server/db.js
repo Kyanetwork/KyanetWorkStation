@@ -9,6 +9,19 @@ if (!SUPPORTED_CLIENTS.has(client)) {
   throw new Error(`Unsupported DB_CLIENT: ${config.dbClient}`);
 }
 
+const STATUS_PROFILE_SETTING_KEY = "status.profile";
+const MINECRAFT_STATUS_SETTING_KEY = "status.minecraft";
+const DEFAULT_STATUS_PROFILE = {
+  enabled: true,
+  apiBaseUrl: config.meowStatusBaseUrl,
+  timeoutMs: config.meowStatusTimeoutMs,
+  updatedAt: ""
+};
+const DEFAULT_MINECRAFT_STATUS = {
+  enabled: true,
+  updatedAt: ""
+};
+
 let sqliteDb = null;
 let mysqlPool = null;
 let postgresPool = null;
@@ -201,7 +214,12 @@ function sqliteSchemaStatements() {
       FOREIGN KEY(user_id) REFERENCES admin_user(id) ON DELETE CASCADE
     )`,
     "CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at ON admin_session(expires_at)",
-    "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)"
+    "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)",
+    `CREATE TABLE IF NOT EXISTS workstation_setting (
+      setting_key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`
   ];
 }
 
@@ -266,6 +284,11 @@ function mysqlSchemaStatements() {
       CONSTRAINT fk_admin_session_user
         FOREIGN KEY (user_id) REFERENCES admin_user(id)
         ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS workstation_setting (
+      setting_key VARCHAR(128) PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at VARCHAR(40) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   ];
 }
@@ -328,7 +351,12 @@ function postgresSchemaStatements() {
       last_seen_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at ON admin_session(expires_at)",
-    "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)"
+    "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)",
+    `CREATE TABLE IF NOT EXISTS workstation_setting (
+      setting_key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`
   ];
 }
 
@@ -342,6 +370,7 @@ async function initializeDatabase() {
     await executeMany(postgresSchemaStatements());
   }
   await ensureHomeDisplayColumns();
+  await ensureStatusSettings();
 }
 
 async function columnExists(tableName, columnName) {
@@ -483,6 +512,127 @@ async function getHealthCounts() {
     feedbackCount: toNumber(feedbackRow && feedbackRow.count),
     worktaskCount: toNumber(worktaskRow && worktaskRow.count)
   };
+}
+
+function defaultStatusProfile(now = "") {
+  return {
+    ...DEFAULT_STATUS_PROFILE,
+    updatedAt: now || DEFAULT_STATUS_PROFILE.updatedAt
+  };
+}
+
+function defaultMinecraftStatus(now = "") {
+  return {
+    ...DEFAULT_MINECRAFT_STATUS,
+    updatedAt: now || DEFAULT_MINECRAFT_STATUS.updatedAt
+  };
+}
+
+function normalizeStatusProfile(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  const timeoutMs = Number.parseInt(raw.timeoutMs, 10);
+  return {
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_STATUS_PROFILE.enabled,
+    apiBaseUrl: typeof raw.apiBaseUrl === "string" && raw.apiBaseUrl ? raw.apiBaseUrl : DEFAULT_STATUS_PROFILE.apiBaseUrl,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : DEFAULT_STATUS_PROFILE.timeoutMs,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : ""
+  };
+}
+
+function normalizeMinecraftStatus(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  return {
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_MINECRAFT_STATUS.enabled,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : ""
+  };
+}
+
+async function getSettingJson(key, defaults) {
+  const p1 = placeholder(1);
+  const row = await queryOne(`SELECT value FROM workstation_setting WHERE setting_key = ${p1} LIMIT 1`, [key]);
+  if (!row || typeof row.value !== "string") {
+    return { ...defaults };
+  }
+  try {
+    const parsed = JSON.parse(row.value);
+    if (parsed && typeof parsed === "object") {
+      return {
+        ...defaults,
+        ...parsed
+      };
+    }
+  } catch (_) {
+    return { ...defaults };
+  }
+  return { ...defaults };
+}
+
+async function setSettingJson(key, value) {
+  const now = nowIso();
+  const encoded = JSON.stringify(value);
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const p3 = placeholder(3);
+  const updateResult = await execute(
+    `UPDATE workstation_setting SET value = ${p1}, updated_at = ${p2} WHERE setting_key = ${p3}`,
+    [encoded, now, key]
+  );
+  if (updateResult.changes === 0) {
+    await execute(
+      `INSERT INTO workstation_setting (setting_key, value, updated_at) VALUES (${p1}, ${p2}, ${p3})`,
+      [key, encoded, now]
+    );
+  }
+  return value;
+}
+
+async function ensureSettingJson(key, defaults) {
+  const p1 = placeholder(1);
+  const row = await queryOne(`SELECT setting_key FROM workstation_setting WHERE setting_key = ${p1} LIMIT 1`, [key]);
+  if (row) {
+    return;
+  }
+  await setSettingJson(key, defaults);
+}
+
+async function ensureStatusSettings() {
+  const now = nowIso();
+  await ensureSettingJson(STATUS_PROFILE_SETTING_KEY, defaultStatusProfile(now));
+  await ensureSettingJson(MINECRAFT_STATUS_SETTING_KEY, defaultMinecraftStatus(now));
+}
+
+async function getStatusSettings() {
+  const profile = normalizeStatusProfile(
+    await getSettingJson(STATUS_PROFILE_SETTING_KEY, defaultStatusProfile())
+  );
+  const minecraft = normalizeMinecraftStatus(
+    await getSettingJson(MINECRAFT_STATUS_SETTING_KEY, defaultMinecraftStatus())
+  );
+  return { profile, minecraft };
+}
+
+async function updateStatusProfileSettings(payload) {
+  const current = (await getStatusSettings()).profile;
+  const now = nowIso();
+  const next = normalizeStatusProfile({
+    ...current,
+    enabled: payload.enabled,
+    apiBaseUrl: payload.apiBaseUrl,
+    timeoutMs: payload.timeoutMs,
+    updatedAt: now
+  });
+  return setSettingJson(STATUS_PROFILE_SETTING_KEY, next);
+}
+
+async function updateMinecraftStatusSettings(payload) {
+  const current = (await getStatusSettings()).minecraft;
+  const now = nowIso();
+  const next = normalizeMinecraftStatus({
+    ...current,
+    enabled: payload.enabled,
+    updatedAt: now
+  });
+  return setSettingJson(MINECRAFT_STATUS_SETTING_KEY, next);
 }
 
 async function createFeedback(payload) {
@@ -1045,5 +1195,8 @@ module.exports = {
   arrangeWorktask,
   deleteWorktask,
   getHomeHighlights,
+  getStatusSettings,
+  updateStatusProfileSettings,
+  updateMinecraftStatusSettings,
   closeDatabase
 };

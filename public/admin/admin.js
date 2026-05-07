@@ -8,6 +8,7 @@
   const worktaskCreateMsg = document.getElementById("worktaskCreateMsg");
   const smtpTestMsg = document.getElementById("smtpTestMsg");
   const webhookTestMsg = document.getElementById("webhookTestMsg");
+  const statusSettingsMsg = document.getElementById("statusSettingsMsg");
   const toastWrap = document.getElementById("toastWrap");
 
   const tabFeedback = document.getElementById("tabFeedback");
@@ -21,6 +22,10 @@
     active: "feedback",
     feedback: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
     worktask: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
+    statusSettings: {
+      profile: { enabled: true, apiBaseUrl: "http://127.0.0.1:8080", timeoutMs: 5000 },
+      minecraft: { enabled: true }
+    },
     ui: {
       displayTimezone: "Asia/Shanghai",
       displayLocale: "zh-CN",
@@ -177,6 +182,59 @@
     } catch (_) {
       setDisplaySettings({});
     }
+  }
+
+  function renderStatusSettings(settings) {
+    const profile = settings.profile || {};
+    const minecraft = settings.minecraft || {};
+    state.statusSettings = {
+      profile: {
+        enabled: profile.enabled !== false,
+        apiBaseUrl: profile.apiBaseUrl || "http://127.0.0.1:8080",
+        timeoutMs: Number(profile.timeoutMs || 5000)
+      },
+      minecraft: {
+        enabled: minecraft.enabled !== false
+      }
+    };
+
+    document.getElementById("statusProfileEnabled").value = state.statusSettings.profile.enabled ? "1" : "0";
+    document.getElementById("meowStatusApiBaseUrl").value = state.statusSettings.profile.apiBaseUrl;
+    document.getElementById("meowStatusTimeoutMs").value = String(state.statusSettings.profile.timeoutMs);
+    document.getElementById("statusMinecraftEnabled").value = state.statusSettings.minecraft.enabled ? "1" : "0";
+  }
+
+  async function loadStatusSettings() {
+    const data = await api("/api/admin/status/settings", null, { method: "GET" });
+    renderStatusSettings(data);
+  }
+
+  async function saveStatusProfileSettings() {
+    clearMessage(statusSettingsMsg);
+    const btn = document.getElementById("statusProfileSaveBtn");
+    const payload = {
+      enabled: document.getElementById("statusProfileEnabled").value === "1",
+      apiBaseUrl: document.getElementById("meowStatusApiBaseUrl").value.trim(),
+      timeoutMs: Number(document.getElementById("meowStatusTimeoutMs").value || 5000)
+    };
+    await withButtonBusy(btn, "保存中...", async () => {
+      const data = await api("/api/admin/status/profile", payload);
+      renderStatusSettings({ ...state.statusSettings, profile: data });
+      notify(statusSettingsMsg, "ok", "MeowStatus 状态展示设置已保存");
+    });
+  }
+
+  async function saveMinecraftStatusSettings() {
+    clearMessage(statusSettingsMsg);
+    const btn = document.getElementById("statusMinecraftSaveBtn");
+    const payload = {
+      enabled: document.getElementById("statusMinecraftEnabled").value === "1"
+    };
+    await withButtonBusy(btn, "保存中...", async () => {
+      const data = await api("/api/admin/status/minecraft", payload);
+      renderStatusSettings({ ...state.statusSettings, minecraft: data });
+      notify(statusSettingsMsg, "ok", "Minecraft 状态展示设置已保存");
+    });
   }
 
   function feedbackStatusLabel(status) {
@@ -486,6 +544,7 @@
       document.getElementById("loginState").textContent = `已登录：${data.username}`;
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
+      await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       switchModule("feedback");
     } catch (error) {
       showMessage(loginMsg, "error", error.message);
@@ -498,6 +557,7 @@
       document.getElementById("loginState").textContent = `已登录：${data.username}`;
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
+      await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       switchModule("feedback");
     } catch (_) {
       loginCard.classList.remove("hidden");
@@ -520,6 +580,7 @@
       clearMessage(worktaskCreateMsg);
       clearMessage(smtpTestMsg);
       clearMessage(webhookTestMsg);
+      clearMessage(statusSettingsMsg);
       document.getElementById("smtpTestTo").value = "";
       document.getElementById("webhookTestContent").value = "";
       loginCard.classList.remove("hidden");
@@ -551,6 +612,22 @@
       await triggerWebhookTestMessage();
     } catch (error) {
       notify(webhookTestMsg, "error", error.message);
+    }
+  });
+
+  document.getElementById("statusProfileSaveBtn").addEventListener("click", async () => {
+    try {
+      await saveStatusProfileSettings();
+    } catch (error) {
+      notify(statusSettingsMsg, "error", error.message);
+    }
+  });
+
+  document.getElementById("statusMinecraftSaveBtn").addEventListener("click", async () => {
+    try {
+      await saveMinecraftStatusSettings();
+    } catch (error) {
+      notify(statusSettingsMsg, "error", error.message);
     }
   });
 

@@ -2,7 +2,10 @@
   const state = {
     locale: "zh-CN",
     timezone: "Asia/Shanghai",
-    formatter: null
+    formatter: null,
+    meowStatusRefreshMs: 10000,
+    meowStatusTimer: null,
+    meowStatusLoading: false
   };
 
   function createFormatter(locale, timezone) {
@@ -65,6 +68,27 @@
     return ({ low: "低", medium: "中", high: "高", urgent: "紧急" }[priority]) || priority || "-";
   }
 
+  function statusStateLabel(status) {
+    return ({ working: "工作中", studying: "学习中", resting: "休息中", away: "离开中" }[status]) || status || "-";
+  }
+
+  function minecraftOnlineText(payload) {
+    if (!payload) return "未知";
+    return payload.online ? "在线" : "离线";
+  }
+
+  function minecraftPlayersText(payload) {
+    if (!payload) return "-";
+    const online = payload.playersOnline == null ? "?" : payload.playersOnline;
+    const max = payload.playersMax == null ? "?" : payload.playersMax;
+    return `${online} / ${max}`;
+  }
+
+  function minecraftLatencyText(payload) {
+    if (!payload || payload.latencyMs == null) return "-";
+    return `${payload.latencyMs} ms`;
+  }
+
   async function fetchJson(path) {
     const response = await fetch(path);
     const data = await response.json().catch(() => ({}));
@@ -91,15 +115,116 @@
     `).join("");
   }
 
+  function renderMeowStatus(statusData) {
+    const section = document.getElementById("meowStatusSection");
+    const profilePanel = document.getElementById("profileStatusPanel");
+    const mcPanel = document.getElementById("minecraftStatusPanel");
+    const profileEnabled = Boolean(statusData.settings && statusData.settings.profileEnabled);
+    const minecraftEnabled = Boolean(statusData.settings && statusData.settings.minecraftEnabled);
+
+    if (!section) {
+      return;
+    }
+
+    if (!profileEnabled && !minecraftEnabled) {
+      section.classList.add("hidden");
+      profilePanel.classList.add("hidden");
+      mcPanel.classList.add("hidden");
+      return;
+    }
+
+    section.classList.remove("hidden");
+    profilePanel.classList.toggle("hidden", !profileEnabled);
+    mcPanel.classList.toggle("hidden", !minecraftEnabled);
+
+    if (profileEnabled) {
+      const profile = statusData.profile || {};
+      document.getElementById("profileState").textContent = statusStateLabel(profile.state);
+      document.getElementById("profileNote").textContent = profile.note || statusData.error || "-";
+      document.getElementById("profileUpdatedAt").textContent = `更新时间：${formatDateTime(profile.updatedAt)}`;
+    }
+
+    if (minecraftEnabled) {
+      renderMinecraftWidgets(statusData.minecraftWidgets || [], statusData.error || "");
+    }
+  }
+
+  function renderMinecraftWidgets(widgets, error) {
+    const container = document.getElementById("minecraftStatusList");
+    if (!container) return;
+
+    if (error) {
+      container.innerHTML = `<div class="mc-error">${escapeHtml(error)}</div>`;
+      return;
+    }
+    if (!widgets.length) {
+      container.innerHTML = `<div class="empty">MeowStatus 暂无 Minecraft 挂件数据。</div>`;
+      return;
+    }
+
+    container.innerHTML = widgets.map((widget) => {
+      const payload = widget.lastPayload;
+      const onlineState = payload && payload.online === true ? "online" : payload && payload.online === false ? "offline" : "unknown";
+      const iconHtml = payload && payload.favicon && String(payload.favicon).startsWith("data:image")
+        ? `<img class="server-icon" src="${escapeHtml(payload.favicon)}" alt="">`
+        : `<img class="server-icon hidden" alt="">`;
+      const target = payload && payload.target ? payload.target : `${widget.config.host || "-"}:${widget.config.port || "-"}`;
+      const errorText = widget.lastErrorCode ? `[${widget.lastErrorCode}] ${widget.lastError || ""}` : (widget.lastError || "");
+      return `
+        <article class="mc-card" data-online="${onlineState}">
+          <div class="mc-head">
+            <div class="mc-name">${iconHtml}<span>${escapeHtml(widget.name)}</span></div>
+            <div class="mc-state">${escapeHtml(minecraftOnlineText(payload))}</div>
+          </div>
+          <div class="mc-line">地址：${escapeHtml(target)} | 版本：${escapeHtml(payload && payload.version || "-")} | 核心：${escapeHtml(payload && payload.serverSoftware || "-")}</div>
+          <div class="mc-line">玩家：${escapeHtml(minecraftPlayersText(payload))} | 延迟：${escapeHtml(minecraftLatencyText(payload))} | 更新时间：${escapeHtml(formatDateTime(widget.lastUpdatedAt))}</div>
+          <div class="mc-line">MOTD：${escapeHtml(payload && payload.motd || "-")}</div>
+          ${errorText ? `<div class="mc-error">${escapeHtml(errorText)}</div>` : ""}
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function refreshMeowStatus() {
+    if (state.meowStatusLoading) return;
+    state.meowStatusLoading = true;
+    try {
+      const meowStatus = await fetchJson("/api/public/meowstatus");
+      renderMeowStatus(meowStatus || {});
+    } catch (_) {
+      renderMeowStatus({
+        settings: {
+          profileEnabled: true,
+          minecraftEnabled: true
+        },
+        profile: null,
+        minecraftWidgets: [],
+        error: "MeowStatus 状态刷新失败，请稍后重试。"
+      });
+    } finally {
+      state.meowStatusLoading = false;
+    }
+  }
+
+  function startMeowStatusRefreshTimer() {
+    if (state.meowStatusTimer) {
+      clearInterval(state.meowStatusTimer);
+    }
+    const intervalMs = Math.max(5000, Number(state.meowStatusRefreshMs) || 10000);
+    state.meowStatusTimer = setInterval(refreshMeowStatus, intervalMs);
+  }
+
   async function loadHomeShowcase() {
     try {
-      const [uiConfig, highlights] = await Promise.all([
+      const [uiConfig, highlights, meowStatus] = await Promise.all([
         fetchJson("/api/public/config"),
-        fetchJson("/api/public/highlights")
+        fetchJson("/api/public/highlights"),
+        fetchJson("/api/public/meowstatus")
       ]);
 
       state.locale = uiConfig.displayLocale || "zh-CN";
       state.timezone = uiConfig.displayTimezone || "Asia/Shanghai";
+      state.meowStatusRefreshMs = Number(uiConfig.meowStatusRefreshMs || 10000);
       state.formatter = createFormatter(state.locale, state.timezone);
 
       renderList(
@@ -114,6 +239,8 @@
         "暂无被设置为主页显示的进行中任务。",
         (item) => `类型：${item.type} | 来源：${item.createdByAdmin ? "本人添加" : "用户提交"} | 状态：${worktaskStatusLabel(item.status)} | 优先级：${worktaskPriorityLabel(item.priority)} | 更新时间：${formatDateTime(item.updatedAt)}`
       );
+      renderMeowStatus(meowStatus || {});
+      startMeowStatusRefreshTimer();
     } catch (_) {
       renderList("homeFeedbackList", [], "主页展示数据加载失败，请稍后刷新。", () => "");
       renderList("homeWorktaskList", [], "主页展示数据加载失败，请稍后刷新。", () => "");

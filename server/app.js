@@ -32,8 +32,12 @@ const {
   updateWorktaskNoteReply,
   arrangeWorktask,
   deleteWorktask,
-  getHomeHighlights
+  getHomeHighlights,
+  getStatusSettings,
+  updateStatusProfileSettings,
+  updateMinecraftStatusSettings
 } = require("./db");
+const { fetchMeowStatusDashboard } = require("./meowstatus");
 const { sendError } = require("./errors");
 const {
   buildSessionCookieOptions,
@@ -56,7 +60,9 @@ const {
   validateHomeDisplayPayload,
   validateNoteReplyPayload,
   validateSmtpTestPayload,
-  validateWebhookTestPayload
+  validateWebhookTestPayload,
+  validateStatusProfileSettingsPayload,
+  validateMinecraftStatusSettingsPayload
 } = require("./validation");
 const {
   createRequireSameOriginForAdminMutation,
@@ -272,7 +278,8 @@ app.get("/api/public/config", (req, res) => {
     ok: true,
     data: {
       displayTimezone: config.displayTimezone,
-      displayLocale: config.displayLocale
+      displayLocale: config.displayLocale,
+      meowStatusRefreshMs: config.meowStatusRefreshMs
     }
   });
 });
@@ -283,6 +290,40 @@ app.get("/api/public/highlights", asyncHandler(async (req, res) => {
     ok: true,
     data
   });
+}));
+
+app.get("/api/public/meowstatus", asyncHandler(async (req, res) => {
+  const settings = await getStatusSettings();
+  const data = {
+    settings: {
+      profileEnabled: settings.profile.enabled,
+      minecraftEnabled: settings.minecraft.enabled
+    },
+    profile: null,
+    minecraftWidgets: [],
+    error: ""
+  };
+
+  if (!settings.profile.enabled && !settings.minecraft.enabled) {
+    return res.json({ ok: true, data });
+  }
+
+  try {
+    const dashboard = await fetchMeowStatusDashboard({
+      baseUrl: settings.profile.apiBaseUrl,
+      timeoutMs: settings.profile.timeoutMs
+    });
+    if (settings.profile.enabled) {
+      data.profile = dashboard.profile;
+    }
+    if (settings.minecraft.enabled) {
+      data.minecraftWidgets = dashboard.minecraftWidgets;
+    }
+  } catch (error) {
+    data.error = error && error.message ? error.message : "MeowStatus 状态加载失败";
+  }
+
+  return res.json({ ok: true, data });
 }));
 
 app.post("/api/feedback", submitLimiter, asyncHandler(async (req, res) => {
@@ -382,6 +423,31 @@ app.post("/api/admin/logout", requireAdminSession, asyncHandler(async (req, res)
   await destroySessionByCookieToken(req.adminToken);
   clearSessionCookie(res);
   res.json({ ok: true });
+}));
+
+app.get("/api/admin/status/settings", requireAdminSession, asyncHandler(async (req, res) => {
+  const data = await getStatusSettings();
+  res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/status/profile", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateStatusProfileSettingsPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+
+  const data = await updateStatusProfileSettings(validation.data);
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/status/minecraft", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateMinecraftStatusSettingsPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+
+  const data = await updateMinecraftStatusSettings(validation.data);
+  return res.json({ ok: true, data });
 }));
 
 app.post("/api/admin/notify/smtp-test", requireAdminSession, asyncHandler(async (req, res) => {

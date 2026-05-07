@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/png" href="images/favicon.png">
   <title>KyanetWorkStation 入口 | Kyanetwork</title>
   <style>
     :root {
@@ -117,6 +118,95 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
+    .status-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr);
+      gap: 10px;
+    }
+    .status-panel {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: color-mix(in srgb, var(--card) 88%, var(--bg-1) 12%);
+      min-height: 124px;
+    }
+    .status-panel h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+    .state-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: var(--brand);
+      font-weight: 700;
+      font-size: 13px;
+      background: var(--card);
+    }
+    .state-note {
+      margin-top: 10px;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .mc-list {
+      display: grid;
+      gap: 8px;
+    }
+    .mc-card {
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--muted);
+      border-radius: 8px;
+      padding: 9px;
+      background: var(--card);
+    }
+    .mc-card[data-online="online"] { border-left-color: #16865c; }
+    .mc-card[data-online="offline"] { border-left-color: #c43546; }
+    .mc-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 5px;
+    }
+    .mc-name {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .server-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      image-rendering: pixelated;
+      flex: 0 0 auto;
+    }
+    .server-icon.hidden { display: none; }
+    .mc-state {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .mc-line {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .mc-error {
+      color: #c43546;
+      font-size: 12px;
+      line-height: 1.6;
+    }
     .show-col {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -167,6 +257,7 @@
       font-size: 12px;
       line-height: 1.7;
     }
+    .hidden { display: none !important; }
     .footer {
       margin-top: 14px;
       text-align: center;
@@ -178,6 +269,7 @@
     @media (max-width: 860px) {
       .grid { grid-template-columns: 1fr; }
       .show-grid { grid-template-columns: 1fr; }
+      .status-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -205,6 +297,23 @@
       </a>
     </section>
 
+    <section id="meowStatusSection" class="showcase hidden">
+      <h2>状态信息</h2>
+      <p>这里同步展示 MeowStatus 的公开状态与 Minecraft 服务器挂件状态。</p>
+      <div class="status-grid">
+        <article id="profileStatusPanel" class="status-panel hidden">
+          <h3>当前状态</h3>
+          <div id="profileState" class="state-pill">-</div>
+          <div id="profileNote" class="state-note">-</div>
+          <div id="profileUpdatedAt" class="show-meta" style="margin-top:8px;">更新时间：-</div>
+        </article>
+        <article id="minecraftStatusPanel" class="status-panel hidden">
+          <h3>Minecraft 服务器</h3>
+          <div id="minecraftStatusList" class="mc-list"></div>
+        </article>
+      </div>
+    </section>
+
     <section class="showcase">
       <h2>当前处理进展</h2>
       <p>这里展示被设置为允许在主页显示的正在处理的反馈与进行中的任务。</p>
@@ -229,4 +338,3 @@
   <script src="/index/main.js"></script>
 </body>
 </html>
-

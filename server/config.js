@@ -67,6 +67,9 @@ const config = {
   },
   displayTimezone: stringOrDefault(process.env.DISPLAY_TIMEZONE, "Asia/Shanghai"),
   displayLocale: stringOrDefault(process.env.DISPLAY_LOCALE, "zh-CN"),
+  meowStatusBaseUrl: stringOrDefault(process.env.MEOWSTATUS_BASE_URL, "http://127.0.0.1:8080"),
+  meowStatusTimeoutMs: parseIntOrDefault(process.env.MEOWSTATUS_TIMEOUT_MS, 5000),
+  meowStatusRefreshMs: parseIntOrDefault(process.env.MEOWSTATUS_REFRESH_MS, 10000),
   backupDir: path.resolve(ROOT_DIR, process.env.BACKUP_DIR || "./backups"),
   backupRetentionDays: parseIntOrDefault(process.env.BACKUP_RETENTION_DAYS, 30),
   smtp: {

@@ -16,3 +16,4 @@ PLAN.md
 @old_files/*
 .vscode/
 .idea/
+public/favicon.*

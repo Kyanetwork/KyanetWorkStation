@@ -5,6 +5,7 @@ const ALLOWED_WORKTASK_TYPES = new Set(["WorkTask提交", "工单提交", "任�
 const ALLOWED_WORKTASK_STATUS = new Set(["new", "scheduled", "in_progress", "completed", "cancelled"]);
 const ALLOWED_WORKTASK_PRIORITY = new Set(["low", "medium", "high", "urgent"]);
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SIMPLE_URL_PATTERN = /^https?:\/\/.+/i;
 
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -397,6 +398,43 @@ function validateWebhookTestPayload(payload) {
   };
 }
 
+function validateStatusProfileSettingsPayload(payload) {
+  const enabled = parseBooleanLike(payload.enabled);
+  const apiBaseUrl = normalizeNullableString(payload.apiBaseUrl, 300);
+  const timeoutMs = Number.parseInt(payload.timeoutMs, 10);
+
+  if (enabled === null) {
+    return { valid: false, message: "enabled 必须为 true/false 或 1/0" };
+  }
+  if (apiBaseUrl && !SIMPLE_URL_PATTERN.test(apiBaseUrl)) {
+    return { valid: false, message: "apiBaseUrl 必须是 http/https 地址" };
+  }
+
+  return {
+    valid: true,
+    data: {
+      enabled,
+      apiBaseUrl,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 5000
+    }
+  };
+}
+
+function validateMinecraftStatusSettingsPayload(payload) {
+  const enabled = parseBooleanLike(payload.enabled);
+
+  if (enabled === null) {
+    return { valid: false, message: "enabled 必须为 true/false 或 1/0" };
+  }
+
+  return {
+    valid: true,
+    data: {
+      enabled
+    }
+  };
+}
+
 module.exports = {
   ALLOWED_STATUS,
   ALLOWED_TYPES,
@@ -416,5 +454,7 @@ module.exports = {
   validateHomeDisplayPayload,
   validateNoteReplyPayload,
   validateSmtpTestPayload,
-  validateWebhookTestPayload
+  validateWebhookTestPayload,
+  validateStatusProfileSettingsPayload,
+  validateMinecraftStatusSettingsPayload
 };
