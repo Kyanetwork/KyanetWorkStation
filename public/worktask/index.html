@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>KyanetWorkStation WorkTask | Kyanetwork</title>
+  <title>KWS WorkTask | Kyanetwork</title>
   <style>
     :root {
       --bg-1: #eaf4ff;
@@ -46,15 +46,27 @@
       border: 1px solid var(--border);
       box-shadow: 0 8px 24px rgba(31, 85, 168, 0.08);
     }
-    .topbar { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
     .hero-badge {
-      display: inline-block;
+      display: inline-flex;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
       font-size: 12px;
       font-weight: 700;
       color: var(--brand);
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 4px 10px;
+      padding: 5px 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .theme-btn {
       border: 1px solid var(--border);
@@ -62,9 +74,11 @@
       background: var(--card);
       color: var(--text);
       cursor: pointer;
-      padding: 8px 12px;
+      padding: 6px 8px;
       font: inherit;
       font-size: 13px;
+      line-height: 1.25;
+      white-space: nowrap;
     }
     .hero h1 { margin: 0 0 8px; font-size: 28px; }
     .hero p { margin: 0; color: var(--muted); line-height: 1.6; }
@@ -112,6 +126,10 @@
     .site-footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
     .site-footer p { margin: 2px 0; }
     @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+    @media (max-width: 520px) {
+      .topbar { gap: 8px; }
+      .theme-btn { padding-inline: 7px; }
+    }
   </style>
 </head>
 <body>
@@ -121,9 +139,9 @@
         <div class="hero-badge">KyanetWorkStation WorkTask</div>
         <button id="themeToggle" class="theme-btn">切换深色</button>
       </div>
-      <h1>WorkTask 提交 / 任务安排</h1>
+      <h1>WorkTask 提交</h1>
       <p>适用于需要排期处理、协作分配或执行跟踪的事项。你可以填写优先级和期望时间，我会在统一面板安排和处理任务。</p>
-      <p><a href="/feedback/">返回反馈页</a> · <a href="/">返回首页入口</a></p>
+      <p><a href="/feedback/">前往反馈页</a> · <a href="/">返回KWS入口</a></p>
     </section>
 
     <section class="card">
@@ -152,7 +170,7 @@
         <div class="row">
           <div class="field">
             <label for="contact">联系方式</label>
-            <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱 / Telegram 等">
+            <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱等">
             <div class="hint"><span>必填</span><span id="contactCount">0/100</span></div>
           </div>
           <div class="field">
@@ -187,7 +205,7 @@
     <footer class="site-footer">
       <p>© 2026 Kyanetwork All rights reserved.</p>
       <p>WorkTask 内容仅用于任务安排、执行跟踪与协作处理。</p>
-      <p>请勿填写敏感信息；联系方式仅用于必要时沟通任务内容。</p>
+      <p>请谨慎填写敏感信息；联系方式仅用于必要时沟通任务内容。</p>
     </footer>
   </main>
 

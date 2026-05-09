@@ -89,6 +89,7 @@ const config = {
     provider: stringOrDefault(process.env.WEBHOOK_PROVIDER, "generic").toLowerCase(),
     urls: csvOrEmptyList(process.env.WEBHOOK_URLS || ""),
     secret: process.env.WEBHOOK_SECRET || "",
+    keywords: csvOrEmptyList(process.env.WEBHOOK_KEYWORDS || ""),
     timeoutMs: parseIntOrDefault(process.env.WEBHOOK_TIMEOUT_MS, 5000),
     titlePrefix: stringOrDefault(process.env.WEBHOOK_TITLE_PREFIX, "[KyanetWorkStation]")
   }

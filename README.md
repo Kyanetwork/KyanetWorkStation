@@ -571,6 +571,7 @@ sudo systemctl reload nginx
 | `WEBHOOK_PROVIDER` | Webhook 平台（`wecom/feishu/lark/dingtalk/slack/generic`） | `generic` |
 | `WEBHOOK_URLS` | Webhook 地址列表（逗号分隔） | - |
 | `WEBHOOK_SECRET` | 可选密钥（Generic 签名 / 钉钉签名） | - |
+| `WEBHOOK_KEYWORDS` | 可选安全关键词列表（逗号分隔，用于钉钉等平台的关键词校验） | - |
 | `WEBHOOK_TIMEOUT_MS` | Webhook 请求超时（毫秒） | `5000` |
 | `WEBHOOK_TITLE_PREFIX` | Webhook 标题前缀 | `[KyanetWorkStation]` |
 

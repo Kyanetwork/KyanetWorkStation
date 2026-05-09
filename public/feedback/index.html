@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" type="image/png" href="images/favicon.png">
-  <title>KyanetWorkStation 反馈 | Kyanetwork</title>
+  <title>KWS 反馈 | Kyanetwork</title>
   <style>
     :root {
       --bg-1: #eaf4ff;
@@ -47,16 +47,28 @@
       border: 1px solid var(--border);
       box-shadow: 0 8px 24px rgba(31, 85, 168, 0.08);
     }
-    .topbar { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
     .hero-badge {
-      display: inline-block;
+      display: inline-flex;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
       font-size: 12px;
       font-weight: 700;
       color: var(--brand);
       background: transparent;
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 4px 10px;
+      padding: 5px 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .theme-btn {
       border: 1px solid var(--border);
@@ -64,9 +76,11 @@
       background: var(--card);
       color: var(--text);
       cursor: pointer;
-      padding: 8px 12px;
+      padding: 6px 8px;
       font: inherit;
       font-size: 13px;
+      line-height: 1.25;
+      white-space: nowrap;
     }
     .hero h1 { margin: 0 0 8px; font-size: 28px; }
     .hero p { margin: 0; color: var(--muted); line-height: 1.6; }
@@ -123,6 +137,10 @@
     .msg.error { color: var(--danger); border: 1px solid #f6c4cd; display: block; }
     .site-footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
     .site-footer p { margin: 2px 0; }
+    @media (max-width: 520px) {
+      .topbar { gap: 8px; }
+      .theme-btn { padding-inline: 7px; }
+    }
   </style>
 </head>
 <body>
@@ -134,11 +152,12 @@
       </div>
       <h1>KyanetWorkStation 反馈</h1>
       <p>欢迎提交问题、建议或体验反馈。请尽量描述清楚实际情况、预期结果和复现方式；如果有截图，也可以将图片链接一并写在详细内容中，便于更快定位问题。</p>
+      <p>在你提交前，请现在KWS首页检查是否有重复提交的反馈或正在处理的相关问题，以免造成资源浪费和处理延误，非常感谢。</p>
       <p>若你要提交的是“需要排期执行”的任务，请前往 WorkTask 提交页。</p>
       <div class="link-entry">
-        <a href="/worktask/">前往 WorkTask 提交 / 任务安排页面</a>
+        <a href="/worktask/">前往 WorkTask 提交页面</a>
         <span> · </span>
-        <a href="/">返回首页入口</a>
+        <a href="/">返回KWS入口</a>
       </div>
     </section>
 
@@ -169,7 +188,7 @@
 
         <div class="field">
           <label for="contact">联系方式</label>
-          <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱 / Telegram 等">
+          <input id="contact" name="contact" maxlength="100" required placeholder="QQ / 微信 / 邮箱等">
           <div class="hint"><span>仅用于必要沟通</span><span id="contactCount">0/100</span></div>
         </div>
 
@@ -181,7 +200,7 @@
     <footer class="site-footer">
       <p>© 2026 Kyanetwork All rights reserved.</p>
       <p>反馈内容仅用于问题排查、体验优化与功能改进。</p>
-      <p>请勿填写敏感信息；联系方式仅用于必要时沟通反馈内容。</p>
+      <p>请谨慎填写敏感信息；联系方式仅用于必要时沟通反馈内容。</p>
     </footer>
   </main>
 
@@ -189,4 +208,3 @@
   <script src="/feedback/main.js"></script>
 </body>
 </html>
-

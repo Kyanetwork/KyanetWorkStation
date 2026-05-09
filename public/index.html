@@ -53,6 +53,13 @@
       align-items: center;
       margin-bottom: 8px;
     }
+    .topbar-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
     .badge {
       display: inline-block;
       border: 1px solid var(--border);
@@ -62,6 +69,9 @@
       color: var(--muted);
     }
     .theme-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       border: 1px solid var(--border);
       border-radius: 10px;
       background: var(--card);
@@ -70,6 +80,7 @@
       padding: 8px 12px;
       font: inherit;
       font-size: 13px;
+      text-decoration: none;
     }
     h1 { margin: 0 0 8px; font-size: 30px; }
     p { margin: 0; color: var(--muted); line-height: 1.7; }
@@ -121,7 +132,7 @@
     .status-grid {
       margin-top: 12px;
       display: grid;
-      grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr);
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 10px;
     }
     .status-panel {
@@ -277,8 +288,11 @@
   <main class="wrap">
     <section class="hero">
       <div class="topbar">
-        <span class="badge">Kyanet Simple Entry</span>
-        <button id="themeToggle" class="theme-btn">切换深色</button>
+        <span class="badge">KWS Simple Entry</span>
+        <div class="topbar-actions">
+          <a class="theme-btn" href="/">返回Kyanet主页</a>
+          <button id="themeToggle" class="theme-btn">切换深色</button>
+        </div>
       </div>
       <h1>KyanetWorkStation 入口</h1>
       <p>提供简洁入口结构，后续会进行扩展。你可以从这里进入反馈提交与 WorkTask 提交/任务安排。</p>
@@ -288,18 +302,33 @@
       <a class="entry" href="/feedback/">
         <h2>反馈系统</h2>
         <p>问题反馈、建议收集、体验意见。</p>
-        <div class="go">进入 /feedback/</div>
+        <div class="go">进入反馈系统</div>
       </a>
       <a class="entry" href="/worktask/">
         <h2>WorkTask 系统</h2>
         <p>工单提交、任务安排、执行追踪。</p>
-        <div class="go">进入 /worktask/</div>
+        <div class="go">进入WorkTask系统</div>
       </a>
+    </section>
+
+    <section class="showcase">
+      <h2>当前处理进展</h2>
+      <p>这里展示被设置为允许在主页显示的正在处理的反馈与进行中的任务，在你提交前请检查是否有重复提交。</p>
+      <div class="show-grid">
+        <article class="show-col">
+          <h3>正在处理的反馈</h3>
+          <ul id="homeFeedbackList" class="show-list"></ul>
+        </article>
+        <article class="show-col">
+          <h3>正在进行的任务</h3>
+          <ul id="homeWorktaskList" class="show-list"></ul>
+        </article>
+      </div>
     </section>
 
     <section id="meowStatusSection" class="showcase hidden">
       <h2>状态信息</h2>
-      <p>这里同步展示 MeowStatus 的公开状态与 Minecraft 服务器挂件状态。</p>
+      <p>这里同步展示 MeowStatus 的公开状态与 Minecraft 服务器挂件状态（如果开启相关功能）。</p>
       <div class="status-grid">
         <article id="profileStatusPanel" class="status-panel hidden">
           <h3>当前状态</h3>
@@ -310,21 +339,6 @@
         <article id="minecraftStatusPanel" class="status-panel hidden">
           <h3>Minecraft 服务器</h3>
           <div id="minecraftStatusList" class="mc-list"></div>
-        </article>
-      </div>
-    </section>
-
-    <section class="showcase">
-      <h2>当前处理进展</h2>
-      <p>这里展示被设置为允许在主页显示的正在处理的反馈与进行中的任务。</p>
-      <div class="show-grid">
-        <article class="show-col">
-          <h3>正在处理的反馈</h3>
-          <ul id="homeFeedbackList" class="show-list"></ul>
-        </article>
-        <article class="show-col">
-          <h3>正在进行的任务</h3>
-          <ul id="homeWorktaskList" class="show-list"></ul>
         </article>
       </div>
     </section>

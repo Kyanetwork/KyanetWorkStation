@@ -54,8 +54,21 @@ function titleWithPrefix(title) {
   return prefix ? `${prefix} ${title}` : title;
 }
 
+function configuredKeywordLine() {
+  const keywords = Array.isArray(config.webhook.keywords)
+    ? config.webhook.keywords.map((item) => oneLine(item, 80)).filter(Boolean)
+    : [];
+  return keywords.length ? `安全关键词：${keywords.join(" ")}` : "";
+}
+
 function buildText(title, lines) {
-  return [titleWithPrefix(title), ...lines].join("\n");
+  const keywordLine = configuredKeywordLine();
+  return [
+    titleWithPrefix(title),
+    "应用：KyanetWorkStation",
+    keywordLine,
+    ...lines
+  ].filter(Boolean).join("\n");
 }
 
 function formatCommonFooter() {
@@ -130,7 +143,11 @@ function assertProviderSuccess(payloadText) {
   const p = provider();
   if (p === "wecom" || p === "dingtalk") {
     if (Number(data.errcode || 0) !== 0) {
-      return data.errmsg || "webhook 平台返回 errcode 非 0";
+      const message = data.errmsg || "webhook 平台返回 errcode 非 0";
+      if (/key\s*words?\s*not\s*found|keywords?\s*not\s*in\s*content|关键词/i.test(message)) {
+        return "Webhook 平台未找到安全关键词，请在 WEBHOOK_KEYWORDS 中配置机器人要求的关键词";
+      }
+      return message;
     }
   }
   if (p === "feishu" || p === "lark") {
