@@ -38,6 +38,30 @@ function createLogger() {
 }
 
 const logger = createLogger();
+const sensitiveQueryKeys = new Set(["ticket", "token", "secret", "password", "pass", "key"]);
+
+function redactSensitiveUrl(value) {
+  if (typeof value !== "string" || !value.includes("?")) {
+    return value;
+  }
+
+  try {
+    const url = new URL(value, "http://kws.local");
+    let changed = false;
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (sensitiveQueryKeys.has(key.toLowerCase())) {
+        url.searchParams.set(key, "[redacted]");
+        changed = true;
+      }
+    }
+    if (!changed) {
+      return value;
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch (_) {
+    return value.replace(/([?&](?:ticket|token|secret|password|pass|key)=)[^&#]*/gi, "$1[redacted]");
+  }
+}
 
 function shouldSkipAccessLog(req) {
   if (!config.accessLogEnabled) {
@@ -62,7 +86,7 @@ function requestLoggerMiddleware(req, res, next) {
     req.log.info({
       event: "request.start",
       method: req.method,
-      path: req.originalUrl || req.url,
+      path: redactSensitiveUrl(req.originalUrl || req.url),
       ip: req.ip || "",
       userAgent: String(req.get("user-agent") || "").slice(0, 256)
     }, "request started");
@@ -85,7 +109,7 @@ function requestLoggerMiddleware(req, res, next) {
     req.log[level]({
       event: eventType,
       method: req.method,
-      path: req.originalUrl || req.url,
+      path: redactSensitiveUrl(req.originalUrl || req.url),
       statusCode,
       durationMs
     }, eventType === "request.close" ? "request closed before finish" : "request completed");
@@ -103,6 +127,7 @@ function requestLoggerMiddleware(req, res, next) {
 
 module.exports = {
   logger,
+  redactSensitiveUrl,
   requestLoggerMiddleware
 };
 

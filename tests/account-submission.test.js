@@ -188,6 +188,7 @@ async function requestRaw(baseUrl, pathName, options = {}) {
   const response = await fetch(`${baseUrl}${pathName}`, {
     method: options.method || "GET",
     headers: options.headers || {},
+    body: options.body,
     redirect: options.redirect || "manual"
   });
   return response;
@@ -230,10 +231,11 @@ function worktaskPayload(title) {
 }
 
 async function loginAccount(baseUrl, ticket, returnUrl = "/feedback/") {
-  const response = await requestRaw(
-    baseUrl,
-    `/auth/account/callback?ticket=${encodeURIComponent(ticket)}&returnUrl=${encodeURIComponent(returnUrl)}`
-  );
+  const response = await requestRaw(baseUrl, "/auth/account/callback", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ ticket, returnUrl }).toString()
+  });
   assert.equal(response.status, 302);
   assert.equal(response.headers.get("location"), returnUrl);
   return accountCookieFrom(response);
@@ -242,14 +244,21 @@ async function loginAccount(baseUrl, ticket, returnUrl = "/feedback/") {
 test("anonymous submissions fail closed when policy fetch is unavailable", async () => {
   const server = await startKwsServer();
   try {
-    const { response, data } = await requestJson(server.baseUrl, "/api/feedback", {
+    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
       method: "POST",
       body: feedbackPayload("默认拒绝匿名反馈")
     });
+    const worktask = await requestJson(server.baseUrl, "/api/worktask", {
+      method: "POST",
+      body: worktaskPayload("默认拒绝匿名 WorkTask")
+    });
 
-    assert.equal(response.status, 401);
-    assert.equal(data.error.code, "UNAUTHORIZED");
-    assert.equal(data.error.message, "提交前请先登录 KyanetAccount");
+    assert.equal(feedback.response.status, 401);
+    assert.equal(feedback.data.error.code, "UNAUTHORIZED");
+    assert.equal(feedback.data.error.message, "提交前请先登录 KyanetAccount");
+    assert.equal(worktask.response.status, 401);
+    assert.equal(worktask.data.error.code, "UNAUTHORIZED");
+    assert.equal(worktask.data.error.message, "提交前请先登录 KyanetAccount");
   } finally {
     await server.stop();
   }
@@ -313,6 +322,38 @@ test("anonymous submissions keep legacy behavior only when policy explicitly all
   }
 });
 
+test("anonymous policy exception applies only to modules that do not require login", async () => {
+  const account = await startFakeAccountServer({
+    policy: {
+      feedbackRequiresLogin: true,
+      worktaskRequiresLogin: false,
+      allowAnonymousSubmission: true
+    }
+  });
+  const server = await startKwsServer({
+    accountBaseUrl: account.baseUrl,
+    accountPublicUrl: account.baseUrl
+  });
+  try {
+    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
+      method: "POST",
+      body: feedbackPayload("混合策略反馈")
+    });
+    const worktask = await requestJson(server.baseUrl, "/api/worktask", {
+      method: "POST",
+      body: worktaskPayload("混合策略 WorkTask")
+    });
+
+    assert.equal(feedback.response.status, 401);
+    assert.equal(feedback.data.error.message, "提交前请先登录 KyanetAccount");
+    assert.equal(worktask.response.status, 201);
+    assert.equal(worktask.data.ok, true);
+  } finally {
+    await server.stop();
+    await account.close();
+  }
+});
+
 test("account routes create linked submissions, private lists, logout, and keep admin session separate", async () => {
   const account = await startFakeAccountServer({
     ticketUsers: {
@@ -343,6 +384,7 @@ test("account routes create linked submissions, private lists, logout, and keep 
     assert.equal(startLocation.origin, account.baseUrl);
     assert.equal(startLocation.pathname, "/workstation/login");
     assert.equal(startLocation.searchParams.get("returnUrl"), `${server.baseUrl}/feedback/`);
+    assert.equal(startLocation.searchParams.get("callbackUrl"), null);
 
     const aliceCookie = await loginAccount(server.baseUrl, "ticket-alice", "/feedback/");
     const bobCookie = await loginAccount(server.baseUrl, "ticket-bob", "/worktask/");

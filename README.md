@@ -29,7 +29,7 @@ Browser
 
 KyanetWorkStation 可以通过 KyanetAccount 的第一方接入 API 读取反馈/WorkTask 登录策略，并用一次性登录票据创建独立的 KWS 账号用户会话。该接入不会处理 KyanetAccount 密码，也不会复用 KyanetAccount 浏览器 session cookie；KWS 使用单独的 `kws_account_sid` Cookie 保存本地账号用户会话。
 
-默认策略为 fail-closed：当 KyanetAccount policy 获取失败或未显式允许匿名时，反馈与 WorkTask 提交都需要 Account 登录。`/auth/account/start` 会跳转到 `${KYANET_ACCOUNT_PUBLIC_URL}/workstation/login`，并传入绝对 KWS `returnUrl` 与 callback 地址；Account 前端完成登录票据创建后回跳 `/auth/account/callback?ticket=...&returnUrl=...`。
+默认策略为 fail-closed：当 KyanetAccount policy 获取失败或未显式允许匿名时，反馈与 WorkTask 提交都需要 Account 登录。`/auth/account/start` 会跳转到 `${KYANET_ACCOUNT_PUBLIC_URL}/workstation/login`，并传入绝对 KWS `returnUrl`；Account 前端完成登录票据创建后会用 POST 表单回调 `/auth/account/callback`，避免一次性票据进入浏览器地址栏或访问日志。
 
 相关环境变量：
 
@@ -157,13 +157,15 @@ KYANET_ACCOUNT_SESSION_TTL_HOURS=168
 ### `GET /auth/account/start`
 跳转到 KyanetAccount 前端授权入口。可选查询参数：`returnUrl`，仅允许 KWS 同源路径，最终传给 Account 前端的是绝对 KWS returnUrl。
 
-### `GET /auth/account/callback`
+### `POST /auth/account/callback`
 使用 KyanetAccount 一次性登录票据创建 KWS Account session。
 
-查询参数：
+表单字段：
 
 - `ticket`：KyanetAccount login ticket。
 - `returnUrl`：登录后回跳路径，仅允许 KWS 同源路径。
+
+为兼容早期桥接实现，服务端仍接受 `GET /auth/account/callback`；KWS 请求日志会统一脱敏 `ticket`、`token`、`secret` 等敏感查询参数。
 
 ### `GET /api/account/me`
 返回当前 Account 用户会话。

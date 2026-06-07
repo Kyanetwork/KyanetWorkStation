@@ -315,7 +315,6 @@ function absoluteKwsReturnUrl(req, rawValue) {
 function accountLoginUrl(req) {
   const url = new URL(ACCOUNT_LOGIN_PATH, `${config.account.publicUrl.replace(/\/+$/, "")}/`);
   url.searchParams.set("returnUrl", absoluteKwsReturnUrl(req, req.query.returnUrl));
-  url.searchParams.set("callbackUrl", new URL("/auth/account/callback", `${appOrigin(req)}/`).toString());
   return url.toString();
 }
 
@@ -426,10 +425,11 @@ app.get("/auth/account/start", (req, res) => {
   return res.redirect(accountLoginUrl(req));
 });
 
-app.get("/auth/account/callback", asyncHandler(async (req, res) => {
-  const returnPath = normalizeReturnPath(req, req.query.returnUrl);
+async function handleAccountCallback(req, res) {
+  const payload = req.method === "POST" ? (req.body || {}) : (req.query || {});
+  const returnPath = normalizeReturnPath(req, payload.returnUrl);
   const user = await exchangeLoginTicket({
-    ticket: req.query.ticket,
+    ticket: payload.ticket,
     baseUrl: config.account.baseUrl,
     secret: config.account.integrationSecret,
     timeoutMs: config.account.requestTimeoutMs
@@ -437,7 +437,10 @@ app.get("/auth/account/callback", asyncHandler(async (req, res) => {
   const token = await createAccountSessionForUser(user, req);
   res.cookie(accountCookieName, token, buildAccountSessionCookieOptions());
   return res.redirect(returnPath);
-}));
+}
+
+app.get("/auth/account/callback", asyncHandler(handleAccountCallback));
+app.post("/auth/account/callback", asyncHandler(handleAccountCallback));
 
 app.get("/api/account/me", requireAccountSession, (req, res) => {
   res.json({

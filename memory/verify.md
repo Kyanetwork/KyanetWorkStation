@@ -14,6 +14,11 @@ Observed on 2026-06-07:
 - FINAL: `npm test` passed with 37 tests.
 - FINAL re-run after status request: `npm test` passed with 37 tests.
 - Visual evidence could not be captured because the repo has no `.agent-md/.bin` helper and local `playwright` is not installed.
+- Review coverage RED: `node --test tests/account-submission.test.js` failed because POST `/auth/account/callback` returned 404 after changing the route test to form POST.
+- Review coverage RED: `node --test tests/logger.test.js` failed because `redactSensitiveUrl` was not implemented/exported.
+- Review coverage GREEN: `node --test tests/account-submission.test.js` passed with 5 tests.
+- Review coverage GREEN: `node --test tests/logger.test.js` passed with 2 tests.
+- Review full GREEN: `npm test` passed with 40 tests.
 
 Definition of done:
 
@@ -26,3 +31,4 @@ Definition of done:
 - KWS admin routes still require admin session and reject account-only sessions.
 - Frontend tells unauthenticated users: `提交前请先登录 KyanetAccount`.
 - Admin list UI displays linked account snapshot when present.
+- One-time Account login tickets are accepted through POST callback and sensitive query keys are redacted from KWS request logs.
