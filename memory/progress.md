@@ -1,19 +1,28 @@
 # Progress
 
-- [x] Read existing server and test patterns.
-- [x] Add account auth tests and observe RED.
-- [x] Add account session tests and observe RED.
-- [x] Implement account auth foundation.
-- [x] Implement account session DB and middleware.
+- [x] Confirmed current workspace is the isolated worktree and git status is clean.
+- [x] Read Task 4 memory state and existing submission/account/session patterns.
+- [x] Add Task 5 account submission route tests and observe RED.
+- [x] Implement backend account submission enforcement and linkage.
+- [x] Update frontend account-login prompts and admin account snapshot display.
 - [x] Run full `npm test` verification.
+- [ ] Commit Task 5 implementation.
 
 ## RED Notes
 
-- Initial `npm test` after mistaken patch did not include new tests because files were written to the wrong workspace. Corrected before continuing.
-- Correct RED in target worktree: `npm test` failed with missing `../server/account-auth` and missing `server/account-session.js`; existing 24 tests passed.
-- Additional RED after partial implementation: account auth tests failed on singular `/api/integration/...` route, missing `profile.displayName` mapping, and missing `db.createAccountSessionRecord`.
-- Targeted GREEN: `node --test tests/account-auth.test.js tests/account-session.test.js` passed with 9 tests.
-- Full GREEN: `npm test` passed with 33 tests.
+- `node --test tests/account-submission.test.js` failed as expected after adding Task 5 route tests:
+  - Default/fail-closed anonymous feedback submission returned `201` instead of expected `401`.
+  - Policy-required anonymous feedback submission returned `201` instead of expected `401`.
+  - Account login start route returned `404` instead of expected redirect `302`.
+  - Explicit anonymous-allowed policy test passed, confirming legacy anonymous path still exists before enforcement.
+
+## GREEN Notes
+
+- Targeted GREEN: `node --test tests/account-submission.test.js` passed with 4 tests.
+- Full GREEN: `npm test` passed with 37 tests.
+- Re-run after user status request: `npm test` passed with 37 tests.
+- Syntax checks passed for `server/app.js`, `server/db.js`, `public/feedback/main.js`, `public/worktask/main.js`, and `public/admin/admin.js`.
+- Visual capture was not run because `.agent-md/.bin` is absent and local `playwright` is not installed.
 
 ## Deferred
 

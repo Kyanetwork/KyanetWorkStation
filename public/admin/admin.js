@@ -253,6 +253,15 @@
     return showOnHome ? "显示中" : "隐藏中";
   }
 
+  function accountSnapshotText(item) {
+    if (!item || !item.accountUserId) {
+      return "-";
+    }
+    const name = item.accountDisplayNameSnapshot || "未命名账号";
+    const email = item.accountEmailSnapshot || "无邮箱快照";
+    return `${name} <${email}>`;
+  }
+
   function renderFeedbackStats(total, summary) {
     const s = {
       new: Number(summary && summary.new || 0),
@@ -280,6 +289,7 @@
       <article class="item">
         <h3>[反馈 #${item.id}] ${escapeHtml(item.title)}</h3>
         <div class="meta">类型：${escapeHtml(item.type)} | 状态：${feedbackStatusLabel(item.status)} | 首页展示状态：${homeDisplayLabel(Boolean(item.showOnHome))} | 联系方式：${escapeHtml(item.contact)} | 提交：${escapeHtml(formatDateTimeDisplay(item.createdAt))}</div>
+        <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
         <div class="ops">
           <button data-action="feedback-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新反馈</button>
@@ -327,6 +337,7 @@
       <article class="item">
         <h3>[WorkTask #${item.id}] ${escapeHtml(item.title)}</h3>
         <div class="meta">类型：${escapeHtml(item.type)} | 来源：${item.createdByAdmin ? "本人添加" : "用户提交"} | 状态：${worktaskStatusLabel(item.status)} | 优先级：${worktaskPriorityLabel(item.priority)} | 首页展示状态：${homeDisplayLabel(Boolean(item.showOnHome))} | 联系方式：${escapeHtml(item.contact)}</div>
+        <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
         <div class="meta">期望时间：${escapeHtml(formatDateTimeDisplay(item.expectedAt))} | 计划时间：${escapeHtml(formatDateTimeDisplay(item.scheduledAt))} | 负责人：${escapeHtml(item.assignee || "未分配")} | 标签：${escapeHtml(item.tags || "-")}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
         <div class="ops">
@@ -663,7 +674,7 @@
   document.getElementById("feedbackExportBtn").addEventListener("click", async () => {
     try {
       const rows = await fetchAllFeedbackForExport();
-      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, feedbackStatusLabel(it.status), it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "status", "createdAt", "updatedAt"], "feedback_export");
+      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, feedbackStatusLabel(it.status), it.accountUserId || "", it.accountEmailSnapshot || "", it.accountDisplayNameSnapshot || "", it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "status", "accountUserId", "accountEmailSnapshot", "accountDisplayNameSnapshot", "createdAt", "updatedAt"], "feedback_export");
       notify(feedbackMsg, "ok", `反馈 CSV 导出完成，共 ${rows.length} 条`);
     } catch (error) {
       notify(feedbackMsg, "error", error.message);
@@ -685,7 +696,7 @@
   document.getElementById("worktaskExportBtn").addEventListener("click", async () => {
     try {
       const rows = await fetchAllWorktaskForExport();
-      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, worktaskPriorityLabel(it.priority), worktaskStatusLabel(it.status), it.expectedAt, it.scheduledAt, it.assignee, it.tags, it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "priority", "status", "expectedAt", "scheduledAt", "assignee", "tags", "createdAt", "updatedAt"], "worktask_export");
+      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, worktaskPriorityLabel(it.priority), worktaskStatusLabel(it.status), it.accountUserId || "", it.accountEmailSnapshot || "", it.accountDisplayNameSnapshot || "", it.expectedAt, it.scheduledAt, it.assignee, it.tags, it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "priority", "status", "accountUserId", "accountEmailSnapshot", "accountDisplayNameSnapshot", "expectedAt", "scheduledAt", "assignee", "tags", "createdAt", "updatedAt"], "worktask_export");
       notify(worktaskMsg, "ok", `WorkTask CSV 导出完成，共 ${rows.length} 条`);
     } catch (error) {
       notify(worktaskMsg, "error", error.message);

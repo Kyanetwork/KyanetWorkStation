@@ -1,24 +1,28 @@
 # Verification
 
-Required checks for Task 4:
+Required checks for Task 5:
 
-- RED: Run `npm test` after adding failing tests and record expected failures.
-- GREEN: Run `npm test` after implementation and confirm exit code 0.
+- RED: Run the new account submission route test before implementation and record the expected failures.
+- GREEN: Run the targeted account submission route test after implementation.
+- FINAL: Run full `npm test` and confirm exit code 0 before committing.
 
 Observed on 2026-06-07:
 
-- RED after initial tests: `npm test` failed because `../server/account-auth` and `server/account-session.js` were missing; existing tests passed.
-- RED after partial implementation review:
-  - `tests/account-auth.test.js` failed because exchange used singular `/api/integration/workstation/login-ticket/exchange` instead of Account's `/api/integrations/workstation/login-ticket/exchange`.
-  - `tests/account-auth.test.js` failed because KyanetAccount `user.profile.displayName` was not mapped.
-  - `tests/account-session.test.js` failed because `db.createAccountSessionRecord` did not exist.
-- Targeted Task 4 GREEN: `node --test tests/account-auth.test.js tests/account-session.test.js` passed with 9 tests.
-- Full Task 4 GREEN: `npm test` passed with 33 tests.
+- RED: `node --test tests/account-submission.test.js` exited 1 with 4 tests, 1 pass, 3 fail.
+  - Failures were expected feature gaps: anonymous submission still returned 201, and `/auth/account/start` returned 404.
+- GREEN: `node --test tests/account-submission.test.js` passed with 4 tests.
+- FINAL: `npm test` passed with 37 tests.
+- FINAL re-run after status request: `npm test` passed with 37 tests.
+- Visual evidence could not be captured because the repo has no `.agent-md/.bin` helper and local `playwright` is not installed.
 
 Definition of done:
 
-- Account auth policy cache fails closed.
-- Ticket exchange uses bearer integration secret and validates account user response.
-- Account session uses a cookie separate from admin session.
-- Expired account sessions clear account cookie.
-- DB has `account_session` schema and CRUD across supported adapters.
+- Feedback submission rejects anonymous requests by default and when Account policy requires login.
+- WorkTask submission rejects anonymous requests by default and when Account policy requires login.
+- Anonymous submission still works only when KyanetAccount policy explicitly allows it.
+- Account-authenticated feedback and WorkTask submissions persist account user id, email snapshot, and display name snapshot.
+- Account list routes return only the current Account user's own feedback and WorkTask.
+- Account login start/callback/me/logout routes work with the existing ticket exchange/session helpers.
+- KWS admin routes still require admin session and reject account-only sessions.
+- Frontend tells unauthenticated users: `提交前请先登录 KyanetAccount`.
+- Admin list UI displays linked account snapshot when present.

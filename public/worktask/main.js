@@ -1,6 +1,7 @@
 const form = document.getElementById("worktaskForm");
 const submitBtn = document.getElementById("submitBtn");
 const messageEl = document.getElementById("message");
+const accountBox = document.getElementById("accountBox");
 
 const titleInput = document.getElementById("title");
 const contentInput = document.getElementById("content");
@@ -23,6 +24,34 @@ updateCounters();
 function showMessage(kind, text) {
   messageEl.className = `msg ${kind}`;
   messageEl.textContent = text;
+}
+
+function escapeHtml(input) {
+  return String(input)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function accountLoginHref() {
+  return `/auth/account/start?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+}
+
+async function refreshAccountState() {
+  try {
+    const response = await fetch("/api/account/me");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+      throw new Error("not signed in");
+    }
+    const user = data.data || {};
+    const name = user.displayName || user.email || "KyanetAccount 用户";
+    accountBox.innerHTML = `已登录 KyanetAccount：<strong>${escapeHtml(name)}</strong>`;
+  } catch (_) {
+    accountBox.innerHTML = `提交前请先登录 KyanetAccount。<a href="${accountLoginHref()}">前往登录</a>`;
+  }
 }
 
 form.addEventListener("submit", async (event) => {
@@ -63,3 +92,5 @@ form.addEventListener("submit", async (event) => {
     submitBtn.disabled = false;
   }
 });
+
+refreshAccountState();

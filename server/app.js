@@ -22,11 +22,13 @@ const {
   createWorktaskByAdmin,
   getAdminByUsername,
   listFeedback,
+  listFeedbackByAccountUser,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,
   updateFeedbackNoteReply,
   deleteFeedback,
   listWorktask,
+  listWorktaskByAccountUser,
   updateWorktaskStatus,
   updateWorktaskHomeDisplay,
   updateWorktaskNoteReply,
@@ -46,6 +48,19 @@ const {
   destroySessionByCookieToken,
   requireAdminSession
 } = require("./auth");
+const {
+  createPolicyCache,
+  fetchWorkstationPolicy,
+  exchangeLoginTicket
+} = require("./account-auth");
+const {
+  accountCookieName,
+  buildAccountSessionCookieOptions,
+  clearAccountSessionCookie,
+  createAccountSessionForUser,
+  destroyAccountSessionByCookieToken,
+  requireAccountSession
+} = require("./account-session");
 const {
   validateFeedbackPayload,
   validateWorktaskPayload,
@@ -71,6 +86,8 @@ const {
 
 const app = express();
 app.set("trust proxy", config.trustProxy);
+
+const ACCOUNT_LOGIN_PATH = "/workstation/login";
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -257,6 +274,85 @@ const requireSameOriginForAdminMutation = createRequireSameOriginForAdminMutatio
   sendError
 });
 
+const accountPolicyCache = createPolicyCache({
+  ttlMs: config.account.policyCacheMs,
+  fetchPolicy: () => fetchWorkstationPolicy({
+    baseUrl: config.account.baseUrl,
+    secret: config.account.integrationSecret,
+    timeoutMs: config.account.requestTimeoutMs
+  })
+});
+
+function appOrigin(req) {
+  try {
+    return new URL(config.appBaseUrl).origin;
+  } catch (_) {
+    const host = req.get("host") || "";
+    return host ? `${req.protocol || "http"}://${host}` : "http://127.0.0.1";
+  }
+}
+
+function normalizeReturnPath(req, rawValue) {
+  const fallback = "/";
+  const raw = typeof rawValue === "string" && rawValue.trim() ? rawValue.trim() : fallback;
+  const origin = appOrigin(req);
+
+  try {
+    const url = new URL(raw, origin);
+    if (url.origin !== origin) {
+      return fallback;
+    }
+    return `${url.pathname}${url.search}${url.hash}` || fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function absoluteKwsReturnUrl(req, rawValue) {
+  return new URL(normalizeReturnPath(req, rawValue), `${appOrigin(req)}/`).toString();
+}
+
+function accountLoginUrl(req) {
+  const url = new URL(ACCOUNT_LOGIN_PATH, `${config.account.publicUrl.replace(/\/+$/, "")}/`);
+  url.searchParams.set("returnUrl", absoluteKwsReturnUrl(req, req.query.returnUrl));
+  url.searchParams.set("callbackUrl", new URL("/auth/account/callback", `${appOrigin(req)}/`).toString());
+  return url.toString();
+}
+
+function accountSnapshot(accountUser) {
+  if (!accountUser) {
+    return {
+      accountUserId: "",
+      accountEmailSnapshot: "",
+      accountDisplayNameSnapshot: ""
+    };
+  }
+  return {
+    accountUserId: accountUser.id,
+    accountEmailSnapshot: accountUser.email,
+    accountDisplayNameSnapshot: accountUser.displayName || ""
+  };
+}
+
+function requireAccountForSubmission(kind) {
+  return asyncHandler(async (req, res, next) => {
+    const policy = await accountPolicyCache.getPolicy();
+    const requiresLogin = kind === "feedback"
+      ? policy.feedbackRequiresLogin !== false
+      : policy.worktaskRequiresLogin !== false;
+    const allowAnonymous = policy.allowAnonymousSubmission === true && !requiresLogin;
+    const rawAccountToken = req.cookies[accountCookieName];
+
+    if (!allowAnonymous && !rawAccountToken) {
+      return sendError(res, 401, "UNAUTHORIZED", "提交前请先登录 KyanetAccount");
+    }
+    if (!rawAccountToken) {
+      return next();
+    }
+    return requireAccountSession(req, res, next);
+  });
+}
+
 app.get("/api/health", asyncHandler(async (req, res) => {
   const payload = {
     ok: true,
@@ -326,21 +422,69 @@ app.get("/api/public/meowstatus", asyncHandler(async (req, res) => {
   return res.json({ ok: true, data });
 }));
 
-app.post("/api/feedback", submitLimiter, asyncHandler(async (req, res) => {
+app.get("/auth/account/start", (req, res) => {
+  return res.redirect(accountLoginUrl(req));
+});
+
+app.get("/auth/account/callback", asyncHandler(async (req, res) => {
+  const returnPath = normalizeReturnPath(req, req.query.returnUrl);
+  const user = await exchangeLoginTicket({
+    ticket: req.query.ticket,
+    baseUrl: config.account.baseUrl,
+    secret: config.account.integrationSecret,
+    timeoutMs: config.account.requestTimeoutMs
+  });
+  const token = await createAccountSessionForUser(user, req);
+  res.cookie(accountCookieName, token, buildAccountSessionCookieOptions());
+  return res.redirect(returnPath);
+}));
+
+app.get("/api/account/me", requireAccountSession, (req, res) => {
+  res.json({
+    ok: true,
+    data: {
+      id: req.accountUser.id,
+      email: req.accountUser.email,
+      displayName: req.accountUser.displayName || ""
+    }
+  });
+});
+
+app.post("/api/account/logout", requireAccountSession, asyncHandler(async (req, res) => {
+  await destroyAccountSessionByCookieToken(req.accountToken);
+  clearAccountSessionCookie(res);
+  res.json({ ok: true });
+}));
+
+app.get("/api/account/feedback", requireAccountSession, asyncHandler(async (req, res) => {
+  const data = await listFeedbackByAccountUser(req.accountUser.id);
+  res.json({ ok: true, data });
+}));
+
+app.get("/api/account/worktask", requireAccountSession, asyncHandler(async (req, res) => {
+  const data = await listWorktaskByAccountUser(req.accountUser.id);
+  res.json({ ok: true, data });
+}));
+
+app.post("/api/feedback", submitLimiter, requireAccountForSubmission("feedback"), asyncHandler(async (req, res) => {
   const validation = validateFeedbackPayload(req.body || {});
   if (!validation.valid) {
     return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
   }
 
-  const id = await createFeedback(validation.data);
+  const data = {
+    ...validation.data,
+    ...accountSnapshot(req.accountUser)
+  };
+  const id = await createFeedback(data);
   fireAndForget("feedback", async () => Promise.all([
     runNotifyTask("smtp", () => notifyNewFeedback({
       id,
-      ...validation.data
+      ...data
     })),
     runNotifyTask("webhook", () => notifyWebhookNewFeedback({
       id,
-      ...validation.data
+      ...data
     }))
   ]));
   return res.status(201).json({
@@ -349,27 +493,31 @@ app.post("/api/feedback", submitLimiter, asyncHandler(async (req, res) => {
   });
 }));
 
-app.post("/api/worktask", submitLimiter, asyncHandler(async (req, res) => {
+app.post("/api/worktask", submitLimiter, requireAccountForSubmission("worktask"), asyncHandler(async (req, res) => {
   const validation = validateWorktaskPayload(req.body || {});
   if (!validation.valid) {
     return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
   }
 
-  const id = await createWorktask(validation.data);
+  const data = {
+    ...validation.data,
+    ...accountSnapshot(req.accountUser)
+  };
+  const id = await createWorktask(data);
   fireAndForget("worktask", async () => Promise.all([
     runNotifyTask("smtp", () => notifyNewWorktask({
       id,
       source: "user",
       showOnHome: false,
       status: "new",
-      ...validation.data
+      ...data
     })),
     runNotifyTask("webhook", () => notifyWebhookNewWorktask({
       id,
       source: "user",
       showOnHome: false,
       status: "new",
-      ...validation.data
+      ...data
     }))
   ]));
   return res.status(201).json({

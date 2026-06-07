@@ -168,11 +168,15 @@ function sqliteSchemaStatements() {
       show_on_home INTEGER NOT NULL DEFAULT 0,
       admin_note TEXT NOT NULL DEFAULT '',
       public_reply TEXT NOT NULL DEFAULT '',
+      account_user_id TEXT NOT NULL DEFAULT '',
+      account_email_snapshot TEXT NOT NULL DEFAULT '',
+      account_display_name_snapshot TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
     "CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_feedback_account_user_id ON feedback(account_user_id)",
     `CREATE TABLE IF NOT EXISTS worktask (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -189,12 +193,16 @@ function sqliteSchemaStatements() {
       scheduled_at TEXT,
       assignee TEXT,
       tags TEXT NOT NULL DEFAULT '',
+      account_user_id TEXT NOT NULL DEFAULT '',
+      account_email_snapshot TEXT NOT NULL DEFAULT '',
+      account_display_name_snapshot TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_worktask_status ON worktask(status)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_priority ON worktask(priority)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_created_at ON worktask(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_worktask_account_user_id ON worktask(account_user_id)",
     `CREATE TABLE IF NOT EXISTS admin_user (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
@@ -250,10 +258,14 @@ function mysqlSchemaStatements() {
       show_on_home TINYINT(1) NOT NULL DEFAULT 0,
       admin_note VARCHAR(2000) NOT NULL DEFAULT '',
       public_reply VARCHAR(2000) NOT NULL DEFAULT '',
+      account_user_id VARCHAR(128) NOT NULL DEFAULT '',
+      account_email_snapshot VARCHAR(320) NOT NULL DEFAULT '',
+      account_display_name_snapshot VARCHAR(255) NOT NULL DEFAULT '',
       created_at VARCHAR(40) NOT NULL,
       updated_at VARCHAR(40) NOT NULL,
       INDEX idx_feedback_status (status),
-      INDEX idx_feedback_created_at (created_at)
+      INDEX idx_feedback_created_at (created_at),
+      INDEX idx_feedback_account_user_id (account_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS worktask (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -271,11 +283,15 @@ function mysqlSchemaStatements() {
       scheduled_at VARCHAR(40) NULL,
       assignee VARCHAR(255) NULL,
       tags VARCHAR(255) NOT NULL DEFAULT '',
+      account_user_id VARCHAR(128) NOT NULL DEFAULT '',
+      account_email_snapshot VARCHAR(320) NOT NULL DEFAULT '',
+      account_display_name_snapshot VARCHAR(255) NOT NULL DEFAULT '',
       created_at VARCHAR(40) NOT NULL,
       updated_at VARCHAR(40) NOT NULL,
       INDEX idx_worktask_status (status),
       INDEX idx_worktask_priority (priority),
-      INDEX idx_worktask_created_at (created_at)
+      INDEX idx_worktask_created_at (created_at),
+      INDEX idx_worktask_account_user_id (account_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS admin_user (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -334,11 +350,15 @@ function postgresSchemaStatements() {
       show_on_home BOOLEAN NOT NULL DEFAULT FALSE,
       admin_note TEXT NOT NULL DEFAULT '',
       public_reply TEXT NOT NULL DEFAULT '',
+      account_user_id TEXT NOT NULL DEFAULT '',
+      account_email_snapshot TEXT NOT NULL DEFAULT '',
+      account_display_name_snapshot TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
     "CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_feedback_account_user_id ON feedback(account_user_id)",
     `CREATE TABLE IF NOT EXISTS worktask (
       id BIGSERIAL PRIMARY KEY,
       type TEXT NOT NULL,
@@ -355,12 +375,16 @@ function postgresSchemaStatements() {
       scheduled_at TEXT,
       assignee TEXT,
       tags TEXT NOT NULL DEFAULT '',
+      account_user_id TEXT NOT NULL DEFAULT '',
+      account_email_snapshot TEXT NOT NULL DEFAULT '',
+      account_display_name_snapshot TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_worktask_status ON worktask(status)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_priority ON worktask(priority)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_created_at ON worktask(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_worktask_account_user_id ON worktask(account_user_id)",
     `CREATE TABLE IF NOT EXISTS admin_user (
       id BIGSERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
@@ -412,6 +436,7 @@ async function initializeDatabase() {
     await executeMany(postgresSchemaStatements());
   }
   await ensureHomeDisplayColumns();
+  await ensureSubmissionAccountColumns();
   await ensureAccountSessionSchema();
   await ensureStatusSettings();
 }
@@ -516,6 +541,42 @@ async function ensureHomeDisplayColumns() {
   }
 }
 
+async function addSubmissionAccountColumn(tableName, columnName, columnType) {
+  if (await columnExists(tableName, columnName)) {
+    return;
+  }
+  await execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} NOT NULL DEFAULT ''`);
+}
+
+function accountColumnType(columnName) {
+  if (client !== "mysql") {
+    return "TEXT";
+  }
+  if (columnName === "account_user_id") {
+    return "VARCHAR(128)";
+  }
+  if (columnName === "account_email_snapshot") {
+    return "VARCHAR(320)";
+  }
+  return "VARCHAR(255)";
+}
+
+async function ensureSubmissionAccountColumns() {
+  const columns = ["account_user_id", "account_email_snapshot", "account_display_name_snapshot"];
+  for (const tableName of ["feedback", "worktask"]) {
+    for (const columnName of columns) {
+      await addSubmissionAccountColumn(tableName, columnName, accountColumnType(columnName));
+    }
+  }
+
+  if (!(await indexExists("feedback", "idx_feedback_account_user_id"))) {
+    await execute("CREATE INDEX idx_feedback_account_user_id ON feedback(account_user_id)");
+  }
+  if (!(await indexExists("worktask", "idx_worktask_account_user_id"))) {
+    await execute("CREATE INDEX idx_worktask_account_user_id ON worktask(account_user_id)");
+  }
+}
+
 async function tableExists(tableName) {
   if (client === "sqlite") {
     const row = await queryOne("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [tableName]);
@@ -533,6 +594,27 @@ async function tableExists(tableName) {
   const row = await queryOne(
     "SELECT 1 AS exists_flag FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1 LIMIT 1",
     [tableName]
+  );
+  return Boolean(row);
+}
+
+async function indexExists(tableName, indexName) {
+  if (client === "sqlite") {
+    const row = await queryOne("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND name = ?", [tableName, indexName]);
+    return Boolean(row);
+  }
+
+  if (client === "mysql") {
+    const row = await queryOne(
+      "SELECT 1 AS exists_flag FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1",
+      [tableName, indexName]
+    );
+    return Boolean(row);
+  }
+
+  const row = await queryOne(
+    "SELECT 1 AS exists_flag FROM pg_indexes WHERE schemaname = current_schema() AND tablename = $1 AND indexname = $2 LIMIT 1",
+    [tableName, indexName]
   );
   return Boolean(row);
 }
@@ -581,6 +663,7 @@ async function ensureBootstrapAdmin() {
 async function cleanupExpiredSessions() {
   const p1 = placeholder(1);
   await execute(`DELETE FROM admin_session WHERE expires_at <= ${p1}`, [nowIso()]);
+  await execute(`DELETE FROM account_session WHERE expires_at <= ${p1}`, [nowIso()]);
 }
 
 async function getHealthCounts() {
@@ -721,16 +804,19 @@ async function createFeedback(payload) {
     payload.content,
     payload.contact,
     JSON.stringify(payload.images),
+    payload.accountUserId || "",
+    payload.accountEmailSnapshot || "",
+    payload.accountDisplayNameSnapshot || "",
     now,
     now
   ];
   const values = params.map((_, idx) => placeholder(idx + 1));
   const sql = client === "postgres"
-    ? `INSERT INTO feedback (type, title, content, contact, images, status, created_at, updated_at)
-       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', ${values[5]}, ${values[6]})
+    ? `INSERT INTO feedback (type, title, content, contact, images, status, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at)
+       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', ${values[5]}, ${values[6]}, ${values[7]}, ${values[8]}, ${values[9]})
        RETURNING id`
-    : `INSERT INTO feedback (type, title, content, contact, images, status, created_at, updated_at)
-       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', ${values[5]}, ${values[6]})`;
+    : `INSERT INTO feedback (type, title, content, contact, images, status, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at)
+       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', ${values[5]}, ${values[6]}, ${values[7]}, ${values[8]}, ${values[9]})`;
 
   const result = await execute(sql, params);
   return result.lastInsertId;
@@ -746,16 +832,19 @@ async function createWorktask(payload) {
     payload.priority,
     payload.expectedAt || null,
     payload.tags,
+    payload.accountUserId || "",
+    payload.accountEmailSnapshot || "",
+    payload.accountDisplayNameSnapshot || "",
     now,
     now
   ];
   const values = params.map((_, idx) => placeholder(idx + 1));
   const sql = client === "postgres"
-    ? `INSERT INTO worktask (type, title, content, contact, priority, status, show_on_home, created_by_admin, expected_at, scheduled_at, assignee, tags, admin_note, public_reply, created_at, updated_at)
-       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', FALSE, FALSE, ${values[5]}, NULL, NULL, ${values[6]}, '', '', ${values[7]}, ${values[8]})
+    ? `INSERT INTO worktask (type, title, content, contact, priority, status, show_on_home, created_by_admin, expected_at, scheduled_at, assignee, tags, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at)
+       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', FALSE, FALSE, ${values[5]}, NULL, NULL, ${values[6]}, '', '', ${values[7]}, ${values[8]}, ${values[9]}, ${values[10]}, ${values[11]})
        RETURNING id`
-    : `INSERT INTO worktask (type, title, content, contact, priority, status, show_on_home, created_by_admin, expected_at, scheduled_at, assignee, tags, admin_note, public_reply, created_at, updated_at)
-       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', 0, 0, ${values[5]}, NULL, NULL, ${values[6]}, '', '', ${values[7]}, ${values[8]})`;
+    : `INSERT INTO worktask (type, title, content, contact, priority, status, show_on_home, created_by_admin, expected_at, scheduled_at, assignee, tags, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at)
+       VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, 'new', 0, 0, ${values[5]}, NULL, NULL, ${values[6]}, '', '', ${values[7]}, ${values[8]}, ${values[9]}, ${values[10]}, ${values[11]})`;
 
   const result = await execute(sql, params);
   return result.lastInsertId;
@@ -986,6 +1075,57 @@ function buildWorktaskFilter(status, keyword, priority) {
   };
 }
 
+function mapFeedbackRow(row) {
+  let images = [];
+  try {
+    images = JSON.parse(row.images || "[]");
+  } catch (_) {
+    images = [];
+  }
+  return {
+    id: toNumber(row.id),
+    type: row.type,
+    title: row.title,
+    content: row.content,
+    contact: row.contact,
+    images,
+    status: row.status,
+    showOnHome: toBoolean(row.show_on_home),
+    adminNote: row.admin_note || "",
+    publicReply: row.public_reply || "",
+    accountUserId: row.account_user_id || "",
+    accountEmailSnapshot: row.account_email_snapshot || "",
+    accountDisplayNameSnapshot: row.account_display_name_snapshot || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapWorktaskRow(row) {
+  return {
+    id: toNumber(row.id),
+    type: row.type,
+    title: row.title,
+    content: row.content,
+    contact: row.contact,
+    priority: row.priority,
+    status: row.status,
+    showOnHome: toBoolean(row.show_on_home),
+    createdByAdmin: toBoolean(row.created_by_admin),
+    adminNote: row.admin_note || "",
+    publicReply: row.public_reply || "",
+    expectedAt: row.expected_at || "",
+    scheduledAt: row.scheduled_at || "",
+    assignee: row.assignee || "",
+    tags: row.tags || "",
+    accountUserId: row.account_user_id || "",
+    accountEmailSnapshot: row.account_email_snapshot || "",
+    accountDisplayNameSnapshot: row.account_display_name_snapshot || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 async function listFeedback({ status, keyword, page, pageSize }) {
   const { whereClause, params, nextIndex } = buildFeedbackFilter(status, keyword);
   const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM feedback ${whereClause}`, params);
@@ -1009,7 +1149,7 @@ async function listFeedback({ status, keyword, page, pageSize }) {
   const limitPlaceholder = placeholder(nextIndex);
   const offsetPlaceholder = placeholder(nextIndex + 1);
   const rows = await queryAll(
-    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, created_at, updated_at
+    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
      FROM feedback
      ${whereClause}
      ORDER BY created_at DESC
@@ -1017,28 +1157,7 @@ async function listFeedback({ status, keyword, page, pageSize }) {
     [...params, pageSize, offset]
   );
 
-  const items = rows.map((row) => {
-    let images = [];
-    try {
-      images = JSON.parse(row.images || "[]");
-    } catch (_) {
-      images = [];
-    }
-    return {
-      id: toNumber(row.id),
-      type: row.type,
-      title: row.title,
-      content: row.content,
-      contact: row.contact,
-      images,
-      status: row.status,
-      showOnHome: toBoolean(row.show_on_home),
-      adminNote: row.admin_note || "",
-      publicReply: row.public_reply || "",
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  });
+  const items = rows.map(mapFeedbackRow);
 
   return {
     items,
@@ -1047,6 +1166,23 @@ async function listFeedback({ status, keyword, page, pageSize }) {
     total,
     summary,
     totalPages: total === 0 ? 1 : Math.ceil(total / pageSize)
+  };
+}
+
+async function listFeedbackByAccountUser(accountUserId, limit = 100) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const rows = await queryAll(
+    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM feedback
+     WHERE account_user_id = ${p1}
+     ORDER BY created_at DESC
+     LIMIT ${p2}`,
+    [accountUserId, Math.max(1, Math.min(100, toNumber(limit) || 100))]
+  );
+  return {
+    items: rows.map(mapFeedbackRow),
+    total: rows.length
   };
 }
 
@@ -1127,7 +1263,7 @@ async function listWorktask({ status, keyword, priority, page, pageSize }) {
   const limitPlaceholder = placeholder(nextIndex);
   const offsetPlaceholder = placeholder(nextIndex + 1);
   const rows = await queryAll(
-    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, created_at, updated_at
+    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
      FROM worktask
      ${whereClause}
      ORDER BY created_at DESC
@@ -1135,25 +1271,7 @@ async function listWorktask({ status, keyword, priority, page, pageSize }) {
     [...params, pageSize, offset]
   );
 
-  const items = rows.map((row) => ({
-    id: toNumber(row.id),
-    type: row.type,
-    title: row.title,
-    content: row.content,
-    contact: row.contact,
-    priority: row.priority,
-    status: row.status,
-    showOnHome: toBoolean(row.show_on_home),
-    createdByAdmin: toBoolean(row.created_by_admin),
-    adminNote: row.admin_note || "",
-    publicReply: row.public_reply || "",
-    expectedAt: row.expected_at || "",
-    scheduledAt: row.scheduled_at || "",
-    assignee: row.assignee || "",
-    tags: row.tags || "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }));
+  const items = rows.map(mapWorktaskRow);
 
   return {
     items,
@@ -1163,6 +1281,23 @@ async function listWorktask({ status, keyword, priority, page, pageSize }) {
     summary,
     prioritySummary,
     totalPages: total === 0 ? 1 : Math.ceil(total / pageSize)
+  };
+}
+
+async function listWorktaskByAccountUser(accountUserId, limit = 100) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const rows = await queryAll(
+    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM worktask
+     WHERE account_user_id = ${p1}
+     ORDER BY created_at DESC
+     LIMIT ${p2}`,
+    [accountUserId, Math.max(1, Math.min(100, toNumber(limit) || 100))]
+  );
+  return {
+    items: rows.map(mapWorktaskRow),
+    total: rows.length
   };
 }
 
@@ -1324,11 +1459,13 @@ module.exports = {
   deleteAccountSessionById,
   touchAccountSessionLastSeen,
   listFeedback,
+  listFeedbackByAccountUser,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,
   updateFeedbackNoteReply,
   deleteFeedback,
   listWorktask,
+  listWorktaskByAccountUser,
   updateWorktaskStatus,
   updateWorktaskHomeDisplay,
   updateWorktaskNoteReply,

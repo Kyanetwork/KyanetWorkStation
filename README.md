@@ -29,6 +29,8 @@ Browser
 
 KyanetWorkStation 可以通过 KyanetAccount 的第一方接入 API 读取反馈/WorkTask 登录策略，并用一次性登录票据创建独立的 KWS 账号用户会话。该接入不会处理 KyanetAccount 密码，也不会复用 KyanetAccount 浏览器 session cookie；KWS 使用单独的 `kws_account_sid` Cookie 保存本地账号用户会话。
 
+默认策略为 fail-closed：当 KyanetAccount policy 获取失败或未显式允许匿名时，反馈与 WorkTask 提交都需要 Account 登录。`/auth/account/start` 会跳转到 `${KYANET_ACCOUNT_PUBLIC_URL}/workstation/login`，并传入绝对 KWS `returnUrl` 与 callback 地址；Account 前端完成登录票据创建后回跳 `/auth/account/callback?ticket=...&returnUrl=...`。
+
 相关环境变量：
 
 ```env
@@ -119,6 +121,8 @@ KYANET_ACCOUNT_SESSION_TTL_HOURS=168
 ### `POST /api/feedback`
 提交反馈。
 
+当 Account policy 要求登录时，需要先通过 `/auth/account/start` 建立 `kws_account_sid` 会话。已登录提交会记录 `account_user_id`、`account_email_snapshot`、`account_display_name_snapshot`。
+
 请求体：
 
 ```json
@@ -134,6 +138,8 @@ KYANET_ACCOUNT_SESSION_TTL_HOURS=168
 ### `POST /api/worktask`
 提交 WorkTask/任务。
 
+当 Account policy 要求登录时，需要先通过 `/auth/account/start` 建立 `kws_account_sid` 会话。已登录提交会记录 `account_user_id`、`account_email_snapshot`、`account_display_name_snapshot`。
+
 请求体：
 
 ```json
@@ -147,6 +153,29 @@ KYANET_ACCOUNT_SESSION_TTL_HOURS=168
   "tags": "前端,协作"
 }
 ```
+
+### `GET /auth/account/start`
+跳转到 KyanetAccount 前端授权入口。可选查询参数：`returnUrl`，仅允许 KWS 同源路径，最终传给 Account 前端的是绝对 KWS returnUrl。
+
+### `GET /auth/account/callback`
+使用 KyanetAccount 一次性登录票据创建 KWS Account session。
+
+查询参数：
+
+- `ticket`：KyanetAccount login ticket。
+- `returnUrl`：登录后回跳路径，仅允许 KWS 同源路径。
+
+### `GET /api/account/me`
+返回当前 Account 用户会话。
+
+### `POST /api/account/logout`
+注销当前 Account 用户会话。
+
+### `GET /api/account/feedback`
+返回当前 Account 用户提交过的反馈。
+
+### `GET /api/account/worktask`
+返回当前 Account 用户提交过的 WorkTask。
 
 ### `POST /api/admin/login`
 管理员登录，成功后下发 HttpOnly Cookie。要求：
