@@ -11,7 +11,7 @@
 - [x] Security review follow-up: accept POST `/auth/account/callback` for ticket handoff and keep GET only for compatibility.
 - [x] Security review follow-up: redact sensitive query keys in KWS access logs.
 - [x] Add regression coverage for WorkTask fail-closed, mixed anonymous policy, POST callback, and log URL redaction.
-- [ ] Commit Task 5 security follow-up.
+- [x] Commit Task 5 security follow-up.
 
 ## RED Notes
 
