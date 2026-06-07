@@ -215,6 +215,20 @@ function sqliteSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at ON admin_session(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)",
+    `CREATE TABLE IF NOT EXISTS account_session (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_user_id TEXT NOT NULL,
+      account_email TEXT NOT NULL,
+      account_display_name TEXT NOT NULL DEFAULT '',
+      token_hash TEXT NOT NULL UNIQUE,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_account_session_expires_at ON account_session(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_account_session_user_id ON account_session(account_user_id)",
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -285,6 +299,20 @@ function mysqlSchemaStatements() {
         FOREIGN KEY (user_id) REFERENCES admin_user(id)
         ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS account_session (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      account_user_id VARCHAR(128) NOT NULL,
+      account_email VARCHAR(320) NOT NULL,
+      account_display_name VARCHAR(255) NOT NULL DEFAULT '',
+      token_hash VARCHAR(128) NOT NULL UNIQUE,
+      ip VARCHAR(64) NULL,
+      user_agent VARCHAR(255) NULL,
+      created_at VARCHAR(40) NOT NULL,
+      expires_at VARCHAR(40) NOT NULL,
+      last_seen_at VARCHAR(40) NOT NULL,
+      INDEX idx_account_session_expires_at (expires_at),
+      INDEX idx_account_session_user_id (account_user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key VARCHAR(128) PRIMARY KEY,
       value TEXT NOT NULL,
@@ -352,6 +380,20 @@ function postgresSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_admin_session_expires_at ON admin_session(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_admin_session_user_id ON admin_session(user_id)",
+    `CREATE TABLE IF NOT EXISTS account_session (
+      id BIGSERIAL PRIMARY KEY,
+      account_user_id TEXT NOT NULL,
+      account_email TEXT NOT NULL,
+      account_display_name TEXT NOT NULL DEFAULT '',
+      token_hash TEXT NOT NULL UNIQUE,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_account_session_expires_at ON account_session(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_account_session_user_id ON account_session(account_user_id)",
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -370,6 +412,7 @@ async function initializeDatabase() {
     await executeMany(postgresSchemaStatements());
   }
   await ensureHomeDisplayColumns();
+  await ensureAccountSessionSchema();
   await ensureStatusSettings();
 }
 
@@ -470,6 +513,41 @@ async function ensureHomeDisplayColumns() {
     } else {
       await execute("ALTER TABLE worktask ADD COLUMN created_by_admin BOOLEAN NOT NULL DEFAULT FALSE");
     }
+  }
+}
+
+async function tableExists(tableName) {
+  if (client === "sqlite") {
+    const row = await queryOne("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [tableName]);
+    return Boolean(row);
+  }
+
+  if (client === "mysql") {
+    const row = await queryOne(
+      "SELECT 1 AS exists_flag FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1",
+      [tableName]
+    );
+    return Boolean(row);
+  }
+
+  const row = await queryOne(
+    "SELECT 1 AS exists_flag FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1 LIMIT 1",
+    [tableName]
+  );
+  return Boolean(row);
+}
+
+async function ensureAccountSessionSchema() {
+  if (await tableExists("account_session")) {
+    return;
+  }
+
+  if (client === "sqlite") {
+    await executeMany(sqliteSchemaStatements().filter((statement) => statement.includes("account_session")));
+  } else if (client === "mysql") {
+    await executeMany(mysqlSchemaStatements().filter((statement) => statement.includes("account_session")));
+  } else {
+    await executeMany(postgresSchemaStatements().filter((statement) => statement.includes("account_session")));
   }
 }
 
@@ -793,6 +871,63 @@ async function touchSessionLastSeen(sessionId, isoTime) {
   const p1 = placeholder(1);
   const p2 = placeholder(2);
   await execute(`UPDATE admin_session SET last_seen_at = ${p1} WHERE id = ${p2}`, [isoTime, sessionId]);
+}
+
+async function createAccountSessionRecord({
+  accountUserId,
+  accountEmail,
+  accountDisplayName,
+  tokenHash,
+  ip,
+  userAgent,
+  createdAt,
+  expiresAt,
+  lastSeenAt
+}) {
+  const params = [
+    accountUserId,
+    accountEmail,
+    accountDisplayName || "",
+    tokenHash,
+    ip || "",
+    String(userAgent || "").slice(0, 255),
+    createdAt,
+    expiresAt,
+    lastSeenAt
+  ];
+  const marks = params.map((_, idx) => placeholder(idx + 1)).join(", ");
+  await execute(
+    `INSERT INTO account_session (account_user_id, account_email, account_display_name, token_hash, ip, user_agent, created_at, expires_at, last_seen_at)
+     VALUES (${marks})`,
+    params
+  );
+}
+
+async function deleteAccountSessionByTokenHash(tokenHash) {
+  const p1 = placeholder(1);
+  await execute(`DELETE FROM account_session WHERE token_hash = ${p1}`, [tokenHash]);
+}
+
+async function findAccountSessionByTokenHash(tokenHash) {
+  const p1 = placeholder(1);
+  return queryOne(
+    `SELECT id AS session_id, account_user_id, account_email, account_display_name, expires_at, last_seen_at
+     FROM account_session
+     WHERE token_hash = ${p1}
+     LIMIT 1`,
+    [tokenHash]
+  );
+}
+
+async function deleteAccountSessionById(sessionId) {
+  const p1 = placeholder(1);
+  await execute(`DELETE FROM account_session WHERE id = ${p1}`, [sessionId]);
+}
+
+async function touchAccountSessionLastSeen(sessionId, isoTime) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  await execute(`UPDATE account_session SET last_seen_at = ${p1} WHERE id = ${p2}`, [isoTime, sessionId]);
 }
 
 function buildFeedbackFilter(status, keyword) {
@@ -1183,6 +1318,11 @@ module.exports = {
   findSessionWithUserByTokenHash,
   deleteSessionById,
   touchSessionLastSeen,
+  createAccountSessionRecord,
+  deleteAccountSessionByTokenHash,
+  findAccountSessionByTokenHash,
+  deleteAccountSessionById,
+  touchAccountSessionLastSeen,
   listFeedback,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,

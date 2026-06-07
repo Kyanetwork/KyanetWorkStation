@@ -25,6 +25,24 @@ Browser
 - 管理页：`/admin/` (`public/admin/index.html`)
 - API：`/api/*`
 
+### KyanetAccount 接入基础
+
+KyanetWorkStation 可以通过 KyanetAccount 的第一方接入 API 读取反馈/WorkTask 登录策略，并用一次性登录票据创建独立的 KWS 账号用户会话。该接入不会处理 KyanetAccount 密码，也不会复用 KyanetAccount 浏览器 session cookie；KWS 使用单独的 `kws_account_sid` Cookie 保存本地账号用户会话。
+
+相关环境变量：
+
+```env
+KYANET_ACCOUNT_BASE_URL=http://127.0.0.1:4000
+KYANET_ACCOUNT_PUBLIC_URL=http://localhost:5173
+KYANET_ACCOUNT_INTEGRATION_SECRET=
+KYANET_ACCOUNT_POLICY_CACHE_MS=60000
+KYANET_ACCOUNT_REQUEST_TIMEOUT_MS=5000
+KYANET_ACCOUNT_COOKIE_NAME=kws_account_sid
+KYANET_ACCOUNT_SESSION_TTL_HOURS=168
+```
+
+生产环境应将 `KYANET_ACCOUNT_INTEGRATION_SECRET` 设置为与 KyanetAccount `WORKSTATION_INTEGRATION_SECRET` 一致的高强度密钥。
+
 ## 2. 功能清单
 
 ### 用户侧

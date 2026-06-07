@@ -54,6 +54,15 @@ const config = {
   dbPath: path.resolve(ROOT_DIR, process.env.DB_PATH || "./data/workstation.db"),
   cookieName: process.env.SESSION_COOKIE_NAME || "kws_sid",
   sessionTtlHours: parseIntOrDefault(process.env.SESSION_TTL_HOURS, 168),
+  account: {
+    baseUrl: stringOrDefault(process.env.KYANET_ACCOUNT_BASE_URL, "http://127.0.0.1:4000"),
+    publicUrl: stringOrDefault(process.env.KYANET_ACCOUNT_PUBLIC_URL, "http://localhost:5173"),
+    integrationSecret: process.env.KYANET_ACCOUNT_INTEGRATION_SECRET || "",
+    policyCacheMs: parseIntOrDefault(process.env.KYANET_ACCOUNT_POLICY_CACHE_MS, 60000),
+    requestTimeoutMs: parseIntOrDefault(process.env.KYANET_ACCOUNT_REQUEST_TIMEOUT_MS, 5000),
+    cookieName: stringOrDefault(process.env.KYANET_ACCOUNT_COOKIE_NAME, "kws_account_sid"),
+    sessionTtlHours: parseIntOrDefault(process.env.KYANET_ACCOUNT_SESSION_TTL_HOURS, 168)
+  },
   bcryptRounds: parseIntOrDefault(process.env.BCRYPT_ROUNDS, 12),
   adminBootstrapUsername: process.env.ADMIN_USERNAME || "",
   adminBootstrapPassword: process.env.ADMIN_PASSWORD || "",
