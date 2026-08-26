@@ -1,3 +1,5 @@
+> 历史资料：本文是旧任务进度记录，仅供追溯，不代表当前测试或功能状态。
+
 # Progress
 
 - [x] Confirmed current workspace is the isolated worktree and git status is clean.

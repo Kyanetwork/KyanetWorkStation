@@ -10,9 +10,8 @@ data/*.db-shm
 data/*.db-wal
 backups/*.db
 backups/*.gz
-Feedback_CloudbaseVer.md
-migration2localweb_reference_guide.md
-PLAN.md
+# Internal deployment notes may contain real hosts, credentials, or topology.
+docs/internal/
 @old_files/*
 .vscode/
 .idea/

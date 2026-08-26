@@ -1,3 +1,5 @@
+> 历史资料：本文是旧代理会话笔记，仅供追溯，不是当前项目约束。
+
 # Gotchas
 
 - Do not modify the original worktree at `E:\Workplace\Projects\KyanetWorkStation`.

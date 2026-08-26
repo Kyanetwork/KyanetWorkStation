@@ -1,3 +1,5 @@
+> 历史资料：本文是旧任务验证记录，仅供追溯，不代表当前环境的验证结果。
+
 # Verification
 
 Required checks for Task 5:
