@@ -1,39 +1,34 @@
 # Frontend Development Guidelines
 
-> Best practices for frontend development in this project.
-
----
-
-## Overview
-
-This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
-
----
+These rules describe the current static HTML/CSS/JavaScript frontend. They
+intentionally do not prescribe React, hooks, TypeScript, a component library,
+or a build step that the project does not use.
 
 ## Guidelines Index
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
-| [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+| [Directory Structure](./directory-structure.md) | Static pages, page modules, and shared theme | Current |
+| [Component Guidelines](./component-guidelines.md) | Semantic sections, render functions, DOM contracts, and accessibility | Current |
+| [Hook Guidelines](./hook-guidelines.md) | Native event/fetch patterns; no React hooks | Current |
+| [State Management](./state-management.md) | Page-local state, DOM form state, server refresh, and theme preference | Current |
+| [Quality Guidelines](./quality-guidelines.md) | Syntax checks, manual browser smoke, safety, and review | Current |
+| [Type Safety](./type-safety.md) | Plain-JavaScript runtime checks and payload boundaries | Current |
 
----
+## Pre-development checklist
 
-## How to Fill These Guidelines
+1. Read this index and the guideline matching the page or behavior being
+   changed.
+2. Confirm the affected HTML IDs, form names, data-action values, and API
+   envelope before editing.
+3. Keep untrusted values escaped and keep server validation authoritative.
+4. Run node --check, focused API tests, and a manual page smoke check when the
+   change affects browser behavior.
 
-For each guideline file:
+## Quality check
 
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
-
-The goal is to help AI assistants and new team members understand how YOUR project works.
-
----
-
-**Language**: All documentation should be written in **English**.
+- Run `node --check` for changed page scripts and `git diff --check`.
+- For API-affecting work, run the relevant Node tests and record any runtime
+  dependency blocker from the full `npm test` baseline.
+- For browser behavior, manually verify success/error states, keyboard use,
+  light/dark themes, and a narrow viewport.

@@ -1,51 +1,53 @@
-# State Management
+# Frontend State Management
 
-> How state is managed in this project.
+## Current model
 
----
+There is no global state library, store, router, or server-state cache. State
+is kept at the smallest useful scope:
 
-## Overview
+- The home IIFE keeps locale, time zone, formatter, refresh interval, timer,
+  and an in-flight flag in its state object (public/index/main.js:2-9).
+- The admin IIFE keeps the active tab, each list's page/items/load status,
+  status settings, and display formatter in its state object
+  (public/admin/admin.js:21-34).
+- Feedback and WorkTask form values remain in the DOM and are read on submit.
+- The theme preference is the one cross-page setting and is stored under
+  kyanet_theme by public/theme.js.
 
-<!--
-Document your project's state management conventions here.
+Do not add a store for values that are already represented by a form control,
+URL, or a short page-local state object.
 
-Questions to answer:
-- What state management solution do you use?
-- How is local vs global state decided?
-- How do you handle server state?
-- What are the patterns for derived state?
--->
+## Server state and refresh
 
-(To be filled by the team)
+Treat API responses as server state. Fetch them through the page helper,
+normalize missing fields with safe defaults, render the response, and refresh
+the relevant projection after a mutation. The admin list loaders reset the
+page when a new search starts and recursively correct a page that is now past
+totalPages (public/admin/admin.js:409-462).
 
----
+The home MeowStatus loop retains its interval id and refuses overlapping
+requests. Preserve this lifecycle when adding another periodic display:
 
-## State Categories
+1. load once with the initial page data;
+2. store the timer id;
+3. skip while a request is in flight;
+4. clear the previous timer before starting a replacement.
 
-<!-- Local state, global state, server state, URL state -->
+## Local and transient state
 
-(To be filled by the team)
+Use DOM properties for transient form/input state and classList for visibility
+or busy status. Use data-id, data-action, and data-status for event-delegation
+metadata, then convert values at the boundary (Number for ids and explicit
+booleans for switches). Keep server data out of localStorage; only user
+presentation preference currently belongs there.
 
----
+## Common mistakes
 
-## When to Use Global State
+- Maintaining a second JavaScript copy of a text input that can become stale.
+- Treating a cached list as authoritative after a status/delete operation.
+- Starting duplicate intervals on every render.
+- Persisting feedback, WorkTask, Account, or admin data in browser storage.
+- Promoting a page-local flag to a global library without a second consumer.
 
-<!-- Criteria for promoting state to global -->
-
-(To be filled by the team)
-
----
-
-## Server State
-
-<!-- How server data is cached and synchronized -->
-
-(To be filled by the team)
-
----
-
-## Common Mistakes
-
-<!-- State management mistakes your team has made -->
-
-(To be filled by the team)
+Reference files: public/index/main.js, public/admin/admin.js, public/theme.js,
+and the mutation listeners in public/admin/admin.js:706-807.

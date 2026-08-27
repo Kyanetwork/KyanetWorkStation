@@ -1,38 +1,32 @@
 # Backend Development Guidelines
 
-> Best practices for backend development in this project.
-
----
-
-## Overview
-
-This directory contains guidelines for backend development. Fill in each file with your project's specific conventions.
-
----
+These rules describe the current Node.js + Express backend. They are source-
+backed constraints for future work, not a proposal to replace the existing
+stack.
 
 ## Guidelines Index
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | To fill |
-| [Error Handling](./error-handling.md) | Error types, handling strategies | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
+| [Directory Structure](./directory-structure.md) | `server/` modules, scripts, and tests | Current |
+| [Database Guidelines](./database-guidelines.md) | Multi-driver SQL, schema compatibility, and row mapping | Current |
+| [Error Handling](./error-handling.md) | API envelope, async propagation, and HTTP error mapping | Current |
+| [Quality Guidelines](./quality-guidelines.md) | JavaScript tests, security boundaries, and review checks | Current |
+| [Logging Guidelines](./logging-guidelines.md) | Pino fields, request ids, levels, and redaction | Current |
 
----
+## Pre-development checklist
 
-## How to Fill These Guidelines
+1. Read this index and the guideline matching the layer you will change.
+2. Trace input through `validation.js`, `app.js`, and `db.js` before
+   changing a response or schema.
+3. Preserve the API envelope, security middleware, and public/admin DTO
+   boundaries.
+4. Run focused tests first, then the appropriate full checks from
+   `quality-guidelines.md`.
 
-For each guideline file:
+## Quality check
 
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
-
-The goal is to help AI assistants and new team members understand how YOUR project works.
-
----
-
-**Language**: All documentation should be written in **English**.
+- Run `node --check` for changed JavaScript and the relevant `node:test` files.
+- Run `npm test` for the full baseline; record the known native SQLite ABI
+  blocker when it occurs.
+- Run `git diff --check` and confirm only the task's spec/task files changed.

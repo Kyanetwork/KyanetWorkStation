@@ -1,59 +1,68 @@
-# Component Guidelines
+# Frontend Component Guidelines
 
-> How components are built in this project.
+## What a component means here
 
----
+This project has no React/Vue component model or component library. A
+“component” is a semantic HTML section plus the page-local render or event
+functions that operate on its DOM nodes. Do not add a framework component just
+to reuse one card or form.
 
-## Overview
+Use stable IDs and data-action attributes as the local contracts. For example,
+public/admin/index.html defines feedbackList and worktaskList, while
+public/admin/admin.js attaches one click listener to each list and dispatches
+by data-action.
 
-<!--
-Document your project's component conventions here.
+## Rendering pattern
 
-Questions to answer:
-- What component patterns do you use?
-- How are props defined?
-- How do you handle composition?
-- What accessibility standards apply?
--->
+Keep render functions pure with respect to their input and write only to the
+target node. The existing patterns are:
 
-(To be filled by the team)
+- renderList in public/index/main.js for public showcase items.
+- renderFeedbackList and renderWorktaskList in public/admin/admin.js for
+  repeated admin records.
+- showMessage/showToast for status feedback.
 
----
+When a template uses innerHTML, escape every API or user value first with
+escapeHtml (or linkifySafeText, which escapes before adding safe links).
+Prefer textContent, classList, and createElement for one-off text or state
+updates. Keep external links target="_blank" only with
+rel="noopener noreferrer".
 
-## Component Structure
+~~~js
+container.innerHTML = items.map(renderItem).join("");
+~~~
 
-<!-- Standard structure of a component file -->
+The renderItem function must escape every dynamic field before it is inserted.
 
-(To be filled by the team)
+## Inputs and composition
 
----
+HTML forms define the field names and browser constraints (required, maxlength,
+and type="datetime-local"). The submit handler trims values, converts local
+date-time to ISO when needed, sends JSON, and restores the button in finally.
+Keep the DOM field name, payload key, and backend validator key aligned.
 
-## Props Conventions
+Use small page-local functions rather than a prop system. If two pages really
+share behavior, first extract a narrow function with an explicit argument
+shape; do not create a speculative component framework.
 
-<!-- How props should be defined and typed -->
+## Styling and accessibility
 
-(To be filled by the team)
+Styles are inline in each page's style block. Preserve the existing CSS
+variables, responsive breakpoints, light/dark data-theme selector, and reduced
+visual complexity. Every form control should retain its associated label,
+visible validation/status text should use textContent, and notifications should
+keep aria-live="polite" as in the admin toast region. Images need meaningful
+alt text or an intentionally empty alt for decorative icons.
 
----
+## Common mistakes
 
-## Styling Patterns
+- Inserting raw feedback content, contact details, or provider payloads into
+  innerHTML.
+- Reading a DOM node before the page script is loaded.
+- Mutating a list item without reloading the server projection after a write.
+- Replacing the established theme variables with a page-specific palette.
+- Adding React props/hooks or a component package to a static page.
 
-<!-- How styles are applied (CSS modules, styled-components, Tailwind, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Accessibility
-
-<!-- A11y requirements and patterns -->
-
-(To be filled by the team)
-
----
-
-## Common Mistakes
-
-<!-- Component-related mistakes your team has made -->
-
-(To be filled by the team)
+Reference files: public/index/main.js:101-185,
+public/admin/admin.js:281-364, public/admin/index.html:118-217, and
+public/theme.js.
