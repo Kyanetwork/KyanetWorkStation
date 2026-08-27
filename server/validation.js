@@ -19,6 +19,16 @@ function normalizeNullableString(value, maxLen) {
   return normalized.slice(0, maxLen);
 }
 
+function hasOwn(payload, key) {
+  return Boolean(payload && Object.prototype.hasOwnProperty.call(payload, key));
+}
+
+function isValidDateTime(value) {
+  if (!value) return true;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+}
+
 function normalizeEmailToken(token) {
   let value = normalizeString(token);
   if (!value) return "";
@@ -283,15 +293,30 @@ function validateWorktaskStatusPayload(payload) {
 
 function validateWorktaskArrangePayload(payload) {
   const id = Number.parseInt(payload.id, 10);
-  const assignee = normalizeNullableString(payload.assignee, 100);
-  const scheduledAt = normalizeNullableString(payload.scheduledAt, 40);
-  const status = normalizeString(payload.status);
+  const assigneeProvided = hasOwn(payload, "assignee");
+  const scheduledAtProvided = hasOwn(payload, "scheduledAt");
+  const statusProvided = hasOwn(payload, "status");
+  const assignee = assigneeProvided ? normalizeNullableString(payload.assignee, 100) : "";
+  const scheduledAt = scheduledAtProvided ? normalizeNullableString(payload.scheduledAt, 40) : "";
+  const status = statusProvided ? normalizeString(payload.status) : "";
 
   if (!Number.isFinite(id) || id <= 0) {
     return { valid: false, message: "id 不合法" };
   }
-  if (!assignee && !scheduledAt && !status) {
+  if (!assigneeProvided && !scheduledAtProvided && !statusProvided) {
     return { valid: false, message: "请至少提供 assignee、scheduledAt 或 status 之一" };
+  }
+  if (assigneeProvided && payload.assignee !== null && typeof payload.assignee !== "string") {
+    return { valid: false, message: "assignee 必须是字符串、null 或空字符串" };
+  }
+  if (scheduledAtProvided && payload.scheduledAt !== null && typeof payload.scheduledAt !== "string") {
+    return { valid: false, message: "scheduledAt 必须是 ISO 时间、null 或空字符串" };
+  }
+  if (scheduledAt && !isValidDateTime(scheduledAt)) {
+    return { valid: false, message: "scheduledAt 必须是有效时间" };
+  }
+  if (statusProvided && (!status || typeof payload.status !== "string")) {
+    return { valid: false, message: "status 必须是有效 WorkTask 状态" };
   }
   if (status && !ALLOWED_WORKTASK_STATUS.has(status)) {
     return { valid: false, message: "worktask status 不合法" };
@@ -303,7 +328,10 @@ function validateWorktaskArrangePayload(payload) {
       id,
       assignee,
       scheduledAt,
-      status
+      status,
+      assigneeProvided,
+      scheduledAtProvided,
+      statusProvided
     }
   };
 }

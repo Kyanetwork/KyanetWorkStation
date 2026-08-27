@@ -353,6 +353,8 @@
           <input id="assignee-${item.id}" placeholder="负责人（可选）" value="${escapeHtml(item.assignee || "")}">
           <input id="scheduled-${item.id}" type="datetime-local" value="${toDateTimeLocalValue(item.scheduledAt)}">
           <button data-action="worktask-arrange" data-id="${item.id}">保存安排</button>
+          <button data-action="worktask-clear-assignee" data-id="${item.id}">清空负责人</button>
+          <button data-action="worktask-clear-scheduled" data-id="${item.id}">清空计划时间</button>
         </div>
         <div class="ops" style="margin-top:6px;">
           <textarea id="worktask-note-${item.id}" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000">${escapeHtml(item.adminNote || "")}</textarea>
@@ -771,6 +773,20 @@
           await loadWorktask();
         });
         notify(worktaskMsg, "ok", "WorkTask 安排已保存");
+      }
+
+      if (btn.dataset.action === "worktask-clear-assignee" || btn.dataset.action === "worktask-clear-scheduled") {
+        const payload = { id };
+        if (btn.dataset.action === "worktask-clear-assignee") {
+          payload.assignee = null;
+        } else {
+          payload.scheduledAt = null;
+        }
+        await withButtonBusy(btn, "清除中...", async () => {
+          await api("/api/admin/worktask/arrange", payload);
+          await loadWorktask();
+        });
+        notify(worktaskMsg, "ok", btn.dataset.action === "worktask-clear-assignee" ? "WorkTask 负责人已清空" : "WorkTask 计划时间已清空");
       }
 
       if (btn.dataset.action === "worktask-delete") {

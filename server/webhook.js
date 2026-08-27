@@ -212,13 +212,47 @@ async function postWebhook(url, body) {
   }
 }
 
+function resolveWebhookTargets(target) {
+  const urls = Array.isArray(config.webhook.urls) ? config.webhook.urls : [];
+  if (!target || target === "configured-endpoints") {
+    return urls.map((url, index) => ({ index, url }));
+  }
+
+  const match = /^webhook-endpoints:([0-9]+(?:,[0-9]+)*)$/.exec(String(target));
+  if (!match) return [];
+
+  const indexes = [...new Set(match[1].split(",").map((value) => Number(value)))]
+    .filter((index) => Number.isSafeInteger(index) && index >= 0 && index < urls.length);
+  return indexes.map((index) => ({ index, url: urls[index] }));
+}
+
+function formatWebhookTarget(items) {
+  if (items.length === config.webhook.urls.length) {
+    return "configured-endpoints";
+  }
+  return `webhook-endpoints:${items.map((item) => item.index).join(",")}`;
+}
+
 async function sendWebhookMessage(title, lines, meta = {}) {
   if (!webhookAvailable()) {
     return {
       sent: false,
       okCount: 0,
       failCount: 0,
-      failures: []
+      failures: [],
+      target: ""
+    };
+  }
+
+  const targets = resolveWebhookTargets(meta.target);
+  if (!targets.length) {
+    return {
+      sent: false,
+      okCount: 0,
+      failCount: 0,
+      failures: [],
+      reason: "webhook_target_unavailable",
+      target: String(meta.target || "").slice(0, 64)
     };
   }
 
@@ -227,15 +261,14 @@ async function sendWebhookMessage(title, lines, meta = {}) {
   const failures = [];
   let okCount = 0;
 
-  for (const [index, url] of config.webhook.urls.entries()) {
-    const result = await postWebhook(url, body);
+  for (const item of targets) {
+    const result = await postWebhook(item.url, body);
     if (result.ok) {
       okCount += 1;
       continue;
     }
     failures.push({
-      index,
-      url: oneLine(url, 500),
+      index: item.index,
       error: oneLine(result.error || "发送失败", 240),
       status: result.status || null
     });
@@ -245,7 +278,8 @@ async function sendWebhookMessage(title, lines, meta = {}) {
     sent: true,
     okCount,
     failCount: failures.length,
-    failures
+    failures,
+    target: formatWebhookTarget(targets)
   };
 }
 
@@ -263,7 +297,7 @@ async function notifyWebhookNewFeedback(payload) {
         textBlock(payload.content, 2000),
         ...formatCommonFooter()
       ],
-      { event: "feedback.created" }
+      { event: "feedback.created", target: payload.notificationTarget }
     );
     if (!result.sent) {
       return { sent: false, ok: false, reason: "webhook_not_ready", ...result };
@@ -314,7 +348,7 @@ async function notifyWebhookNewWorktask(payload) {
         textBlock(payload.content, 2500),
         ...formatCommonFooter()
       ],
-      { event: "worktask.created" }
+      { event: "worktask.created", target: payload.notificationTarget }
     );
     if (!result.sent) {
       return { sent: false, ok: false, reason: "webhook_not_ready", ...result };
@@ -351,7 +385,7 @@ async function sendWebhookTestMessage(payload = {}) {
       extraText ? `附加内容：${extraText}` : "附加内容：-",
       ...formatCommonFooter()
     ],
-    { event: "notify.webhook.test" }
+    { event: "notify.webhook.test", target: payload.notificationTarget }
   );
 }
 

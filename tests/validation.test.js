@@ -5,7 +5,8 @@ const {
   validateFeedbackPayload,
   validateAdminLoginPayload,
   validateHomeDisplayPayload,
-  validateSmtpTestPayload
+  validateSmtpTestPayload,
+  validateWorktaskArrangePayload
 } = require("../server/validation");
 
 test("validateFeedbackPayload accepts valid payload", () => {
@@ -56,4 +57,20 @@ test("validateSmtpTestPayload supports comma and semicolon split", () => {
   });
   assert.equal(result.valid, true);
   assert.deepEqual(result.data.to, ["a@example.com", "b@example.com", "c@example.com"]);
+});
+
+test("validateWorktaskArrangePayload preserves explicit clear operations", () => {
+  const assignee = validateWorktaskArrangePayload({ id: 12, assignee: null });
+  const schedule = validateWorktaskArrangePayload({ id: 12, scheduledAt: "" });
+  assert.equal(assignee.valid, true);
+  assert.equal(assignee.data.assigneeProvided, true);
+  assert.equal(assignee.data.assignee, "");
+  assert.equal(schedule.valid, true);
+  assert.equal(schedule.data.scheduledAtProvided, true);
+  assert.equal(schedule.data.scheduledAt, "");
+});
+
+test("validateWorktaskArrangePayload rejects an empty update object", () => {
+  const result = validateWorktaskArrangePayload({ id: 12 });
+  assert.equal(result.valid, false);
 });

@@ -5,20 +5,17 @@ const config = require("./config");
 
 const SUPPORTED_CLIENTS = new Set(["sqlite", "mysql", "postgres"]);
 const client = (config.dbClient || "sqlite").toLowerCase();
-if (!SUPPORTED_CLIENTS.has(client)) {
-  throw new Error(`Unsupported DB_CLIENT: ${config.dbClient}`);
-}
 
 const STATUS_PROFILE_SETTING_KEY = "status.profile";
 const MINECRAFT_STATUS_SETTING_KEY = "status.minecraft";
 const DEFAULT_STATUS_PROFILE = {
-  enabled: true,
+  enabled: false,
   apiBaseUrl: config.meowStatusBaseUrl,
   timeoutMs: config.meowStatusTimeoutMs,
   updatedAt: ""
 };
 const DEFAULT_MINECRAFT_STATUS = {
-  enabled: true,
+  enabled: false,
   updatedAt: ""
 };
 
@@ -55,6 +52,9 @@ function toDbBoolean(value) {
 }
 
 async function ensureDriverInitialized() {
+  if (!SUPPORTED_CLIENTS.has(client)) {
+    throw new Error(`Unsupported DB_CLIENT: ${config.dbClient}`);
+  }
   if (client === "sqlite") {
     if (sqliteDb) return;
     const dbDir = path.dirname(config.dbPath);
@@ -237,6 +237,21 @@ function sqliteSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_account_session_expires_at ON account_session(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_account_session_user_id ON account_session(account_user_id)",
+    `CREATE TABLE IF NOT EXISTS notification_delivery (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      target TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_notification_delivery_due ON notification_delivery(status, next_attempt_at)",
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -329,6 +344,21 @@ function mysqlSchemaStatements() {
       INDEX idx_account_session_expires_at (expires_at),
       INDEX idx_account_session_user_id (account_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS notification_delivery (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      event_id VARCHAR(255) NOT NULL UNIQUE,
+      entity_type VARCHAR(32) NOT NULL,
+      entity_id BIGINT NOT NULL,
+      provider VARCHAR(32) NOT NULL,
+      target VARCHAR(255) NOT NULL DEFAULT '',
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      attempts INT NOT NULL DEFAULT 0,
+      next_attempt_at VARCHAR(40) NOT NULL,
+      last_error VARCHAR(500) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_notification_delivery_due (status, next_attempt_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key VARCHAR(128) PRIMARY KEY,
       value TEXT NOT NULL,
@@ -418,6 +448,21 @@ function postgresSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_account_session_expires_at ON account_session(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_account_session_user_id ON account_session(account_user_id)",
+    `CREATE TABLE IF NOT EXISTS notification_delivery (
+      id BIGSERIAL PRIMARY KEY,
+      event_id TEXT NOT NULL UNIQUE,
+      entity_type TEXT NOT NULL,
+      entity_id BIGINT NOT NULL,
+      provider TEXT NOT NULL,
+      target TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_notification_delivery_due ON notification_delivery(status, next_attempt_at)",
     `CREATE TABLE IF NOT EXISTS workstation_setting (
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -1126,6 +1171,213 @@ function mapWorktaskRow(row) {
   };
 }
 
+async function getFeedbackById(id) {
+  const p1 = placeholder(1);
+  const row = await queryOne(
+    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM feedback WHERE id = ${p1} LIMIT 1`,
+    [id]
+  );
+  return row ? mapFeedbackRow(row) : null;
+}
+
+async function getWorktaskById(id) {
+  const p1 = placeholder(1);
+  const row = await queryOne(
+    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM worktask WHERE id = ${p1} LIMIT 1`,
+    [id]
+  );
+  return row ? mapWorktaskRow(row) : null;
+}
+
+function mapNotificationDeliveryRow(row) {
+  return {
+    id: toNumber(row.id),
+    eventId: row.event_id,
+    entityType: row.entity_type,
+    entityId: toNumber(row.entity_id),
+    provider: row.provider,
+    target: row.target || "",
+    status: row.status,
+    attempts: toNumber(row.attempts),
+    nextAttemptAt: row.next_attempt_at,
+    lastError: row.last_error || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function enqueueNotificationDelivery({ eventId, entityType, entityId, provider, target = "" }) {
+  const eventKey = String(eventId || "").trim();
+  if (!eventKey || !entityType || !provider) {
+    throw new Error("notification delivery requires eventId, entityType and provider");
+  }
+  const p1 = placeholder(1);
+  const existing = await queryOne(
+    `SELECT id FROM notification_delivery WHERE event_id = ${p1} LIMIT 1`,
+    [eventKey]
+  );
+  if (existing) return toNumber(existing.id);
+
+  const now = nowIso();
+  const params = [eventKey, String(entityType).slice(0, 32), toNumber(entityId), String(provider).slice(0, 32), String(target || "").slice(0, 255), now, now, now];
+  const marks = params.map((_, idx) => placeholder(idx + 1));
+  const sql = client === "postgres"
+    ? `INSERT INTO notification_delivery (event_id, entity_type, entity_id, provider, target, status, attempts, next_attempt_at, last_error, created_at, updated_at)
+       VALUES (${marks[0]}, ${marks[1]}, ${marks[2]}, ${marks[3]}, ${marks[4]}, 'pending', 0, ${marks[5]}, '', ${marks[6]}, ${marks[7]}) RETURNING id`
+    : `INSERT INTO notification_delivery (event_id, entity_type, entity_id, provider, target, status, attempts, next_attempt_at, last_error, created_at, updated_at)
+       VALUES (${marks[0]}, ${marks[1]}, ${marks[2]}, ${marks[3]}, ${marks[4]}, 'pending', 0, ${marks[5]}, '', ${marks[6]}, ${marks[7]})`;
+  const result = await execute(sql, params);
+  return result.lastInsertId;
+}
+
+async function enqueueNotificationDeliveries({ entityType, entityId, providers = [] }) {
+  const ids = [];
+  for (const provider of providers) {
+    const normalizedProvider = String(provider || "").trim().toLowerCase();
+    if (!normalizedProvider) continue;
+    const eventId = `${String(entityType).slice(0, 32)}:${toNumber(entityId)}:${normalizedProvider}`;
+    ids.push(await enqueueNotificationDelivery({
+      eventId,
+      entityType,
+      entityId,
+      provider: normalizedProvider,
+      target: normalizedProvider === "smtp" ? "configured-recipients" : "configured-endpoints"
+    }));
+  }
+  return ids;
+}
+
+async function listDueNotificationDeliveries(limit = 20) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const safeLimit = Math.max(1, Math.min(100, toNumber(limit) || 20));
+  const rows = await queryAll(
+    `SELECT id, event_id, entity_type, entity_id, provider, target, status, attempts, next_attempt_at, last_error, created_at, updated_at
+     FROM notification_delivery
+     WHERE status IN ('pending', 'retrying') AND next_attempt_at <= ${p1}
+     ORDER BY next_attempt_at ASC, id ASC
+     LIMIT ${p2}`,
+    [nowIso(), safeLimit]
+  );
+  return rows.map(mapNotificationDeliveryRow);
+}
+
+async function getNotificationDeliveryById(id) {
+  const p1 = placeholder(1);
+  const row = await queryOne(
+    `SELECT id, event_id, entity_type, entity_id, provider, target, status, attempts, next_attempt_at, last_error, created_at, updated_at
+     FROM notification_delivery WHERE id = ${p1} LIMIT 1`,
+    [id]
+  );
+  return row ? mapNotificationDeliveryRow(row) : null;
+}
+
+async function listNotificationDeliveries({ status = "", limit = 100 } = {}) {
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+  if (status) {
+    conditions.push(`status = ${placeholder(idx++)}`);
+    params.push(status);
+  }
+  const limitPlaceholder = placeholder(idx++);
+  params.push(Math.max(1, Math.min(200, toNumber(limit) || 100)));
+  const rows = await queryAll(
+    `SELECT id, event_id, entity_type, entity_id, provider, target, status, attempts, next_attempt_at, last_error, created_at, updated_at
+     FROM notification_delivery ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+     ORDER BY created_at DESC, id DESC LIMIT ${limitPlaceholder}`,
+    params
+  );
+  return rows.map(mapNotificationDeliveryRow);
+}
+
+async function markNotificationDeliveryDelivered(id) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const result = await execute(
+    `UPDATE notification_delivery SET status = 'delivered', last_error = '', updated_at = ${p1} WHERE id = ${p2}`,
+    [nowIso(), id]
+  );
+  return result.changes;
+}
+
+async function recordNotificationDeliveryFailure(id, errorMessage, nextAttemptAt, maxAttempts = 3, nextTarget = null) {
+  const current = await getNotificationDeliveryById(id);
+  if (!current) return { changes: 0, status: "missing", attempts: 0 };
+  const attempts = current.attempts + 1;
+  const status = attempts >= maxAttempts ? "failed" : "retrying";
+  const target = nextTarget == null
+    ? current.target
+    : String(nextTarget).replace(/\s+/g, " ").trim().slice(0, 255);
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const p3 = placeholder(3);
+  const p4 = placeholder(4);
+  const result = await execute(
+    `UPDATE notification_delivery SET status = ${p1}, attempts = ${p2}, next_attempt_at = ${p3}, target = ${p4}, last_error = ${placeholder(5)}, updated_at = ${placeholder(6)} WHERE id = ${placeholder(7)}`,
+    [status, attempts, nextAttemptAt || nowIso(), target, String(errorMessage || "投递失败").replace(/\s+/g, " ").slice(0, 500), nowIso(), id]
+  );
+  return { changes: result.changes, status, attempts };
+}
+
+async function retryNotificationDelivery(id) {
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const p3 = placeholder(3);
+  const result = await execute(
+    `UPDATE notification_delivery SET status = 'pending', attempts = 0, next_attempt_at = ${p1}, last_error = '', updated_at = ${p2} WHERE id = ${p3} AND status IN ('failed', 'retrying')`,
+    [nowIso(), nowIso(), id]
+  );
+  return result.changes;
+}
+
+function mapPublicHighlight(row, kind) {
+  const item = {
+    id: toNumber(row.id),
+    type: row.type,
+    title: row.title,
+    status: row.status,
+    publicReply: row.public_reply || "",
+    updatedAt: row.updated_at
+  };
+  if (kind === "worktask") {
+    item.priority = row.priority;
+    item.createdByAdmin = toBoolean(row.created_by_admin);
+  }
+  return item;
+}
+
+function mapAccountFeedbackRow(row) {
+  return {
+    id: toNumber(row.id),
+    type: row.type,
+    title: row.title,
+    status: row.status,
+    publicReply: row.public_reply || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapAccountWorktaskRow(row) {
+  return {
+    id: toNumber(row.id),
+    type: row.type,
+    title: row.title,
+    priority: row.priority,
+    status: row.status,
+    publicReply: row.public_reply || "",
+    expectedAt: row.expected_at || "",
+    scheduledAt: row.scheduled_at || "",
+    assignee: row.assignee || "",
+    tags: row.tags || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 async function listFeedback({ status, keyword, page, pageSize }) {
   const { whereClause, params, nextIndex } = buildFeedbackFilter(status, keyword);
   const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM feedback ${whereClause}`, params);
@@ -1173,7 +1425,7 @@ async function listFeedbackByAccountUser(accountUserId, limit = 100) {
   const p1 = placeholder(1);
   const p2 = placeholder(2);
   const rows = await queryAll(
-    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+    `SELECT id, type, title, status, public_reply, created_at, updated_at
      FROM feedback
      WHERE account_user_id = ${p1}
      ORDER BY created_at DESC
@@ -1181,7 +1433,7 @@ async function listFeedbackByAccountUser(accountUserId, limit = 100) {
     [accountUserId, Math.max(1, Math.min(100, toNumber(limit) || 100))]
   );
   return {
-    items: rows.map(mapFeedbackRow),
+    items: rows.map(mapAccountFeedbackRow),
     total: rows.length
   };
 }
@@ -1288,7 +1540,7 @@ async function listWorktaskByAccountUser(accountUserId, limit = 100) {
   const p1 = placeholder(1);
   const p2 = placeholder(2);
   const rows = await queryAll(
-    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+    `SELECT id, type, title, priority, status, public_reply, expected_at, scheduled_at, assignee, tags, created_at, updated_at
      FROM worktask
      WHERE account_user_id = ${p1}
      ORDER BY created_at DESC
@@ -1296,7 +1548,7 @@ async function listWorktaskByAccountUser(accountUserId, limit = 100) {
     [accountUserId, Math.max(1, Math.min(100, toNumber(limit) || 100))]
   );
   return {
-    items: rows.map(mapWorktaskRow),
+    items: rows.map(mapAccountWorktaskRow),
     total: rows.length
   };
 }
@@ -1335,27 +1587,35 @@ async function updateWorktaskNoteReply(id, adminNote, publicReply) {
   return result.changes;
 }
 
-async function arrangeWorktask({ id, assignee, scheduledAt, status }) {
+async function arrangeWorktask({ id, assignee, scheduledAt, status, assigneeProvided, scheduledAtProvided, statusProvided }) {
   const updates = [];
   const params = [];
   let idx = 1;
 
-  if (assignee) {
+  const hasAssignee = assigneeProvided === undefined ? assignee !== undefined : Boolean(assigneeProvided);
+  const hasScheduledAt = scheduledAtProvided === undefined ? scheduledAt !== undefined : Boolean(scheduledAtProvided);
+  const hasStatus = statusProvided === undefined ? status !== undefined : Boolean(statusProvided);
+
+  if (hasAssignee) {
     updates.push(`assignee = ${placeholder(idx++)}`);
-    params.push(assignee);
+    params.push(assignee || null);
   }
-  if (scheduledAt) {
+  if (hasScheduledAt) {
     updates.push(`scheduled_at = ${placeholder(idx++)}`);
-    params.push(scheduledAt);
+    params.push(scheduledAt || null);
   }
 
-  let nextStatus = status;
-  if (!nextStatus && (assignee || scheduledAt)) {
+  let nextStatus = hasStatus ? status : "";
+  if (!hasStatus && ((hasAssignee && assignee) || (hasScheduledAt && scheduledAt))) {
     nextStatus = "scheduled";
   }
   if (nextStatus) {
     updates.push(`status = ${placeholder(idx++)}`);
     params.push(nextStatus);
+  }
+
+  if (updates.length === 0) {
+    return 0;
   }
 
   updates.push(`updated_at = ${placeholder(idx++)}`);
@@ -1381,7 +1641,7 @@ async function getHomeHighlights(limitPerType = 6) {
   const limit = Math.max(1, Math.min(20, toNumber(limitPerType) || 6));
   const p1 = placeholder(1);
   const feedbackRows = await queryAll(
-    `SELECT id, type, title, content, status, public_reply, updated_at
+    `SELECT id, type, title, status, public_reply, updated_at
      FROM feedback
      WHERE ${homeDisplayCondition()} AND status IN ('new', 'reviewed')
      ORDER BY updated_at DESC
@@ -1389,7 +1649,7 @@ async function getHomeHighlights(limitPerType = 6) {
     [limit]
   );
   const worktaskRows = await queryAll(
-    `SELECT id, type, title, content, status, priority, created_by_admin, public_reply, updated_at
+    `SELECT id, type, title, status, priority, created_by_admin, public_reply, updated_at
      FROM worktask
      WHERE ${homeDisplayCondition()} AND status IN ('new', 'scheduled', 'in_progress')
      ORDER BY updated_at DESC
@@ -1398,26 +1658,8 @@ async function getHomeHighlights(limitPerType = 6) {
   );
 
   return {
-    feedbackItems: feedbackRows.map((row) => ({
-      id: toNumber(row.id),
-      type: row.type,
-      title: row.title,
-      content: row.content,
-      status: row.status,
-      publicReply: row.public_reply || "",
-      updatedAt: row.updated_at
-    })),
-    worktaskItems: worktaskRows.map((row) => ({
-      id: toNumber(row.id),
-      type: row.type,
-      title: row.title,
-      content: row.content,
-      status: row.status,
-      priority: row.priority,
-      createdByAdmin: toBoolean(row.created_by_admin),
-      publicReply: row.public_reply || "",
-      updatedAt: row.updated_at
-    }))
+    feedbackItems: feedbackRows.map((row) => mapPublicHighlight(row, "feedback")),
+    worktaskItems: worktaskRows.map((row) => mapPublicHighlight(row, "worktask"))
   };
 }
 
@@ -1447,6 +1689,8 @@ module.exports = {
   createWorktask,
   createWorktaskByAdmin,
   getAdminByUsername,
+  getFeedbackById,
+  getWorktaskById,
   upsertAdminUser,
   createSessionRecord,
   deleteSessionByTokenHash,
@@ -1475,5 +1719,13 @@ module.exports = {
   getStatusSettings,
   updateStatusProfileSettings,
   updateMinecraftStatusSettings,
+  enqueueNotificationDelivery,
+  enqueueNotificationDeliveries,
+  listDueNotificationDeliveries,
+  getNotificationDeliveryById,
+  listNotificationDeliveries,
+  markNotificationDeliveryDelivered,
+  recordNotificationDeliveryFailure,
+  retryNotificationDelivery,
   closeDatabase
 };

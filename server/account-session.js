@@ -10,7 +10,10 @@ const {
 } = require("./db");
 const { sendError } = require("./errors");
 
-const accountCookieName = config.account.cookieName;
+// This module is retained only for historical data/session migration tests. It
+// is intentionally not imported by the active WorkStation request path.
+const accountCookieName = "kws_account_sid";
+const accountSessionTtlHours = 168;
 
 function hashToken(rawToken) {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
@@ -26,7 +29,7 @@ function buildAccountSessionCookieOptions() {
     sameSite: "strict",
     secure: config.isProduction,
     path: "/",
-    maxAge: config.account.sessionTtlHours * 60 * 60 * 1000
+    maxAge: accountSessionTtlHours * 60 * 60 * 1000
   };
 }
 
@@ -47,7 +50,7 @@ async function createAccountSessionForUser(user, req) {
   const rawToken = generateSessionToken();
   const tokenHash = hashToken(rawToken);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + config.account.sessionTtlHours * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(now.getTime() + accountSessionTtlHours * 60 * 60 * 1000).toISOString();
   const nowText = now.toISOString();
 
   await createAccountSessionRecord({

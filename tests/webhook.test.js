@@ -91,3 +91,53 @@ test("webhook keyword provider errors are mapped to actionable message", async (
     global.fetch = previousFetch;
   }
 });
+
+test("webhook partial failures expose counts and support targeted retries", async () => {
+  const previousFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (url) => {
+    requests.push(url);
+    if (url.endsWith("/ok")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => ""
+      };
+    }
+    return {
+      ok: false,
+      status: 503,
+      text: async () => "upstream unavailable"
+    };
+  };
+
+  const { webhook, restore } = loadWebhookWithEnv({
+    WEBHOOK_ENABLED: "true",
+    WEBHOOK_PROVIDER: "generic",
+    WEBHOOK_URLS: "https://example.test/ok,https://example.test/fail"
+  });
+
+  try {
+    const result = await webhook.sendWebhookTestMessage({ operator: "tester" });
+    assert.equal(result.okCount, 1);
+    assert.equal(result.failCount, 1);
+    assert.equal(result.failures[0].index, 1);
+    assert.equal(result.failures[0].url, undefined);
+    assert.deepEqual(requests, [
+      "https://example.test/ok",
+      "https://example.test/fail"
+    ]);
+
+    requests.length = 0;
+    const retry = await webhook.sendWebhookTestMessage({
+      operator: "tester",
+      notificationTarget: "webhook-endpoints:1"
+    });
+    assert.equal(retry.okCount, 0);
+    assert.equal(retry.failCount, 1);
+    assert.deepEqual(requests, ["https://example.test/fail"]);
+  } finally {
+    restore();
+    global.fetch = previousFetch;
+  }
+});

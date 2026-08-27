@@ -8,6 +8,7 @@ const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 
 const config = require("./config");
+const { validateRuntimeConfig } = config;
 const { logger, requestLoggerMiddleware } = require("./logger");
 const { notifyNewFeedback, notifyNewWorktask, sendSmtpTestMail } = require("./notify");
 const { notifyWebhookNewFeedback, notifyWebhookNewWorktask, sendWebhookTestMessage } = require("./webhook");
@@ -21,14 +22,14 @@ const {
   createWorktask,
   createWorktaskByAdmin,
   getAdminByUsername,
+  getFeedbackById,
+  getWorktaskById,
   listFeedback,
-  listFeedbackByAccountUser,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,
   updateFeedbackNoteReply,
   deleteFeedback,
   listWorktask,
-  listWorktaskByAccountUser,
   updateWorktaskStatus,
   updateWorktaskHomeDisplay,
   updateWorktaskNoteReply,
@@ -37,7 +38,13 @@ const {
   getHomeHighlights,
   getStatusSettings,
   updateStatusProfileSettings,
-  updateMinecraftStatusSettings
+  updateMinecraftStatusSettings,
+  enqueueNotificationDeliveries,
+  listNotificationDeliveries,
+  retryNotificationDelivery,
+  markNotificationDeliveryDelivered,
+  recordNotificationDeliveryFailure,
+  listDueNotificationDeliveries
 } = require("./db");
 const { fetchMeowStatusDashboard } = require("./meowstatus");
 const { sendError } = require("./errors");
@@ -48,19 +55,6 @@ const {
   destroySessionByCookieToken,
   requireAdminSession
 } = require("./auth");
-const {
-  createPolicyCache,
-  fetchWorkstationPolicy,
-  exchangeLoginTicket
-} = require("./account-auth");
-const {
-  accountCookieName,
-  buildAccountSessionCookieOptions,
-  clearAccountSessionCookie,
-  createAccountSessionForUser,
-  destroyAccountSessionByCookieToken,
-  requireAccountSession
-} = require("./account-session");
 const {
   validateFeedbackPayload,
   validateWorktaskPayload,
@@ -86,8 +80,6 @@ const {
 
 const app = express();
 app.set("trust proxy", config.trustProxy);
-
-const ACCOUNT_LOGIN_PATH = "/workstation/login";
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -159,198 +151,119 @@ function asyncHandler(handler) {
   };
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function configuredNotificationProviders() {
+  const providers = [];
+  if (config.smtp.enabled) providers.push("smtp");
+  if (config.webhook.enabled) providers.push("webhook");
+  return providers;
 }
 
-function isNotifyResultSkipped(result) {
-  return Boolean(result && typeof result === "object" && result.sent === false);
+async function queueNotifications(entityType, entityId) {
+  const providers = configuredNotificationProviders();
+  if (!providers.length) return [];
+  try {
+    return await enqueueNotificationDeliveries({ entityType, entityId, providers });
+  } catch (error) {
+    logger.error({
+      event: "notification.outbox.enqueue.error",
+      entityType,
+      entityId,
+      error: error && error.message ? error.message : String(error)
+    }, "notification outbox enqueue failed");
+    return [];
+  }
 }
 
-function isNotifyResultRetryableFailure(result) {
-  if (!result || typeof result !== "object") {
-    return false;
+async function deliverNotification(delivery) {
+  const record = delivery.entityType === "feedback"
+    ? await getFeedbackById(delivery.entityId)
+    : await getWorktaskById(delivery.entityId);
+  if (!record) {
+    return recordNotificationDeliveryFailure(delivery.id, "业务记录不存在", new Date(Date.now() + 60 * 60 * 1000).toISOString(), 1);
   }
-  if (result.ok === false) {
-    return true;
+
+  let result;
+  if (delivery.provider === "smtp") {
+    result = delivery.entityType === "feedback"
+      ? await notifyNewFeedback({ id: delivery.entityId, ...record })
+      : await notifyNewWorktask({ id: delivery.entityId, source: record.createdByAdmin ? "admin" : "user", ...record });
+  } else if (delivery.provider === "webhook") {
+    result = delivery.entityType === "feedback"
+      ? await notifyWebhookNewFeedback({ id: delivery.entityId, ...record, notificationTarget: delivery.target })
+      : await notifyWebhookNewWorktask({ id: delivery.entityId, source: record.createdByAdmin ? "admin" : "user", ...record, notificationTarget: delivery.target });
+  } else {
+    result = { sent: true, ok: false, error: "不支持的通知 provider" };
   }
-  if (typeof result.failCount === "number" && typeof result.okCount === "number") {
-    return result.failCount > 0 && result.okCount === 0;
+
+  const isWebhookPartialFailure = delivery.provider === "webhook" && result &&
+    typeof result.failCount === "number" && result.failCount > 0;
+  const success = result && result.sent !== false && result.ok !== false && !isWebhookPartialFailure;
+  if (success) {
+    await markNotificationDeliveryDelivered(delivery.id);
+    logger.info({ event: "notification.delivery.success", deliveryId: delivery.id, provider: delivery.provider }, "notification delivered");
+    return { status: "delivered" };
   }
-  return false;
+
+  const attempt = delivery.attempts + 1;
+  const backoffMs = Math.min(60 * 60 * 1000, 1000 * 2 ** Math.min(attempt, 10));
+  const message = isWebhookPartialFailure
+    ? `Webhook 投递部分失败（成功 ${result.okCount}，失败 ${result.failCount}）${result.failures && result.failures[0] && result.failures[0].error ? `：${result.failures[0].error}` : ""}`
+    : (result && (result.error || result.reason) ? String(result.error || result.reason) : "通知投递失败");
+  const failedWebhookIndexes = isWebhookPartialFailure && Array.isArray(result.failures)
+    ? [...new Set(result.failures
+      .map((failure) => Number(failure && failure.index))
+      .filter((index) => Number.isSafeInteger(index) && index >= 0))]
+    : [];
+  const retryTarget = failedWebhookIndexes.length
+    ? `webhook-endpoints:${failedWebhookIndexes.join(",")}`
+    : null;
+  const outcome = await recordNotificationDeliveryFailure(
+    delivery.id,
+    message,
+    new Date(Date.now() + backoffMs).toISOString(),
+    3,
+    retryTarget || null
+  );
+  logger.warn({
+    event: "notification.delivery.failure",
+    deliveryId: delivery.id,
+    provider: delivery.provider,
+    status: outcome.status,
+    attempts: outcome.attempts,
+    partial: isWebhookPartialFailure,
+    okCount: isWebhookPartialFailure ? result.okCount : undefined,
+    failCount: isWebhookPartialFailure ? result.failCount : undefined,
+    retryTarget: retryTarget || undefined,
+    error: message.slice(0, 240)
+  }, "notification delivery failed");
+  return outcome;
 }
 
-function notifyResultMessage(result) {
-  if (!result || typeof result !== "object") {
-    return "unknown notify result";
-  }
-  if (result.error) {
-    return String(result.error);
-  }
-  if (typeof result.failCount === "number" && typeof result.okCount === "number") {
-    return `ok=${result.okCount}, failed=${result.failCount}`;
-  }
-  return "notify failed";
-}
-
-async function runNotifyTask(taskName, taskFn, maxAttempts = 2) {
-  let lastError = null;
-  let lastResult = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      lastResult = await taskFn();
-      if (isNotifyResultSkipped(lastResult)) {
-        return {
-          taskName,
-          success: true,
-          skipped: true,
-          message: "skip (disabled or incomplete config)"
-        };
-      }
-
-      const retryableFailure = isNotifyResultRetryableFailure(lastResult);
-      if (!retryableFailure) {
-        const partialFailure = Boolean(lastResult && typeof lastResult === "object" &&
-          typeof lastResult.failCount === "number" &&
-          typeof lastResult.okCount === "number" &&
-          lastResult.failCount > 0 &&
-          lastResult.okCount > 0);
-        return {
-          taskName,
-          success: true,
-          skipped: false,
-          partialFailure,
-          message: partialFailure ? notifyResultMessage(lastResult) : ""
-        };
-      }
-      lastError = new Error(notifyResultMessage(lastResult));
-    } catch (error) {
-      lastError = error;
+let notificationWorkerRunning = false;
+async function processNotificationOutbox() {
+  if (notificationWorkerRunning) return;
+  notificationWorkerRunning = true;
+  try {
+    const due = await listDueNotificationDeliveries(20);
+    for (const delivery of due) {
+      await deliverNotification(delivery);
     }
-
-    if (attempt < maxAttempts) {
-      await sleep(300 * attempt);
-    }
+  } catch (error) {
+    logger.error({
+      event: "notification.worker.error",
+      error: error && error.message ? error.message : String(error)
+    }, "notification worker failed");
+  } finally {
+    notificationWorkerRunning = false;
   }
-
-  return {
-    taskName,
-    success: false,
-    skipped: false,
-    partialFailure: false,
-    message: lastError && lastError.message ? lastError.message : "notify task failed",
-    error: lastError
-  };
-}
-
-function fireAndForget(taskName, taskPromiseFactory) {
-  Promise.resolve()
-    .then(taskPromiseFactory)
-    .then((result) => {
-      if (!Array.isArray(result)) return;
-      for (const item of result) {
-        if (!item || typeof item !== "object") continue;
-        if (!item.success) {
-          logger.error({ taskName, subTask: item.taskName, error: item.message }, "notify task failed");
-          continue;
-        }
-        if (item.partialFailure) {
-          logger.warn({ taskName, subTask: item.taskName, error: item.message }, "notify task partial failure");
-        }
-      }
-    })
-    .catch((error) => {
-      logger.error({
-        taskName,
-        error: error && error.message ? error.message : String(error)
-      }, "notify async task failed");
-    });
 }
 
 const requireSameOriginForAdminMutation = createRequireSameOriginForAdminMutation({
   appBaseUrl: config.appBaseUrl,
   allowHeaderlessAdminMutation: config.allowHeaderlessAdminMutation,
+  trustProxy: config.trustProxy,
   sendError
 });
-
-const accountPolicyCache = createPolicyCache({
-  ttlMs: config.account.policyCacheMs,
-  fetchPolicy: () => fetchWorkstationPolicy({
-    baseUrl: config.account.baseUrl,
-    secret: config.account.integrationSecret,
-    timeoutMs: config.account.requestTimeoutMs
-  })
-});
-
-function appOrigin(req) {
-  try {
-    return new URL(config.appBaseUrl).origin;
-  } catch (_) {
-    const host = req.get("host") || "";
-    return host ? `${req.protocol || "http"}://${host}` : "http://127.0.0.1";
-  }
-}
-
-function normalizeReturnPath(req, rawValue) {
-  const fallback = "/";
-  const raw = typeof rawValue === "string" && rawValue.trim() ? rawValue.trim() : fallback;
-  const origin = appOrigin(req);
-
-  try {
-    const url = new URL(raw, origin);
-    if (url.origin !== origin) {
-      return fallback;
-    }
-    return `${url.pathname}${url.search}${url.hash}` || fallback;
-  } catch (_) {
-    return fallback;
-  }
-}
-
-function absoluteKwsReturnUrl(req, rawValue) {
-  return new URL(normalizeReturnPath(req, rawValue), `${appOrigin(req)}/`).toString();
-}
-
-function accountLoginUrl(req) {
-  const url = new URL(ACCOUNT_LOGIN_PATH, `${config.account.publicUrl.replace(/\/+$/, "")}/`);
-  url.searchParams.set("returnUrl", absoluteKwsReturnUrl(req, req.query.returnUrl));
-  return url.toString();
-}
-
-function accountSnapshot(accountUser) {
-  if (!accountUser) {
-    return {
-      accountUserId: "",
-      accountEmailSnapshot: "",
-      accountDisplayNameSnapshot: ""
-    };
-  }
-  return {
-    accountUserId: accountUser.id,
-    accountEmailSnapshot: accountUser.email,
-    accountDisplayNameSnapshot: accountUser.displayName || ""
-  };
-}
-
-function requireAccountForSubmission(kind) {
-  return asyncHandler(async (req, res, next) => {
-    const policy = await accountPolicyCache.getPolicy();
-    const requiresLogin = kind === "feedback"
-      ? policy.feedbackRequiresLogin !== false
-      : policy.worktaskRequiresLogin !== false;
-    const allowAnonymous = policy.allowAnonymousSubmission === true && !requiresLogin;
-    const rawAccountToken = req.cookies[accountCookieName];
-
-    if (!allowAnonymous && !rawAccountToken) {
-      return sendError(res, 401, "UNAUTHORIZED", "提交前请先登录 KyanetAccount");
-    }
-    if (!rawAccountToken) {
-      return next();
-    }
-    return requireAccountSession(req, res, next);
-  });
-}
 
 app.get("/api/health", asyncHandler(async (req, res) => {
   const payload = {
@@ -390,16 +303,17 @@ app.get("/api/public/highlights", asyncHandler(async (req, res) => {
 app.get("/api/public/meowstatus", asyncHandler(async (req, res) => {
   const settings = await getStatusSettings();
   const data = {
+    state: "disabled",
     settings: {
-      profileEnabled: settings.profile.enabled,
-      minecraftEnabled: settings.minecraft.enabled
+      profileEnabled: config.meowStatusEnabled && settings.profile.enabled,
+      minecraftEnabled: config.meowStatusEnabled && settings.minecraft.enabled
     },
     profile: null,
     minecraftWidgets: [],
     error: ""
   };
 
-  if (!settings.profile.enabled && !settings.minecraft.enabled) {
+  if (!config.meowStatusEnabled || (!settings.profile.enabled && !settings.minecraft.enabled)) {
     return res.json({ ok: true, data });
   }
 
@@ -414,115 +328,39 @@ app.get("/api/public/meowstatus", asyncHandler(async (req, res) => {
     if (settings.minecraft.enabled) {
       data.minecraftWidgets = dashboard.minecraftWidgets;
     }
+    data.state = "ok";
   } catch (error) {
+    data.state = "unavailable";
     data.error = error && error.message ? error.message : "MeowStatus 状态加载失败";
   }
 
   return res.json({ ok: true, data });
 }));
 
-app.get("/auth/account/start", (req, res) => {
-  return res.redirect(accountLoginUrl(req));
-});
-
-async function handleAccountCallback(req, res) {
-  const payload = req.method === "POST" ? (req.body || {}) : (req.query || {});
-  const returnPath = normalizeReturnPath(req, payload.returnUrl);
-  const user = await exchangeLoginTicket({
-    ticket: payload.ticket,
-    baseUrl: config.account.baseUrl,
-    secret: config.account.integrationSecret,
-    timeoutMs: config.account.requestTimeoutMs
-  });
-  const token = await createAccountSessionForUser(user, req);
-  res.cookie(accountCookieName, token, buildAccountSessionCookieOptions());
-  return res.redirect(returnPath);
-}
-
-app.get("/auth/account/callback", asyncHandler(handleAccountCallback));
-app.post("/auth/account/callback", asyncHandler(handleAccountCallback));
-
-app.get("/api/account/me", requireAccountSession, (req, res) => {
-  res.json({
-    ok: true,
-    data: {
-      id: req.accountUser.id,
-      email: req.accountUser.email,
-      displayName: req.accountUser.displayName || ""
-    }
-  });
-});
-
-app.post("/api/account/logout", requireAccountSession, asyncHandler(async (req, res) => {
-  await destroyAccountSessionByCookieToken(req.accountToken);
-  clearAccountSessionCookie(res);
-  res.json({ ok: true });
-}));
-
-app.get("/api/account/feedback", requireAccountSession, asyncHandler(async (req, res) => {
-  const data = await listFeedbackByAccountUser(req.accountUser.id);
-  res.json({ ok: true, data });
-}));
-
-app.get("/api/account/worktask", requireAccountSession, asyncHandler(async (req, res) => {
-  const data = await listWorktaskByAccountUser(req.accountUser.id);
-  res.json({ ok: true, data });
-}));
-
-app.post("/api/feedback", submitLimiter, requireAccountForSubmission("feedback"), asyncHandler(async (req, res) => {
+app.post("/api/feedback", submitLimiter, asyncHandler(async (req, res) => {
   const validation = validateFeedbackPayload(req.body || {});
   if (!validation.valid) {
     return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
   }
 
-  const data = {
-    ...validation.data,
-    ...accountSnapshot(req.accountUser)
-  };
+  const data = validation.data;
   const id = await createFeedback(data);
-  fireAndForget("feedback", async () => Promise.all([
-    runNotifyTask("smtp", () => notifyNewFeedback({
-      id,
-      ...data
-    })),
-    runNotifyTask("webhook", () => notifyWebhookNewFeedback({
-      id,
-      ...data
-    }))
-  ]));
+  await queueNotifications("feedback", id);
   return res.status(201).json({
     ok: true,
     data: { id }
   });
 }));
 
-app.post("/api/worktask", submitLimiter, requireAccountForSubmission("worktask"), asyncHandler(async (req, res) => {
+app.post("/api/worktask", submitLimiter, asyncHandler(async (req, res) => {
   const validation = validateWorktaskPayload(req.body || {});
   if (!validation.valid) {
     return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
   }
 
-  const data = {
-    ...validation.data,
-    ...accountSnapshot(req.accountUser)
-  };
+  const data = validation.data;
   const id = await createWorktask(data);
-  fireAndForget("worktask", async () => Promise.all([
-    runNotifyTask("smtp", () => notifyNewWorktask({
-      id,
-      source: "user",
-      showOnHome: false,
-      status: "new",
-      ...data
-    })),
-    runNotifyTask("webhook", () => notifyWebhookNewWorktask({
-      id,
-      source: "user",
-      showOnHome: false,
-      status: "new",
-      ...data
-    }))
-  ]));
+  await queueNotifications("worktask", id);
   return res.status(201).json({
     ok: true,
     data: { id }
@@ -667,6 +505,32 @@ app.post("/api/admin/notify/webhook-test", requireAdminSession, asyncHandler(asy
   }
 }));
 
+app.get("/api/admin/notifications", requireAdminSession, asyncHandler(async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const data = await listNotificationDeliveries({ status });
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/notifications/retry", requireAdminSession, asyncHandler(async (req, res) => {
+  const id = Number.parseInt(req.body && req.body.id, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return sendError(res, 400, "INVALID_PAYLOAD", "id 不合法");
+  }
+  const changes = await retryNotificationDelivery(id);
+  if (changes === 0) {
+    return sendError(res, 404, "NOT_FOUND", "通知记录不存在");
+  }
+  // Manual retry only schedules the durable delivery attempt. Do not make the
+  // admin request wait on every due provider target or its network timeout.
+  processNotificationOutbox().catch((error) => {
+    logger.error({
+      event: "notification.worker.error",
+      error: error && error.message ? error.message : String(error)
+    }, "notification worker failed");
+  });
+  return res.json({ ok: true });
+}));
+
 app.post("/api/admin/feedback/list", requireAdminSession, asyncHandler(async (req, res) => {
   const validation = validateListPayload(req.body || {});
   if (!validation.valid) {
@@ -750,18 +614,7 @@ app.post("/api/admin/worktask/create", requireAdminSession, asyncHandler(async (
   }
 
   const id = await createWorktaskByAdmin(validation.data);
-  fireAndForget("worktask-admin-create", async () => Promise.all([
-    runNotifyTask("smtp", () => notifyNewWorktask({
-      id,
-      source: "admin",
-      ...validation.data
-    })),
-    runNotifyTask("webhook", () => notifyWebhookNewWorktask({
-      id,
-      source: "admin",
-      ...validation.data
-    }))
-  ]));
+  await queueNotifications("worktask", id);
   return res.status(201).json({
     ok: true,
     data: { id }
@@ -861,6 +714,12 @@ app.use((err, req, res, next) => {
 });
 
 async function startServer() {
+  const configCheck = validateRuntimeConfig(config);
+  if (!configCheck.valid) {
+    const error = new Error(`运行配置无效：${configCheck.errors.join("；")}`);
+    error.code = "INVALID_RUNTIME_CONFIG";
+    throw error;
+  }
   await initializeDatabase();
   const bootstrapResult = await ensureBootstrapAdmin();
   if (bootstrapResult.created) {
@@ -871,6 +730,22 @@ async function startServer() {
   }
 
   await cleanupExpiredSessions();
+  // Start the worker after bootstrap without delaying the HTTP listener on a
+  // slow or unavailable external notification provider.
+  processNotificationOutbox().catch((error) => {
+    logger.error({
+      event: "notification.worker.error",
+      error: error && error.message ? error.message : String(error)
+    }, "notification worker failed");
+  });
+  setInterval(() => {
+    processNotificationOutbox().catch((error) => {
+      logger.error({
+        event: "notification.worker.error",
+        error: error && error.message ? error.message : String(error)
+      }, "notification worker failed");
+    });
+  }, 30 * 1000).unref();
   setInterval(() => {
     cleanupExpiredSessions().catch((error) => {
       logger.error({

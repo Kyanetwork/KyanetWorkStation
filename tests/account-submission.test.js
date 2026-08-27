@@ -1,15 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const http = require("node:http");
-const net = require("node:net");
 const fs = require("node:fs");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const APP_PATH = path.join(ROOT_DIR, "server", "app.js");
-const INTEGRATION_SECRET = "test-integration-secret";
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -23,78 +21,13 @@ async function getFreePort() {
   });
 }
 
-function jsonResponse(res, statusCode, payload) {
-  res.writeHead(statusCode, { "content-type": "application/json" });
-  res.end(JSON.stringify(payload));
-}
-
-async function readJsonBody(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
-async function startFakeAccountServer(options = {}) {
-  const port = await getFreePort();
-  const requests = [];
-  const policy = options.policy || {
-    feedbackRequiresLogin: true,
-    worktaskRequiresLogin: true,
-    allowAnonymousSubmission: false
-  };
-  const ticketUsers = options.ticketUsers || {};
-
-  const server = http.createServer(async (req, res) => {
-    requests.push({
-      method: req.method,
-      url: req.url,
-      authorization: req.headers.authorization || ""
-    });
-
-    if (req.headers.authorization !== `Bearer ${INTEGRATION_SECRET}`) {
-      return jsonResponse(res, 401, { ok: false });
-    }
-
-    if (req.method === "GET" && req.url === "/api/integrations/workstation/policy") {
-      return jsonResponse(res, 200, { ok: true, policy });
-    }
-
-    if (req.method === "POST" && req.url === "/api/integrations/workstation/login-ticket/exchange") {
-      const body = await readJsonBody(req);
-      const user = ticketUsers[body.ticket];
-      if (!user) {
-        return jsonResponse(res, 404, { ok: false });
-      }
-      return jsonResponse(res, 200, { ok: true, user });
-    }
-
-    return jsonResponse(res, 404, { ok: false });
-  });
-
-  await new Promise((resolve, reject) => {
-    server.listen(port, "127.0.0.1", resolve);
-    server.on("error", reject);
-  });
-
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    requests,
-    close: () => new Promise((resolve) => server.close(resolve))
-  };
-}
-
 async function waitForHealth(baseUrl, child, output) {
   const deadline = Date.now() + 10000;
   let lastError = null;
-
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`KWS server exited early with code ${child.exitCode}\n${output.join("")}`);
+      throw new Error(`KWS server exited early (${child.exitCode})\n${output.join("")}`);
     }
-
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) return;
@@ -102,16 +35,14 @@ async function waitForHealth(baseUrl, child, output) {
     } catch (error) {
       lastError = error;
     }
-
     await new Promise((resolve) => setTimeout(resolve, 80));
   }
-
   throw new Error(`KWS server did not become healthy: ${lastError && lastError.message}\n${output.join("")}`);
 }
 
-async function startKwsServer(options = {}) {
+async function startKwsServer() {
   const port = await getFreePort();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-account-submission-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-api-smoke-"));
   const dbPath = path.join(tempDir, "workstation.db");
   const baseUrl = `http://127.0.0.1:${port}`;
   const output = [];
@@ -127,34 +58,31 @@ async function startKwsServer(options = {}) {
     ADMIN_USERNAME: "admin",
     ADMIN_PASSWORD: "admin-password",
     BCRYPT_ROUNDS: "4",
+    MEOWSTATUS_ENABLED: "false",
     LOG_LEVEL: "fatal",
     ACCESS_LOG_ENABLED: "false",
     SMTP_ENABLED: "false",
     WEBHOOK_ENABLED: "false",
     RATE_LIMIT_SUBMIT_MAX: "1000",
     RATE_LIMIT_LOGIN_MAX: "1000",
-    RATE_LIMIT_ADMIN_MAX: "1000",
-    KYANET_ACCOUNT_BASE_URL: options.accountBaseUrl || `http://127.0.0.1:${await getFreePort()}`,
-    KYANET_ACCOUNT_PUBLIC_URL: options.accountPublicUrl || options.accountBaseUrl || "http://account.local",
-    KYANET_ACCOUNT_INTEGRATION_SECRET: INTEGRATION_SECRET,
-    KYANET_ACCOUNT_POLICY_CACHE_MS: "0",
-    KYANET_ACCOUNT_REQUEST_TIMEOUT_MS: "500"
+    RATE_LIMIT_ADMIN_MAX: "1000"
   };
-
   const child = spawn(process.execPath, [APP_PATH], {
     cwd: ROOT_DIR,
     env,
     stdio: ["ignore", "pipe", "pipe"]
   });
-
   child.stdout.on("data", (chunk) => output.push(chunk.toString("utf8")));
   child.stderr.on("data", (chunk) => output.push(chunk.toString("utf8")));
-
-  await waitForHealth(baseUrl, child, output);
-
+  try {
+    await waitForHealth(baseUrl, child, output);
+  } catch (error) {
+    if (child.exitCode === null) child.kill();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    throw error;
+  }
   return {
     baseUrl,
-    dbPath,
     stop: async () => {
       if (child.exitCode === null) {
         child.kill();
@@ -165,17 +93,15 @@ async function startKwsServer(options = {}) {
   };
 }
 
-async function requestJson(baseUrl, pathName, options = {}) {
-  const method = options.method || "GET";
+async function requestJson(baseUrl, pathname, options = {}) {
   const headers = { ...(options.headers || {}) };
   let body = options.body;
   if (body && typeof body !== "string") {
     body = JSON.stringify(body);
     headers["content-type"] = headers["content-type"] || "application/json";
   }
-
-  const response = await fetch(`${baseUrl}${pathName}`, {
-    method,
+  const response = await fetch(`${baseUrl}${pathname}`, {
+    method: options.method || "GET",
     headers,
     body,
     redirect: options.redirect || "follow"
@@ -184,27 +110,10 @@ async function requestJson(baseUrl, pathName, options = {}) {
   return { response, data };
 }
 
-async function requestRaw(baseUrl, pathName, options = {}) {
-  const response = await fetch(`${baseUrl}${pathName}`, {
-    method: options.method || "GET",
-    headers: options.headers || {},
-    body: options.body,
-    redirect: options.redirect || "manual"
-  });
-  return response;
-}
-
-function accountCookieFrom(response) {
+function cookieFrom(response, name) {
   const setCookie = response.headers.get("set-cookie") || "";
-  const match = setCookie.match(/kws_account_sid=[^;]+/);
-  assert.ok(match, `expected account cookie in ${setCookie}`);
-  return match[0];
-}
-
-function adminCookieFrom(response) {
-  const setCookie = response.headers.get("set-cookie") || "";
-  const match = setCookie.match(/kws_sid=[^;]+/);
-  assert.ok(match, `expected admin cookie in ${setCookie}`);
+  const match = setCookie.match(new RegExp(`${name}=[^;]+`));
+  assert.ok(match, `expected ${name} cookie in ${setCookie}`);
   return match[0];
 }
 
@@ -212,8 +121,8 @@ function feedbackPayload(title) {
   return {
     type: "Bug",
     title,
-    content: `${title} 的详细内容`,
-    contact: "tester@example.com",
+    content: `${title} 的内部详细内容`,
+    contact: "private@example.com",
     images: []
   };
 }
@@ -222,265 +131,128 @@ function worktaskPayload(title) {
   return {
     type: "WorkTask提交",
     title,
-    content: `${title} 的详细说明`,
-    contact: "tester@example.com",
-    priority: "medium",
+    content: `${title} 的内部详细说明`,
+    contact: "private@example.com",
+    priority: "high",
     expectedAt: "",
-    tags: "account"
+    tags: "smoke"
   };
 }
 
-async function loginAccount(baseUrl, ticket, returnUrl = "/feedback/") {
-  const response = await requestRaw(baseUrl, "/auth/account/callback", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ ticket, returnUrl }).toString()
-  });
-  assert.equal(response.status, 302);
-  assert.equal(response.headers.get("location"), returnUrl);
-  return accountCookieFrom(response);
-}
-
-test("anonymous submissions fail closed when policy fetch is unavailable", async () => {
+test("匿名 API、Account 下线、公开 DTO 和 WorkTask 清空流程可重复运行", async () => {
   const server = await startKwsServer();
   try {
     const feedback = await requestJson(server.baseUrl, "/api/feedback", {
       method: "POST",
-      body: feedbackPayload("默认拒绝匿名反馈")
+      body: feedbackPayload("匿名反馈")
     });
     const worktask = await requestJson(server.baseUrl, "/api/worktask", {
       method: "POST",
-      body: worktaskPayload("默认拒绝匿名 WorkTask")
+      body: worktaskPayload("匿名 WorkTask")
     });
-
-    assert.equal(feedback.response.status, 401);
-    assert.equal(feedback.data.error.code, "UNAUTHORIZED");
-    assert.equal(feedback.data.error.message, "提交前请先登录 KyanetAccount");
-    assert.equal(worktask.response.status, 401);
-    assert.equal(worktask.data.error.code, "UNAUTHORIZED");
-    assert.equal(worktask.data.error.message, "提交前请先登录 KyanetAccount");
-  } finally {
-    await server.stop();
-  }
-});
-
-test("policy-enforced feedback and WorkTask reject anonymous submissions", async () => {
-  const account = await startFakeAccountServer();
-  const server = await startKwsServer({
-    accountBaseUrl: account.baseUrl,
-    accountPublicUrl: account.baseUrl
-  });
-  try {
-    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
-      method: "POST",
-      body: feedbackPayload("拒绝匿名反馈")
-    });
-    const worktask = await requestJson(server.baseUrl, "/api/worktask", {
-      method: "POST",
-      body: worktaskPayload("拒绝匿名 WorkTask")
-    });
-
-    assert.equal(feedback.response.status, 401);
-    assert.equal(feedback.data.error.message, "提交前请先登录 KyanetAccount");
-    assert.equal(worktask.response.status, 401);
-    assert.equal(worktask.data.error.message, "提交前请先登录 KyanetAccount");
-  } finally {
-    await server.stop();
-    await account.close();
-  }
-});
-
-test("anonymous submissions keep legacy behavior only when policy explicitly allows them", async () => {
-  const account = await startFakeAccountServer({
-    policy: {
-      feedbackRequiresLogin: false,
-      worktaskRequiresLogin: false,
-      allowAnonymousSubmission: true
-    }
-  });
-  const server = await startKwsServer({
-    accountBaseUrl: account.baseUrl,
-    accountPublicUrl: account.baseUrl
-  });
-  try {
-    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
-      method: "POST",
-      body: feedbackPayload("允许匿名反馈")
-    });
-    const worktask = await requestJson(server.baseUrl, "/api/worktask", {
-      method: "POST",
-      body: worktaskPayload("允许匿名 WorkTask")
-    });
-
     assert.equal(feedback.response.status, 201);
     assert.equal(feedback.data.ok, true);
     assert.equal(worktask.response.status, 201);
     assert.equal(worktask.data.ok, true);
-  } finally {
-    await server.stop();
-    await account.close();
-  }
-});
 
-test("anonymous policy exception applies only to modules that do not require login", async () => {
-  const account = await startFakeAccountServer({
-    policy: {
-      feedbackRequiresLogin: true,
-      worktaskRequiresLogin: false,
-      allowAnonymousSubmission: true
+    const meowStatus = await requestJson(server.baseUrl, "/api/public/meowstatus");
+    assert.equal(meowStatus.response.status, 200);
+    assert.equal(meowStatus.data.data.state, "disabled");
+    assert.equal(meowStatus.data.data.settings.profileEnabled, false);
+    assert.equal(meowStatus.data.data.settings.minecraftEnabled, false);
+
+    for (const pathname of ["/api/account/me", "/api/account/feedback", "/api/account/worktask"]) {
+      const response = await requestJson(server.baseUrl, pathname);
+      assert.equal(response.response.status, 404, `legacy route ${pathname} should be removed`);
+      assert.equal(response.data.error.code, "NOT_FOUND");
     }
-  });
-  const server = await startKwsServer({
-    accountBaseUrl: account.baseUrl,
-    accountPublicUrl: account.baseUrl
-  });
-  try {
-    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
-      method: "POST",
-      body: feedbackPayload("混合策略反馈")
-    });
-    const worktask = await requestJson(server.baseUrl, "/api/worktask", {
-      method: "POST",
-      body: worktaskPayload("混合策略 WorkTask")
-    });
-
-    assert.equal(feedback.response.status, 401);
-    assert.equal(feedback.data.error.message, "提交前请先登录 KyanetAccount");
-    assert.equal(worktask.response.status, 201);
-    assert.equal(worktask.data.ok, true);
-  } finally {
-    await server.stop();
-    await account.close();
-  }
-});
-
-test("account routes create linked submissions, private lists, logout, and keep admin session separate", async () => {
-  const account = await startFakeAccountServer({
-    ticketUsers: {
-      "ticket-alice": {
-        id: "acct_alice",
-        email: "alice@example.com",
-        profile: { displayName: "Alice 用户" }
-      },
-      "ticket-bob": {
-        id: "acct_bob",
-        email: "bob@example.com",
-        displayName: "Bob 用户"
-      }
+    for (const pathname of ["/auth/account/start", "/auth/account/callback"]) {
+      const response = await fetch(`${server.baseUrl}${pathname}`);
+      assert.equal(response.status, 404, `legacy route ${pathname} should be removed`);
     }
-  });
-  const server = await startKwsServer({
-    accountBaseUrl: account.baseUrl,
-    accountPublicUrl: account.baseUrl
-  });
-
-  try {
-    const startResponse = await requestRaw(
-      server.baseUrl,
-      "/auth/account/start?returnUrl=%2Ffeedback%2F"
-    );
-    assert.equal(startResponse.status, 302);
-    const startLocation = new URL(startResponse.headers.get("location"));
-    assert.equal(startLocation.origin, account.baseUrl);
-    assert.equal(startLocation.pathname, "/workstation/login");
-    assert.equal(startLocation.searchParams.get("returnUrl"), `${server.baseUrl}/feedback/`);
-    assert.equal(startLocation.searchParams.get("callbackUrl"), null);
-
-    const aliceCookie = await loginAccount(server.baseUrl, "ticket-alice", "/feedback/");
-    const bobCookie = await loginAccount(server.baseUrl, "ticket-bob", "/worktask/");
-
-    const accountOnlyAdminMe = await requestJson(server.baseUrl, "/api/admin/me", {
-      headers: { cookie: aliceCookie }
-    });
-    assert.equal(accountOnlyAdminMe.response.status, 401);
-    assert.match(accountOnlyAdminMe.data.error.message, /管理员账号/);
-
-    const me = await requestJson(server.baseUrl, "/api/account/me", {
-      headers: { cookie: aliceCookie }
-    });
-    assert.equal(me.response.status, 200);
-    assert.deepEqual(me.data.data, {
-      id: "acct_alice",
-      email: "alice@example.com",
-      displayName: "Alice 用户"
-    });
-
-    const aliceFeedback = await requestJson(server.baseUrl, "/api/feedback", {
-      method: "POST",
-      headers: { cookie: aliceCookie },
-      body: feedbackPayload("Alice 反馈")
-    });
-    const aliceWorktask = await requestJson(server.baseUrl, "/api/worktask", {
-      method: "POST",
-      headers: { cookie: aliceCookie },
-      body: worktaskPayload("Alice WorkTask")
-    });
-    const bobFeedback = await requestJson(server.baseUrl, "/api/feedback", {
-      method: "POST",
-      headers: { cookie: bobCookie },
-      body: feedbackPayload("Bob 反馈")
-    });
-    const bobWorktask = await requestJson(server.baseUrl, "/api/worktask", {
-      method: "POST",
-      headers: { cookie: bobCookie },
-      body: worktaskPayload("Bob WorkTask")
-    });
-
-    assert.equal(aliceFeedback.response.status, 201);
-    assert.equal(aliceWorktask.response.status, 201);
-    assert.equal(bobFeedback.response.status, 201);
-    assert.equal(bobWorktask.response.status, 201);
-
-    const aliceFeedbackList = await requestJson(server.baseUrl, "/api/account/feedback", {
-      headers: { cookie: aliceCookie }
-    });
-    const aliceWorktaskList = await requestJson(server.baseUrl, "/api/account/worktask", {
-      headers: { cookie: aliceCookie }
-    });
-    assert.deepEqual(aliceFeedbackList.data.data.items.map((item) => item.title), ["Alice 反馈"]);
-    assert.deepEqual(aliceWorktaskList.data.data.items.map((item) => item.title), ["Alice WorkTask"]);
 
     const login = await requestJson(server.baseUrl, "/api/admin/login", {
       method: "POST",
       body: { username: "admin", password: "admin-password" }
     });
     assert.equal(login.response.status, 200);
-    const adminCookie = adminCookieFrom(login.response);
+    const adminCookie = cookieFrom(login.response, "kws_sid");
+    const headers = { cookie: adminCookie };
 
-    const adminFeedback = await requestJson(server.baseUrl, "/api/admin/feedback/list", {
+    const feedbackList = await requestJson(server.baseUrl, "/api/admin/feedback/list", {
       method: "POST",
-      headers: { cookie: adminCookie },
+      headers,
       body: { page: 1, pageSize: 20 }
     });
-    const adminWorktask = await requestJson(server.baseUrl, "/api/admin/worktask/list", {
+    const feedbackItem = feedbackList.data.data.items.find((item) => item.title === "匿名反馈");
+    assert.ok(feedbackItem);
+    const worktaskList = await requestJson(server.baseUrl, "/api/admin/worktask/list", {
       method: "POST",
-      headers: { cookie: adminCookie },
+      headers,
       body: { page: 1, pageSize: 20 }
     });
-    const feedbackItem = adminFeedback.data.data.items.find((item) => item.title === "Alice 反馈");
-    const worktaskItem = adminWorktask.data.data.items.find((item) => item.title === "Alice WorkTask");
+    const worktaskItem = worktaskList.data.data.items.find((item) => item.title === "匿名 WorkTask");
+    assert.ok(worktaskItem);
 
-    assert.equal(feedbackItem.accountUserId, "acct_alice");
-    assert.equal(feedbackItem.accountEmailSnapshot, "alice@example.com");
-    assert.equal(feedbackItem.accountDisplayNameSnapshot, "Alice 用户");
-    assert.equal(worktaskItem.accountUserId, "acct_alice");
-    assert.equal(worktaskItem.accountEmailSnapshot, "alice@example.com");
-    assert.equal(worktaskItem.accountDisplayNameSnapshot, "Alice 用户");
-
-    const logout = await requestJson(server.baseUrl, "/api/account/logout", {
+    const homeDisplay = await requestJson(server.baseUrl, "/api/admin/feedback/home-display", {
       method: "POST",
-      headers: { cookie: aliceCookie },
-      body: {}
+      headers,
+      body: { id: feedbackItem.id, showOnHome: true }
     });
-    assert.equal(logout.response.status, 200);
-    assert.match(logout.response.headers.get("set-cookie") || "", /kws_account_sid=;/);
+    assert.equal(homeDisplay.response.status, 200);
+    const noteReply = await requestJson(server.baseUrl, "/api/admin/feedback/note-reply", {
+      method: "POST",
+      headers,
+      body: { id: feedbackItem.id, adminNote: "只限后台", publicReply: "公开回复" }
+    });
+    assert.equal(noteReply.response.status, 200);
+    const highlights = await requestJson(server.baseUrl, "/api/public/highlights");
+    assert.equal(highlights.response.status, 200);
+    const publicFeedback = highlights.data.data.feedbackItems.find((item) => item.id === feedbackItem.id);
+    assert.ok(publicFeedback);
+    assert.deepEqual(Object.keys(publicFeedback).sort(), ["id", "publicReply", "status", "title", "type", "updatedAt"].sort());
+    assert.equal(publicFeedback.content, undefined);
+    assert.equal(publicFeedback.contact, undefined);
+    assert.equal(publicFeedback.adminNote, undefined);
 
-    const meAfterLogout = await requestJson(server.baseUrl, "/api/account/me", {
-      headers: { cookie: aliceCookie }
+    const arrange = await requestJson(server.baseUrl, "/api/admin/worktask/arrange", {
+      method: "POST",
+      headers,
+      body: { id: worktaskItem.id, assignee: "Kyan", scheduledAt: "2030-01-02T03:04:05.000Z" }
     });
-    assert.equal(meAfterLogout.response.status, 401);
+    assert.equal(arrange.response.status, 200);
+    let arranged = await requestJson(server.baseUrl, "/api/admin/worktask/list", {
+      method: "POST",
+      headers,
+      body: { page: 1, pageSize: 20 }
+    });
+    let arrangedItem = arranged.data.data.items.find((item) => item.id === worktaskItem.id);
+    assert.equal(arrangedItem.assignee, "Kyan");
+    assert.equal(arrangedItem.scheduledAt, "2030-01-02T03:04:05.000Z");
+    assert.equal(arrangedItem.status, "scheduled");
+
+    const clearAssignee = await requestJson(server.baseUrl, "/api/admin/worktask/arrange", {
+      method: "POST",
+      headers,
+      body: { id: worktaskItem.id, assignee: null }
+    });
+    assert.equal(clearAssignee.response.status, 200);
+    const clearSchedule = await requestJson(server.baseUrl, "/api/admin/worktask/arrange", {
+      method: "POST",
+      headers,
+      body: { id: worktaskItem.id, scheduledAt: "" }
+    });
+    assert.equal(clearSchedule.response.status, 200);
+    arranged = await requestJson(server.baseUrl, "/api/admin/worktask/list", {
+      method: "POST",
+      headers,
+      body: { page: 1, pageSize: 20 }
+    });
+    arrangedItem = arranged.data.data.items.find((item) => item.id === worktaskItem.id);
+    assert.equal(arrangedItem.assignee, "");
+    assert.equal(arrangedItem.scheduledAt, "");
+    assert.equal(arrangedItem.status, "scheduled");
   } finally {
     await server.stop();
-    await account.close();
   }
 });

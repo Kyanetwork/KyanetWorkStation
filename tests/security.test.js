@@ -99,6 +99,43 @@ test("same-origin admin mutation is allowed", async () => {
   assert.equal(res.payload, null);
 });
 
+test("direct requests cannot use spoofed forwarded headers to pass same-origin check", async () => {
+  const req = createReq({
+    headers: {
+      host: "127.0.0.1:3000",
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "workstation.example",
+      origin: "https://workstation.example"
+    }
+  });
+  const res = createRes();
+  const mw = createRequireSameOriginForAdminMutation({
+    appBaseUrl: "https://workstation.example",
+    trustProxy: 0
+  });
+  await runMiddleware(mw, req, res);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.payload.error.code, "CSRF_BLOCKED");
+});
+
+test("a configured trusted proxy may provide the public same-origin", async () => {
+  const req = createReq({
+    headers: {
+      host: "127.0.0.1:3000",
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "workstation.example",
+      origin: "https://workstation.example"
+    }
+  });
+  const res = createRes();
+  const mw = createRequireSameOriginForAdminMutation({
+    appBaseUrl: "https://workstation.example",
+    trustProxy: 1
+  });
+  await runMiddleware(mw, req, res);
+  assert.equal(res.payload, null);
+});
+
 test("cross-origin admin mutation is blocked", async () => {
   const req = createReq({
     headers: {

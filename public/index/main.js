@@ -126,6 +126,13 @@
       return;
     }
 
+    if (statusData.state === "disabled") {
+      section.classList.add("hidden");
+      profilePanel.classList.add("hidden");
+      mcPanel.classList.add("hidden");
+      return;
+    }
+
     if (!profileEnabled && !minecraftEnabled) {
       section.classList.add("hidden");
       profilePanel.classList.add("hidden");
@@ -193,6 +200,7 @@
       renderMeowStatus(meowStatus || {});
     } catch (_) {
       renderMeowStatus({
+        state: "unavailable",
         settings: {
           profileEnabled: true,
           minecraftEnabled: true

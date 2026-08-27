@@ -61,6 +61,43 @@ test("healthExposeCounts parses true values", () => {
   assert.equal(config.healthExposeCounts, true);
 });
 
+test("MeowStatus is disabled by default and runtime defaults pass preflight", () => {
+  const config = loadConfigWithEnv({
+    MEOWSTATUS_ENABLED: undefined,
+    DB_CLIENT: "sqlite",
+    DB_PATH: "./data/test.db"
+  });
+  assert.equal(config.meowStatusEnabled, false);
+  assert.equal(config.validateRuntimeConfig(config).valid, true);
+});
+
+test("runtime preflight reports invalid port without exposing secrets", () => {
+  const config = loadConfigWithEnv({
+    PORT: "0",
+    ADMIN_PASSWORD: "do-not-leak-this-secret"
+  });
+  const result = config.validateRuntimeConfig(config);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((message) => message.startsWith("PORT ")));
+  assert.equal(result.errors.some((message) => message.includes("do-not-leak-this-secret")), false);
+});
+
+test("runtime preflight requires valid enabled provider configuration", () => {
+  const config = loadConfigWithEnv({
+    SMTP_ENABLED: "true",
+    SMTP_HOST: "",
+    SMTP_FROM: "bad-address",
+    SMTP_TO: "",
+    WEBHOOK_ENABLED: "true",
+    WEBHOOK_URLS: ""
+  });
+  const result = config.validateRuntimeConfig(config);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((message) => message.includes("SMTP_HOST")));
+  assert.ok(result.errors.some((message) => message.includes("SMTP_FROM")));
+  assert.ok(result.errors.some((message) => message.includes("WEBHOOK_URLS")));
+});
+
 test("allowHeaderlessAdminMutation defaults to false", () => {
   const config = loadConfigWithEnv({
     ADMIN_ALLOW_HEADERLESS_MUTATION: undefined

@@ -14,9 +14,17 @@ function getForwardedFirstValue(headerValue) {
   return headerValue.split(",")[0].trim();
 }
 
-function getRequestOrigin(req) {
-  const forwardedProto = getForwardedFirstValue(req.get("x-forwarded-proto"));
-  const forwardedHost = getForwardedFirstValue(req.get("x-forwarded-host"));
+function getRequestOrigin(req, options) {
+  const hasExplicitProxyOption = options && Object.prototype.hasOwnProperty.call(options, "trustProxy");
+  const appTrustProxy = req && req.app && typeof req.app.get === "function"
+    ? req.app.get("trust proxy")
+    : undefined;
+  const trustProxy = hasExplicitProxyOption ? Number(options.trustProxy) : appTrustProxy;
+  // Callers that do not provide Express context keep the historical helper
+  // behavior. Security middleware always passes the configured proxy count.
+  const useForwarded = trustProxy === undefined ? true : Number.isFinite(trustProxy) && trustProxy > 0;
+  const forwardedProto = useForwarded ? getForwardedFirstValue(req.get("x-forwarded-proto")) : "";
+  const forwardedHost = useForwarded ? getForwardedFirstValue(req.get("x-forwarded-host")) : "";
   const protocol = forwardedProto || req.protocol || "http";
   const host = forwardedHost || req.get("host") || "";
   return host ? `${protocol}://${host}` : "";
@@ -25,6 +33,7 @@ function getRequestOrigin(req) {
 function createRequireSameOriginForAdminMutation(options) {
   const appBaseUrl = options && options.appBaseUrl ? options.appBaseUrl : "";
   const allowHeaderless = Boolean(options && options.allowHeaderlessAdminMutation);
+  const trustProxy = Number(options && options.trustProxy) || 0;
   const sendError = options && options.sendError
     ? options.sendError
     : ((res, status, code, message) => res.status(status).json({ ok: false, error: { code, message } }));
@@ -35,18 +44,18 @@ function createRequireSameOriginForAdminMutation(options) {
     }
 
     const expectedOrigins = new Set();
-    const requestOrigin = getRequestOrigin(req);
     const configuredOrigin = safeOriginFromUrl(appBaseUrl);
-    if (requestOrigin) expectedOrigins.add(requestOrigin);
     if (configuredOrigin) expectedOrigins.add(configuredOrigin);
+    const requestOrigin = getRequestOrigin(req, { trustProxy });
 
     const origin = safeOriginFromUrl(req.get("origin") || "");
     const refererOrigin = safeOriginFromUrl(req.get("referer") || "");
 
-    if (origin && expectedOrigins.has(origin)) {
+    const requestHostMatches = !configuredOrigin || !requestOrigin || requestOrigin === configuredOrigin;
+    if (origin && expectedOrigins.has(origin) && requestHostMatches) {
       return next();
     }
-    if (!origin && refererOrigin && expectedOrigins.has(refererOrigin)) {
+    if (!origin && refererOrigin && expectedOrigins.has(refererOrigin) && requestHostMatches) {
       return next();
     }
 
