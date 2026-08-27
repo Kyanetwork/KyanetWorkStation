@@ -27,6 +27,6 @@ stack.
 ## Quality check
 
 - Run `node --check` for changed JavaScript and the relevant `node:test` files.
-- Run `npm test` for the full baseline; record the known native SQLite ABI
-  blocker when it occurs.
+- Run `npm test` for the full Node 24 baseline; if a native SQLite ABI mismatch
+  occurs, rebuild `better-sqlite3` in that same runtime and record the failure.
 - Run `git diff --check` and confirm only the task's spec/task files changed.

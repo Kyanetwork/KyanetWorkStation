@@ -12,9 +12,9 @@
 ## P0 必须修复或验证
 
 1. 公共 highlights 只返回公开 DTO，禁止返回 content、contact、adminNote 和账号快照。
-2. 旧 Account 私有列表不能返回 adminNote 等内部字段；旧联动清理前应先隔离 DTO。
-3. `X-Forwarded-Proto`/`X-Forwarded-Host` 只能在明确受信代理和正确 `TRUST_PROXY` 配置下使用。
-4. 图片链接限制协议、域名、长度、响应类型和大小，外部状态响应设置大小上限。
+2. 旧 Account 私有列表路由已下线；历史 mapper 仅作迁移保留，不能恢复为活动接口或返回 adminNote 等内部字段。
+3. `X-Forwarded-Proto`/`X-Forwarded-Host` 只能在明确受信代理和正确 `TRUST_PROXY` 配置下使用；当前数值 hop 配置本身不能证明直连请求来自受信代理，应用应保持回环监听并在发布前完成实际代理边界校验（见已知缺陷 D-004）。
+4. 当前反馈只保存用户提供的文本链接，并限制数量/长度；图片协议、域名、响应类型和大小，以及外部状态响应/favicons 的严格资源边界属于 P1 D-007，不能在当前文档中宣称已完成。
 5. 旧 Account 回调的未来替代方案必须有 state/nonce、单次消费和重放保护；旧代码按独立任务移除。
 6. 依赖审计、Node/better-sqlite3 ABI、配置启动自检和备份恢复演练必须成为发布门禁。
 

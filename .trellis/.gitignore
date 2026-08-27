@@ -30,3 +30,9 @@
 # Python cache
 **/__pycache__/
 **/*.pyc
+
+# Research-only package archives and generated audit fixtures
+tasks/*/research/*.tgz
+tasks/*/research/*.tar.gz
+tasks/*/research/audit-*/
+tasks/*/research/npm-audit-*.json

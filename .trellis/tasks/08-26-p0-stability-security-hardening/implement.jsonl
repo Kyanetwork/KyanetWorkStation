@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend layer checklist and API/database boundary rules for the P0 changes"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Multi-driver schema, parameterized SQL, migration, and explicit row-mapping constraints"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Shared API envelope, validation, async, notification, and startup error behavior"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Required regression tests, security boundaries, and honest runtime verification"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Structured logging and secret-redaction rules for preflight and notification work"}
+{"file":".trellis/spec/frontend/index.md","reason":"Static frontend checklist and API/DOM contract expectations"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Safe rendering, escaping, form contracts, and accessibility for admin/public pages"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Page-local state and server-refresh rules for MeowStatus and arrange controls"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend syntax, browser smoke, theme, and reduced-motion verification"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Required data-flow and contract checks across API, database, frontend, and external adapters"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Search-first and single-source-of-truth guidance before adding DTO, config, or retry helpers"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/p0-code-evidence.md","reason":"Repository evidence and exact implementation boundaries for all P0 defects"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/node24-runtime-compatibility.md","reason":"Node 24 ABI evidence and clean-install acceptance constraints"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/node24-and-dependency-upgrade-path.md","reason":"Pinned dependency targets, audit findings, and upgrade/rollback sequence"}

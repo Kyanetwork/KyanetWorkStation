@@ -41,7 +41,7 @@ Browser
 ## 认证边界（当前代码状态）
 
 - 管理员会话使用独立 Cookie 和服务端会话表，Token 只以哈希形式保存。
-- 当前代码还存在旧 KyanetAccount 登录票据、Account 会话和 Account 私有列表路由；它们处于维护冻结状态，计划在 P0 中完整移除。
+- 旧 KyanetAccount 登录票据、Account 会话和 Account 私有列表路由已从活动请求路径移除；历史 schema/数据暂保留，等待独立迁移任务。
 - 旧 Account 代码不得成为新工作台功能的依赖。未来重新接入必须作为独立设计，并重新定义 state、回调、DTO 和历史匿名数据规则。
 
 ## 通知与外部状态
@@ -49,11 +49,11 @@ Browser
 - `server/notify.js` 封装 SMTP。
 - `server/webhook.js` 封装 generic、企业微信、飞书/Lark、钉钉和 Slack 载荷。
 - `server/meowstatus.js` 负责外部 Dashboard 请求、超时和基本规范化。
-- 当前通知在请求成功后异步 fire-and-forget，失败只记录日志；持久化投递记录和人工重试属于 P0 计划。
+- 通知在业务写入成功后进入 `notification_delivery` outbox；启动及定时 worker 进行有界重试，管理员可查询失败并触发重试。
 
 ## 启动顺序
 
-`server/app.js` 启动时加载配置，初始化数据库、补齐 schema、确保引导管理员并清理过期会话，然后开始监听端口。启动自检、配置 schema 和原生依赖 ABI 检查属于后续 P0 加固。
+`server/app.js` 启动时先执行无副作用的运行配置 preflight；通过后才初始化数据库、补齐 schema、确保引导管理员、清理过期会话，并启动不阻塞监听的通知 outbox worker，随后开始监听端口。Node 24 是发布运行时基线。
 
 ## 数据可见性原则
 

@@ -2,7 +2,7 @@
 
 ## Current toolchain
 
-The project runs CommonJS JavaScript on Node.js 20+ and uses Node's built-in
+The project runs CommonJS JavaScript on Node.js 24.x LTS and uses Node's built-in
 `node:test` plus `node:assert/strict`. `package.json` currently defines
 `npm test` but no ESLint, TypeScript, or separate type-check script. Do not
 claim a lint/type-check pass that the repository cannot run; use syntax checks,
@@ -15,8 +15,9 @@ focused tests, `npm test`, and `git diff --check` as applicable.
 - Use parameterized SQL through `server/db.js` and map rows into explicit
   camelCase objects.
 - Return the shared API envelope and use `sendError` for failures.
-- Preserve separate admin and legacy Account cookies/sessions; never use one
-  cookie as the other authority.
+- Keep the admin cookie/session as the only active request authority. Legacy
+  Account helpers/tables are migration-only and must not be imported by active
+  routes or authorize mutations.
 - Keep admin mutations behind the same-origin and JSON middleware.
 - Use bounded, structured Pino logs and redact credential-bearing URLs.
 - Add a focused test when introducing a validator, adapter contract, security
@@ -36,14 +37,25 @@ focused tests, `npm test`, and `git diff --check` as applicable.
 
 Use small deterministic tests like `tests/validation.test.js`,
 `tests/security.test.js`, and `tests/logger.test.js` for pure functions. Use
-temporary databases and cleanup hooks for persistence/session behavior, as in
-`tests/account-session.test.js`. Use an isolated fake HTTP Account server for
-the legacy integration tests in `tests/account-submission.test.js`.
+temporary databases and cleanup hooks for persistence/restore behavior, as in
+`tests/backup-sqlite.test.js` and `tests/notification-outbox.test.js`.
+Historical Account helper tests may remain only to protect migration behavior;
+they are not active request-path coverage.
 
-The full suite is `npm test`. The current documented environment may fail
-SQLite-backed tests when the installed `better-sqlite3` binary ABI does not
-match the active Node runtime; record that as an environment blocker and do not
-label the suite passing. See `docs/testing/release-checklist.md`.
+The full suite is `npm test`. It is a Node 24 release gate; if the installed
+`better-sqlite3` binary ABI does not match the active runtime, rebuild it in
+that same Node version and record the failure rather than labeling the suite
+passing. See `docs/testing/release-checklist.md`.
+
+## Node 24 native-install policy
+
+npm 12 can block dependency install scripts that are not explicitly approved.
+The repository therefore keeps a narrow `package.json#allowScripts` allow-list
+containing only `better-sqlite3`. The reproducibility check uses
+`npm ci --foreground-scripts` so the native install result is visible; use
+`npm rebuild better-sqlite3` only as the documented fallback when a matching
+prebuild is unavailable. Do not replace the allow-list with a global
+`--dangerously-allow-all-scripts` bypass or commit `node_modules`.
 
 ## Review checklist
 

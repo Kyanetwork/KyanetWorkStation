@@ -1,6 +1,6 @@
 # API 参考
 
-本文档描述当前代码中的 HTTP 路由。未来移除旧 KyanetAccount 联动后，Account 路由会从本表删除；本文件不把计划中的新接口当作当前接口。
+本文档描述当前代码中的 HTTP 路由。旧 KyanetAccount 联动已移除；本文件不把计划中的新接口当作当前接口。
 
 ## 通用约定
 
@@ -17,9 +17,9 @@
 | `GET /api/health` | 健康检查；可选返回计数 | 无 |
 | `GET /api/public/config` | 返回展示时区、语言和 MeowStatus 刷新间隔 | 无 |
 | `GET /api/public/highlights` | 返回主页公开进展 | 无；只应返回公开投影 |
-| `GET /api/public/meowstatus` | 返回状态设置、个人状态和 Minecraft widgets | 无；外部服务不可用时返回错误字段 |
-| `POST /api/feedback` | 提交反馈 | 当前代码依赖提交策略；Account 旧联动清理后按匿名规则重新确认 |
-| `POST /api/worktask` | 提交 WorkTask | 当前代码依赖提交策略；Account 旧联动清理后按匿名规则重新确认 |
+| `GET /api/public/meowstatus` | 返回状态设置、个人状态和 Minecraft widgets | 无；`state` 为 `disabled`、`unavailable` 或 `ok`，不阻塞核心提交 |
+| `POST /api/feedback` | 提交反馈 | 无；受限流和输入校验保护 |
+| `POST /api/worktask` | 提交 WorkTask | 无；受限流和输入校验保护 |
 
 反馈请求字段：`type`（`Bug`、`功能建议`、`体验问题`、`其他`）、`title`（1-80）、`content`（1-2000）、`contact`（1-100）、`images`（最多 8 项，每项最多 500 字符）。
 
@@ -55,14 +55,16 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/worktask/list` | 按状态/优先级/关键词分页查询 |
 | `POST /api/admin/worktask/create` | 管理员创建本人任务 |
 | `POST /api/admin/worktask/status` | 更新 `new/scheduled/in_progress/completed/cancelled` |
-| `POST /api/admin/worktask/arrange` | 更新负责人、计划时间和可选状态 |
+| `POST /api/admin/worktask/arrange` | 更新负责人、计划时间和可选状态；字段显式传 `null`/空字符串可清空 |
 | `POST /api/admin/worktask/delete` | 删除 WorkTask |
 | `POST /api/admin/worktask/home-display` | 更新主页展示开关 |
 | `POST /api/admin/worktask/note-reply` | 保存管理员备注和对外回复 |
+| `GET /api/admin/notifications` | 查询持久化通知投递记录 |
+| `POST /api/admin/notifications/retry` | 触发指定通知记录的人工重试 |
 
-## 当前遗留 Account 接口
+## 已移除的旧 Account 接口
 
-以下路由在当前代码中仍存在，但属于维护冻结范围，计划随旧联动清理移除：
+以下历史路由已不再注册，访问时返回统一 `NOT_FOUND`：
 
 | 方法与路径 | 当前用途 |
 |---|---|
@@ -73,7 +75,7 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `GET /api/account/feedback` | 读取旧 Account 用户反馈列表 |
 | `GET /api/account/worktask` | 读取旧 Account 用户任务列表 |
 
-这些接口不应继续扩展。当前缺陷清单要求在清理前修复或隔离敏感 DTO；未来新 Account 协议另行设计。
+这些接口不应恢复或扩展；未来新 Account 协议另行设计。
 
 ## 错误与分页
 

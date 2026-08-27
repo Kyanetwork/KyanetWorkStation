@@ -10,22 +10,26 @@ git diff --check
 npm audit --omit=dev --registry=https://registry.npmjs.org
 ```
 
-当前 Node 24 环境发现 `better-sqlite3` ABI 与运行时不匹配，`npm test` 不能据此宣称通过。应先使用项目支持的 Node 版本重新安装/重建依赖，再记录新的测试结果。
+发布基线为 Node.js 24.x LTS。npm 12 的安装脚本策略在
+`package.json#allowScripts` 中仅允许 `better-sqlite3`；执行带有前台脚本的
+`npm ci --foreground-scripts` 后，若预构建包不可用，再运行
+`npm rebuild better-sqlite3`，确认 `process.versions.modules=137` 且原生模块可加载。
 
-### 当前环境基线记录（2026-08-26）
+### 当前环境基线记录（2026-08-27）
 
-- Node.js：`v24.19.0`；npm：`12.0.2`。
-- 已安装的 `better-sqlite3` 原生模块使用 `NODE_MODULE_VERSION 127` 编译；当前 Node.js 要求 `NODE_MODULE_VERSION 137`。
-- 具体错误为：`ERR_DLOPEN_FAILED`，提示 “was compiled against a different Node.js version … Please try re-compiling or re-installing”。因此涉及 SQLite 的测试失败，当前 `npm test` 结果不能视为通过。
-- 修复验证：使用项目支持且与依赖 ABI 匹配的 Node.js 版本，执行干净的 `npm install` 或 `npm rebuild`，随后重新运行 `npm test`。
+- Node.js：`v24.19.0`；npm：`12.0.2`；当前运行时模块 ABI：`137`，N-API：`10`。
+- 依赖目标：`better-sqlite3 ^12.11.1`、`express ^4.22.2`、`nodemailer ^9.0.5`。
+- 已在当前工作区重建 `better-sqlite3` 并验证内存数据库可打开；另在临时目录以
+  canonical npm registry 执行 `npm ci --foreground-scripts`，干净安装后原生模块
+  加载成功（ABI 137），并在同一临时安装运行 `npm test`（46/46）。
 
 ## 必须覆盖的行为
 
-- health、默认 fail-closed 的匿名反馈/WorkTask 拒绝、显式允许匿名策略下的提交、管理员登录和管理员列表查询。
+- health、匿名反馈/WorkTask 提交、管理员登录和管理员列表查询；当前匿名提交不依赖 KyanetAccount 策略，旧 Account 路由应返回 404。
 - 未登录管理接口、跨来源管理写请求、错误 Content-Type 和限流响应。
 - 公共 highlights 不含 `content`、`contact`、`adminNote`、账号快照等内部字段。
 - 任何用户安全列表不含管理员备注和其他用户数据。
-- 备份脚本生成有效文件，并能在临时数据库完成恢复读取。
+- 备份脚本生成有效文件，并能在临时数据库完成 checksum、解压、schema 和关键表读取（`tests/backup-sqlite.test.js`）；发布前仍需真实脱敏备份演练。
 - MeowStatus 不可达、超时和关闭设置时，主页仍能给出可理解状态。
 - SMTP/Webhook 至少一条链路在测试环境可发送，失败目标能被记录和重试。
 
@@ -33,13 +37,13 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 
 | 门禁 | 证据 | 状态 |
 |---|---|---|
-| 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | 当前待处理 |
-| 单元/集成测试 | `npm test` 输出和退出码 | 当前环境受 ABI 阻塞 |
-| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | 当前有 4 项待处理 |
-| API 冒烟 | health → 提交 → 管理登录 → 列表 | 待建立/验证 |
-| 隐私投影 | 接口响应断言 | P0 必须完成 |
-| 备份恢复 | 临时恢复记录和数据校验 | 尚无真实演练证据 |
-| 通知链路 | SMTP/Webhook 测试结果 | 需至少一条可用 |
+| 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 临时干净安装 46/46 |
+| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | canonical registry 当前 0 项 |
+| API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
+| 隐私投影 | 接口响应断言 | 已有回归覆盖 |
+| 备份恢复 | `tests/backup-sqlite.test.js` + 临时恢复记录和数据校验 | 自动 SQLite 演练已覆盖；真实备份仍需发布前演练 |
+| 通知链路 | SMTP/Webhook 测试结果 | stub/outbox 状态与重试已覆盖；真实 provider 仍需部署环境验证 |
 | 代理与 TLS | Nginx/IIS/Caddy 配置测试 | 部署环境执行 |
 | 配置与密钥 | `.env` 检查、无默认凭据 | 部署环境执行 |
 | 观测与回滚 | request ID、日志、上一版本和备份 | 部署环境执行 |

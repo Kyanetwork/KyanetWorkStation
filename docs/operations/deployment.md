@@ -2,7 +2,7 @@
 
 ## 通用原则
 
-- 使用 Node.js 20+，并确保 `better-sqlite3` 与实际 Node ABI 匹配。
+- 使用 Node.js 24.x LTS，并确保 `better-sqlite3` 与实际 Node ABI 匹配。
 - 应用默认绑定回环地址，由 Nginx、IIS 或 Caddy 处理公网 TLS。
 - `.env`、数据库、备份、日志和真实域名配置只存在于部署环境。
 - 生产部署前必须完成[发布门禁](../testing/release-checklist.md)。
@@ -15,7 +15,8 @@ sudo chown -R "$USER:$USER" /var/www/kyanet-workstation
 # 将已审核的项目文件同步到 /var/www/kyanet-workstation
 cd /var/www/kyanet-workstation
 cp .env.example .env
-npm install --omit=dev
+# npm 12：仅 package.json 中 allowScripts 声明的 better-sqlite3 会运行安装脚本
+npm ci --omit=dev --foreground-scripts
 npm run init-admin
 npm install -g pm2
 pm2 start ecosystem.config.cjs
@@ -29,7 +30,7 @@ pm2 startup
 
 ```powershell
 Copy-Item .env.example .env
-npm install
+npm ci --foreground-scripts
 npm run init-admin
 npm run start
 ```
@@ -38,11 +39,11 @@ npm run start
 
 ## WSL
 
-在 WSL Ubuntu 中安装 Node.js 20+、Nginx 和构建工具，复制项目后执行：
+在 WSL Ubuntu 中安装 Node.js 24.x LTS、Nginx 和构建工具，复制项目后执行：
 
 ```bash
 cp .env.example .env
-npm install --omit=dev
+npm ci --omit=dev --foreground-scripts
 npm run init-admin
 pm2 start ecosystem.config.cjs --cwd ~/apps/kyanet-workstation
 ```

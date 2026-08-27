@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality-check entry point and pre-development boundary checklist"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Verify schema parity, migration safety, parameterization, and DTO projections"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify response envelopes, status codes, async failures, and notification isolation"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Run the required security, regression, syntax, and full-suite quality checks"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check request/preflight/notification logs for bounded fields and redaction"}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality gate for changed static pages and API consumers"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review escaping, DOM contracts, accessibility, and safe rendering"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Review server refresh and disabled/unavailable UI state handling"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify syntax, browser smoke, themes, keyboard use, and narrow viewport behavior"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Cross-layer review of DTO, config, migration, external adapter, and retry flows"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check for duplicated projections, validators, constants, and retry logic"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/p0-code-evidence.md","reason":"Ground quality findings in the confirmed code evidence and line anchors"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/node24-runtime-compatibility.md","reason":"Verify ABI, runtime, native module, and clean-install claims"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/node24-and-dependency-upgrade-path.md","reason":"Verify dependency versions, audit remediation, and rollback evidence"}

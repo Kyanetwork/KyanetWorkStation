@@ -51,10 +51,11 @@
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `MEOWSTATUS_BASE_URL` | `http://127.0.0.1:8080` | 外部 API 基地址；仅作开发默认值 |
+| `MEOWSTATUS_ENABLED` | `false` | 全局启用门；默认关闭，避免未配置外部服务阻塞页面 |
 | `MEOWSTATUS_TIMEOUT_MS` | `5000` | 请求超时 |
 | `MEOWSTATUS_REFRESH_MS` | `10000` | 前端刷新间隔 |
 
-当前数据库初始化会把 profile 和 Minecraft 状态设置为启用；环境变量本身只提供默认地址、超时和刷新间隔，并没有独立的 `MEOWSTATUS_ENABLED` 开关。首次部署没有 MeowStatus 时，应在管理页关闭对应状态卡片或配置可达地址。启动自检和显式启用策略属于 P0 计划。
+MeowStatus 由 `MEOWSTATUS_ENABLED=false` 全局关闭时不会发起外部请求，公共接口返回 `state=disabled`，反馈和 WorkTask 不依赖其可用性。只有全局门开启且管理页对应卡片启用时才会访问外部 API；不可达时返回 `state=unavailable`，不阻塞核心业务。
 
 ## 备份
 
@@ -89,18 +90,6 @@
 | `WEBHOOK_TIMEOUT_MS` | `5000` | 请求超时 |
 | `WEBHOOK_TITLE_PREFIX` | `[KyanetWorkStation]` | 消息标题前缀 |
 
-## 旧 Account 配置
+## KyanetAccount 边界
 
-以下变量仍会被当前遗留联动读取，但不应被新功能依赖；旧联动计划在 P0 独立任务中移除。
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `KYANET_ACCOUNT_BASE_URL` | `http://127.0.0.1:4000` | 旧 Account 后端地址 |
-| `KYANET_ACCOUNT_PUBLIC_URL` | `http://localhost:5173` | 旧 Account 前端地址 |
-| `KYANET_ACCOUNT_INTEGRATION_SECRET` | 空 | 旧联动 Bearer 密钥；不得写入仓库或日志 |
-| `KYANET_ACCOUNT_POLICY_CACHE_MS` | `60000` | 旧策略缓存时间 |
-| `KYANET_ACCOUNT_REQUEST_TIMEOUT_MS` | `5000` | 旧 Account 请求超时 |
-| `KYANET_ACCOUNT_COOKIE_NAME` | `kws_account_sid` | 旧 Account 会话 Cookie 名 |
-| `KYANET_ACCOUNT_SESSION_TTL_HOURS` | `168` | 旧 Account 会话有效期 |
-
-不要为新功能继续依赖这些变量；未来新联动会使用独立配置契约。
+KyanetAccount 当前不在运行时配置或请求路径中，遗留环境变量即使存在也不会被读取。历史业务列和会话表暂保留，删除条件及未来独立接入约束见 `docs/plans/account-refactor.md`。

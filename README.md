@@ -13,15 +13,15 @@ KyanetWorkStation 是面向个人和小团队的轻量自托管工作中枢：�
 - SQLite、MySQL、PostgreSQL 数据库驱动
 - PM2 运行与 Nginx、IIS、Caddy 反向代理模板
 - SQLite 和 RDBMS 备份脚本、结构化日志、基础限流和安全响应头
-- 当前代码还保留旧 KyanetAccount 联动；该联动已冻结，计划在 P0 中移除，未来按独立设计重新接入
+- KyanetAccount 旧联动已从活动请求路径移除；历史 schema/数据暂保留，未来按独立设计重新接入
 
 ## 五分钟本地启动
 
-要求 Node.js 20+，并使用与 Node 版本匹配的 npm。项目支持的 Node 版本和 `better-sqlite3` 原生依赖必须匹配；详见[运行时与发布门禁](docs/testing/release-checklist.md)。
+要求 Node.js 24.x LTS，并使用与 Node 版本匹配的 npm。`better-sqlite3` 原生依赖必须与 ABI 匹配；详见[运行时与发布门禁](docs/testing/release-checklist.md)。
 
 ```powershell
 Copy-Item .env.example .env
-npm install
+npm ci --foreground-scripts
 # 编辑 .env，至少设置 ADMIN_USERNAME、ADMIN_PASSWORD、APP_BASE_URL
 npm run init-admin
 npm run start
@@ -34,7 +34,7 @@ npm run start
 - WorkTask 页：`http://127.0.0.1:3000/worktask/`
 - 管理页：`http://127.0.0.1:3000/admin/`
 
-MeowStatus 是可选外部服务，但当前数据库初始化时默认开启 profile/Minecraft 状态卡片。首次运行前请在管理页配置可达地址，或在未运行 MeowStatus 时关闭对应卡片；不要把 `127.0.0.1:8080` 当作生产服务地址。显式启用/关闭策略仍属于 P0 加固。
+MeowStatus 是可选外部服务，默认由 `MEOWSTATUS_ENABLED=false` 关闭；需要使用时再配置地址并开启全局门及对应卡片。不要把 `127.0.0.1:8080` 当作生产服务地址。
 
 ## 文档导航
 
@@ -66,11 +66,11 @@ MeowStatus 是可选外部服务，但当前数据库初始化时默认开启 pr
 
 ## 当前限制
 
-- 产品目标保留匿名提交，但当前旧 Account 联动仍可能按 fail-closed 策略要求登录；该差异列入 P0 清理。匿名模式不提供历史查询。
+- 当前反馈和 WorkTask 支持匿名提交；匿名模式不提供历史查询，未来 Account 重构后再评估账号绑定。
 - 当前没有原生图片上传，反馈中的图片以文本链接为主。
 - 当前管理模型仍以单管理员为主，暂不承诺复杂 RBAC、多租户或组织架构。
 - 统一 Workstation 首页、工作收件箱、Kanban、AI 和更多服务聚合均按路线图分阶段推进。
-- KyanetAccount 旧联动代码处于维护冻结状态，不应继续增加依赖。
+- KyanetAccount 旧 schema/会话遗留仅用于迁移保留，不应成为新功能依赖。
 
 ## 开发命令
 

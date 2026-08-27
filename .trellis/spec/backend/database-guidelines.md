@@ -75,5 +75,6 @@ follows the same JSON-text storage and is parsed only in `mapFeedbackRow`.
 - Reading an internal column such as `admin_note` into a public DTO; public
   projections must be deliberately selected (see `getHomeHighlights`).
 
-Reference files: `server/db.js:57-156`, `server/db.js:158-442`,
-`server/db.js:1078-1422`, and `tests/account-session.test.js`.
+Reference files: `server/db.js:57-156`, `server/db.js:158-470`,
+`server/db.js:1078-1663`, `tests/backup-sqlite.test.js`, and
+`tests/notification-outbox.test.js`.

@@ -11,16 +11,16 @@
 
 | 能力 | 状态 | 当前证据/边界 |
 |---|---|---|
-| 反馈提交 | 已实现 | `server/app.js:472-498`、`public/feedback/` |
-| WorkTask 提交 | 已实现 | `server/app.js:499-529`、`public/worktask/` |
-| 管理员登录与会话 | 已实现 | `server/app.js:532-578`、`server/auth.js` |
-| 管理列表、筛选、分页、状态、备注、CSV | 已实现 | `server/app.js:670-839`、`public/admin/admin.js` |
-| 主页处理进展 | 已实现/P0 加固 | `server/app.js:382-388`、`server/db.js:1380-1420`；公开投影需最小化 |
-| SMTP/Webhook 通知 | 已实现/P0 加固 | `server/notify.js`、`server/webhook.js`；当前为进程内异步重试 |
-| MeowStatus/Minecraft 状态 | 已实现/P0 加固 | `server/app.js:390-422`、`server/meowstatus.js`；数据库初始化默认开启，地址需配置，显式启用策略仍待加固 |
+| 反馈提交 | 已实现 | `server/app.js:340-353`、`public/feedback/` |
+| WorkTask 提交 | 已实现 | `server/app.js:355-367`、`public/worktask/` |
+| 管理员登录与会话 | 已实现 | `server/app.js:370-398`、`server/auth.js` |
+| 管理列表、筛选、分页、状态、备注、CSV | 已实现 | `server/app.js:527-681`、`public/admin/admin.js` |
+| 主页处理进展 | 已实现/P0 加固 | `server/app.js:295-301`、`server/db.js:1640-1663`；公开查询已使用最小投影，仍需发布门禁验证 |
+| SMTP/Webhook 通知 | 已实现/P0 加固 | `server/notify.js`、`server/webhook.js`、`server/db.js:1194-1333`；已持久化 outbox 和有限重试，入队异常与真实 provider 仍需验证 |
+| MeowStatus/Minecraft 状态 | 已实现/P0 加固 | `server/app.js:303-337`、`server/meowstatus.js`；`MEOWSTATUS_ENABLED=false` 默认关闭，状态接口区分 disabled/unavailable/ok |
 | SQLite/MySQL/PostgreSQL | 已实现/P0 加固 | `server/db.js:1-14,158-429`；需匹配 Node 原生模块 ABI |
 | 备份脚本 | 已实现/P0 加固 | `scripts/backup-db*`；恢复演练仍需真实证据 |
-| 旧 KyanetAccount 联动 | 维护冻结 | `server/account-auth.js`、`server/account-session.js`、相关路由；计划移除 |
+| 旧 KyanetAccount 联动 | 已移除/数据保留 | 活动路由和提交 gating 已移除；历史 schema/数据待独立迁移 |
 | 统一 Workstation 首页 | P1 计划 | 统一摘要、收件箱和快捷入口 |
 | 我的提交/任务安全视图 | P1 计划 | 只返回安全 DTO，不能包含内部备注 |
 | 服务状态卡片与适配器边界 | P1 计划 | 先复用 MeowStatus，不建设通用插件平台 |

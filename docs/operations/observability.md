@@ -16,7 +16,7 @@
 
 ## 通知观测
 
-当前通知在提交后异步执行并最多短暂重试，失败写入日志但没有持久化投递记录。P0 计划增加事件 ID、目标、尝试次数、错误、最后状态和人工重试入口。通知失败不应回滚已经成功写入的反馈或 WorkTask。
+通知采用数据库 `notification_delivery` outbox。反馈/WorkTask 写入成功后，为已启用的 SMTP/Webhook provider 建立 pending 记录；进程启动时和每 30 秒处理到期记录，失败按最多 3 次指数退避重试，最终状态为 `failed`。Webhook 多目标投递若部分成功，会记录成功/失败计数，并把失败目标索引写入脱敏的 `target` 标签；后续重试只发送失败目标，避免重复通知已成功目标。数据库只保存 provider、事件/业务 ID、脱敏目标标签、次数、时间和截断错误，不保存密码、签名或完整联系方式。管理员可通过 `/api/admin/notifications` 查询并通过 `/api/admin/notifications/retry` 触发人工重试。通知失败不回滚已经成功写入的反馈或 WorkTask。
 
 ## 排障顺序
 
