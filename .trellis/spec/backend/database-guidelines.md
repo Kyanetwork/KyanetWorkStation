@@ -48,6 +48,82 @@ Use snake_case table/column/index names (`worktask`, `admin_session`,
 `toBoolean` on read because SQLite/MySQL and PostgreSQL represent them
  differently.
 
+## Legacy submission migration ordering
+
+### 1. Scope / Trigger
+
+This contract applies when `initializeDatabase()` must load a database created
+before the current `account_*` submission columns existed.
+
+### 2. Signatures
+
+- `initializeDatabase() -> Promise<void>` creates base schema and runs ordered
+  compatibility checks.
+- `ensureSubmissionAccountColumns() -> Promise<void>` adds missing columns and
+  then creates `idx_feedback_account_user_id` and
+  `idx_worktask_account_user_id`.
+
+### 3. Contracts
+
+- Schema statements may create indexes only for columns guaranteed to exist in
+  the same statement or in an earlier compatibility step.
+- Legacy SQLite databases must retain existing rows while adding missing
+  `account_user_id`, `account_email_snapshot`, and
+  `account_display_name_snapshot` columns with empty-string defaults.
+- SQLite, MySQL, and PostgreSQL schema definitions must keep the same ordering
+  rule; the compatibility helper owns creation of the account indexes.
+- Compatibility DDL must tolerate concurrent initializers: after an `ALTER TABLE`
+  or `CREATE INDEX` error, re-check the expected column/index and suppress the
+  error only when another initializer has already created that exact object.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Legacy feedback/worktask table lacks account columns | Add columns, then create both account indexes; initialization succeeds |
+| Current table already has columns/indexes | Leave data and indexes intact; initialization remains idempotent |
+| Two processes initialize the same legacy database concurrently | Both initializers may observe the object as missing; the loser re-checks after its DDL error and still succeeds |
+| Schema statement references a compatibility-added column too early | Initialization fails with a driver column error; this is a defect to fix before release |
+
+### 5. Good / Base / Bad Cases
+
+- Good: old SQLite schema starts successfully and existing rows remain readable.
+- Base: a new database creates columns and indexes through the same ordered path.
+- Concurrent: two initializers converge on the same columns and indexes without
+  treating a duplicate-object race as a startup failure.
+- Bad: `CREATE INDEX ... (account_user_id)` runs before the compatibility column
+  is added.
+
+### 6. Tests Required
+
+- `tests/backup-sqlite.test.js` must construct a legacy SQLite schema, call
+  `initializeDatabase()`, assert success, assert all three account columns, and
+  assert both account indexes.
+- The test must also close the database and remove the temporary directory.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```js
+"CREATE INDEX IF NOT EXISTS idx_feedback_account_user_id ON feedback(account_user_id)",
+// ensureSubmissionAccountColumns() adds account_user_id afterwards
+```
+
+#### Correct
+
+```js
+// ensureSubmissionAccountColumns() adds missing columns first and re-checks
+// after a concurrent duplicate-object error.
+if (!(await indexExists("feedback", "idx_feedback_account_user_id"))) {
+  try {
+    await execute("CREATE INDEX idx_feedback_account_user_id ON feedback(account_user_id)");
+  } catch (error) {
+    if (!(await indexExists("feedback", "idx_feedback_account_user_id"))) throw error;
+  }
+}
+```
+
 ## Writes, reads, and transactions
 
 Create/update/delete functions should return a useful primitive from

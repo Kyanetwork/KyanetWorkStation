@@ -5,13 +5,78 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 
 const BetterSqlite3 = require("better-sqlite3");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const BACKUP_SCRIPT = path.join(ROOT_DIR, "scripts", "backup-db.js");
 const VERIFY_SCRIPT = path.join(ROOT_DIR, "scripts", "verify-sqlite-backup.js");
+
+function forceTerminate(child) {
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true
+    });
+    return;
+  }
+  child.kill("SIGKILL");
+}
+
+function initializeLegacyDatabase(dbPath, runs = 1) {
+  const script = [
+    "process.env.NODE_ENV = 'test';",
+    "process.env.DB_CLIENT = 'sqlite';",
+    `process.env.DB_PATH = ${JSON.stringify(dbPath)};`,
+    `const db = require(${JSON.stringify(path.join(ROOT_DIR, "server", "db.js"))});`,
+    `(async () => { for (let attempt = 0; attempt < ${runs}; attempt += 1) await db.initializeDatabase(); process.stdout.write('READY\\n'); setInterval(() => {}, 1000); })().catch((error) => { process.stderr.write(error.message); process.exit(1); });`
+  ].join("\n");
+  const child = spawn(process.execPath, ["-e", script], {
+    cwd: ROOT_DIR,
+    env: { ...process.env, NODE_ENV: "test", DB_CLIENT: "sqlite", DB_PATH: dbPath },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk.toString("utf8"); });
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let terminationRequested = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+    const timer = setTimeout(() => {
+      terminationRequested = true;
+      forceTerminate(child);
+      finish(new Error("legacy schema initialization timed out"));
+    }, 12000);
+    child.on("error", (error) => {
+      finish(error);
+    });
+    child.on("close", (code) => {
+      if (!stdout.includes("READY") || stderr.trim()) {
+        finish(new Error(stderr || `legacy schema initialization exited with ${code}`));
+        return;
+      }
+      finish();
+    });
+    child.stdout.on("data", () => {
+      if (settled || terminationRequested || !stdout.includes("READY")) return;
+      terminationRequested = true;
+      forceTerminate(child);
+    });
+  });
+}
 
 test("SQLite backup can be checksum-verified and restored in an isolated database", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-backup-restore-"));
@@ -132,5 +197,85 @@ test("SQLite backup verifier rejects missing critical tables, corrupt gzip, and 
     }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("initializeDatabase upgrades legacy SQLite submissions and remains idempotent", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-db-migration-"));
+  const dbPath = path.join(tempDir, "legacy.db");
+  const db = new BetterSqlite3(dbPath);
+  db.exec(`
+    CREATE TABLE feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      images TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'new',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE worktask (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'new',
+      tags TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE admin_user (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  db.prepare(`
+    INSERT INTO feedback (type, title, content, contact, images, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run("Bug", "legacy feedback", "legacy content", "legacy@example.com", "[]", "new", "2026-08-27T00:00:00.000Z", "2026-08-27T00:00:00.000Z");
+  db.prepare(`
+    INSERT INTO worktask (type, title, content, contact, priority, status, tags, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run("WorkTask提交", "legacy worktask", "legacy content", "legacy@example.com", "medium", "new", "legacy", "2026-08-27T00:00:00.000Z", "2026-08-27T00:00:00.000Z");
+  db.close();
+
+  try {
+    await initializeLegacyDatabase(dbPath, 2);
+
+    const upgraded = new BetterSqlite3(dbPath, { readonly: true, fileMustExist: true });
+    try {
+      for (const table of ["feedback", "worktask"]) {
+        const columns = upgraded.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name);
+        assert.ok(columns.includes("account_user_id"));
+        assert.ok(columns.includes("account_email_snapshot"));
+        assert.ok(columns.includes("account_display_name_snapshot"));
+      }
+      assert.deepEqual(
+        upgraded.prepare("SELECT title, account_user_id, account_email_snapshot, account_display_name_snapshot FROM feedback WHERE title = ?").get("legacy feedback"),
+        { title: "legacy feedback", account_user_id: "", account_email_snapshot: "", account_display_name_snapshot: "" }
+      );
+      assert.deepEqual(
+        upgraded.prepare("SELECT title, account_user_id, account_email_snapshot, account_display_name_snapshot FROM worktask WHERE title = ?").get("legacy worktask"),
+        { title: "legacy worktask", account_user_id: "", account_email_snapshot: "", account_display_name_snapshot: "" }
+      );
+      for (const [table, indexName] of [
+        ["feedback", "idx_feedback_account_user_id"],
+        ["worktask", "idx_worktask_account_user_id"]
+      ]) {
+        const indexColumns = upgraded.prepare(`PRAGMA index_info(${indexName})`).all().map((row) => row.name);
+        assert.deepEqual(indexColumns, ["account_user_id"], `${table} account index must target account_user_id`);
+      }
+    } finally {
+      upgraded.close();
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });

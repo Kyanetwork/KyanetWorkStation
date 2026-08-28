@@ -42,6 +42,16 @@ temporary databases and cleanup hooks for persistence/restore behavior, as in
 Historical Account helper tests may remain only to protect migration behavior;
 they are not active request-path coverage.
 
+### SQLite child-process cleanup on Windows
+
+When a test loads `better-sqlite3` in a child process to exercise legacy schema
+initialization, keep the child alive after its readiness marker and terminate it
+with an OS-level force path (`taskkill /T /F` on Windows, `SIGKILL` elsewhere).
+On Node.js 24 for Windows, natural exit or explicit database close can trigger a
+native environment-cleanup assertion after the migration has already passed.
+The harness must still require the readiness marker and reject non-empty stderr;
+this workaround is test isolation only and does not change production shutdown.
+
 The full suite is `npm test`. It is a Node 24 release gate; if the installed
 `better-sqlite3` binary ABI does not match the active runtime, rebuild it in
 that same Node version and record the failure rather than labeling the suite

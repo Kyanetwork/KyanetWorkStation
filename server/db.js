@@ -176,7 +176,6 @@ function sqliteSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
     "CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_feedback_account_user_id ON feedback(account_user_id)",
     `CREATE TABLE IF NOT EXISTS worktask (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -202,7 +201,6 @@ function sqliteSchemaStatements() {
     "CREATE INDEX IF NOT EXISTS idx_worktask_status ON worktask(status)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_priority ON worktask(priority)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_created_at ON worktask(created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_worktask_account_user_id ON worktask(account_user_id)",
     `CREATE TABLE IF NOT EXISTS admin_user (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
@@ -279,8 +277,7 @@ function mysqlSchemaStatements() {
       created_at VARCHAR(40) NOT NULL,
       updated_at VARCHAR(40) NOT NULL,
       INDEX idx_feedback_status (status),
-      INDEX idx_feedback_created_at (created_at),
-      INDEX idx_feedback_account_user_id (account_user_id)
+      INDEX idx_feedback_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS worktask (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -305,8 +302,7 @@ function mysqlSchemaStatements() {
       updated_at VARCHAR(40) NOT NULL,
       INDEX idx_worktask_status (status),
       INDEX idx_worktask_priority (priority),
-      INDEX idx_worktask_created_at (created_at),
-      INDEX idx_worktask_account_user_id (account_user_id)
+      INDEX idx_worktask_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS admin_user (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -388,7 +384,6 @@ function postgresSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
     "CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_feedback_account_user_id ON feedback(account_user_id)",
     `CREATE TABLE IF NOT EXISTS worktask (
       id BIGSERIAL PRIMARY KEY,
       type TEXT NOT NULL,
@@ -414,7 +409,6 @@ function postgresSchemaStatements() {
     "CREATE INDEX IF NOT EXISTS idx_worktask_status ON worktask(status)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_priority ON worktask(priority)",
     "CREATE INDEX IF NOT EXISTS idx_worktask_created_at ON worktask(created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_worktask_account_user_id ON worktask(account_user_id)",
     `CREATE TABLE IF NOT EXISTS admin_user (
       id BIGSERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
@@ -590,7 +584,13 @@ async function addSubmissionAccountColumn(tableName, columnName, columnType) {
   if (await columnExists(tableName, columnName)) {
     return;
   }
-  await execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} NOT NULL DEFAULT ''`);
+  try {
+    await execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} NOT NULL DEFAULT ''`);
+  } catch (error) {
+    if (!(await columnExists(tableName, columnName))) {
+      throw error;
+    }
+  }
 }
 
 function accountColumnType(columnName) {
@@ -614,11 +614,20 @@ async function ensureSubmissionAccountColumns() {
     }
   }
 
-  if (!(await indexExists("feedback", "idx_feedback_account_user_id"))) {
-    await execute("CREATE INDEX idx_feedback_account_user_id ON feedback(account_user_id)");
-  }
-  if (!(await indexExists("worktask", "idx_worktask_account_user_id"))) {
-    await execute("CREATE INDEX idx_worktask_account_user_id ON worktask(account_user_id)");
+  for (const [tableName, indexName] of [
+    ["feedback", "idx_feedback_account_user_id"],
+    ["worktask", "idx_worktask_account_user_id"]
+  ]) {
+    if (await indexExists(tableName, indexName)) {
+      continue;
+    }
+    try {
+      await execute(`CREATE INDEX ${indexName} ON ${tableName}(account_user_id)`);
+    } catch (error) {
+      if (!(await indexExists(tableName, indexName))) {
+        throw error;
+      }
+    }
   }
 }
 
