@@ -15,6 +15,8 @@
 | D-007 | 已修复/待实链路验证 | MeowStatus Dashboard 现在限制 JSON MIME/响应体/字段/挂件数量，favicon 仅接受有界 raster data URL；异常仍只影响状态卡片 | `server/meowstatus.js`、`public/index/main.js`、`tests/meowstatus.test.js` | 本地边界回归已覆盖；发布环境继续观察上游契约 |
 | D-008 | 已实现/待实链路验证 | 通知改为数据库 outbox、有限重试和管理员重试；真实 provider 仍需部署验证 | `server/app.js:161-255,508-524`、`server/db.js:1194-1333` | 持久化投递、失败状态和重启后重试测试 |
 | D-009 | 已修复 | WorkTask arrange 支持显式清空负责人/计划时间 | `server/validation.js:293-338`、`server/db.js:1584-1626` | clear/unassign 语义测试 |
+| D-010 | 已修复 | 旧版 SQLite 缺少 `account_*` 列时，初始化先创建依赖列的索引，导致启动失败 | `server/db.js`、`tests/backup-sqlite.test.js` | 旧 schema 补列后再建索引；保留既有数据 |
+| D-011 | 已修复/待并发实链路验证 | 多进程初始化可能同时尝试补建 `account_*` 列/索引，后到进程把并发重复对象误判为启动失败 | `server/db.js`、`tests/backup-sqlite.test.js` | DDL 失败后复查对象；本地重复初始化/既有数据/索引目标已回归，部署时仍观察多进程启动 |
 
 ## 高概率风险
 
@@ -31,8 +33,8 @@
 | ID | 状态/优先级 | 缺口 | 处理方式 |
 |---|---|---|---|
 | V-001 | 已解决 | 没有稳定的 health → 提交 → 登录 → 列表 API 冒烟 | `tests/account-submission.test.js` 已提供临时 DB/端口/子进程清理的可重复冒烟 |
-| V-002 | P0 发布前 | 已有可重复的隔离 SQLite 备份、checksum、解压和关键表读取测试；尚无真实生产备份演练记录 | `tests/backup-sqlite.test.js` 自动覆盖；发布前仍需使用脱敏备份在独立路径演练并保存证据 |
-| V-003 | P0 发布前 | 已有 Webhook stub 的成功/失败/部分失败与 outbox 重试覆盖；尚无真实 SMTP/Webhook 网络链路证据 | `tests/webhook.test.js`、`tests/notification-outbox.test.js`；部署环境至少验证一条并记录失败和重试 |
+| V-002 | 本机已完成/发布目标待重演 | 已从 `.env` 指向的真实本机 SQLite 生成脱敏副本，在隔离路径完成 checksum、integrity/schema、关键表读取和应用启动冒烟；非本机发布目标仍需按模板重演 | 内部记录 `docs/internal/release-2026-08-27.md`；公开仓库仅保留工具和模板 |
+| V-003 | 本机已完成 | 已使用真实 `.env` provider 完成 SMTP 与 Feishu 成功测试，并用不可达隔离目标完成失败、有限重试、重启恢复和管理员人工重试；生产目标变更时需重新确认 | 内部记录 `docs/internal/release-2026-08-27.md`；不记录目标地址或凭据 |
 | V-004 | P1 | 没有真实浏览器 UI 回归 | P1 首页/收件箱实现时加入浏览器验收 |
 | V-005 | P1 | MySQL/PostgreSQL 只有脚本参数测试，缺少真实集成 | 选择性加入 CI/预发布矩阵 |
 | V-006 | 已解决 | README/旧文档遗漏 MeowStatus 路由和配置 | 已补齐 README、API、配置和状态说明；后续改动继续以对应权威文档同步 |

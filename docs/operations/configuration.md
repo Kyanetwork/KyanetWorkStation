@@ -10,11 +10,15 @@
 | `PORT` | `3000` | Node 监听端口 |
 | `LISTEN_HOST` | `127.0.0.1` | 建议仅绑定本机并由反向代理暴露 |
 | `TRUST_PROXY` | `0` | 仅在明确受信反向代理时设置为代理层数 |
-| `APP_BASE_URL` | `http://127.0.0.1:3000` | 站点绝对地址 |
+| `APP_BASE_URL` | `http://127.0.0.1:3000` | 站点绝对地址；生产反向代理使用 HTTPS 公网地址 |
 | `DB_CLIENT` | `sqlite` | `sqlite`、`mysql` 或 `postgres` |
 | `DATABASE_URL` | 空 | MySQL/PostgreSQL 连接串；非 SQLite 必填 |
 | `DB_PATH` | `./data/workstation.db` | SQLite 文件路径 |
 | `HEALTH_EXPOSE_COUNTS` | `false` | 是否在 health 暴露业务计数 |
+
+生产经宝塔 Nginx 等反向代理提供 HTTPS 时，设置为例如
+`APP_BASE_URL=https://kws.kyanet.work`。不要填后端回环地址、HTTP 公网地址，或在
+值后追加 `//` 注释；行尾说明会被当作配置值的一部分。
 
 ## 管理员、会话与限流
 

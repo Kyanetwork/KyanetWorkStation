@@ -7,6 +7,42 @@
 - `.env`、数据库、备份、日志和真实域名配置只存在于部署环境。
 - 生产部署前必须完成[发布门禁](../testing/release-checklist.md)。
 
+## 发布同步与文件边界
+
+生产环境推荐使用 Git 同步已审核的提交；前提是该提交已经推送到远端，且服务器
+目录是 Git 工作树。不要在服务器上直接修改源文件，也不要使用 `git clean -fdx`
+或用 `.env.example` 覆盖现有配置。
+
+常规发布步骤如下。`main` 和版本号按实际发布策略替换，发布前先保留上一提交和
+数据库备份：
+
+```bash
+cd /var/www/kyanet-workstation
+git status --short
+git fetch origin
+git pull --ff-only origin main
+npm ci --omit=dev --foreground-scripts
+node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqlite3 ok')"
+```
+
+若当前目录是手动上传的、没有可信 Git 历史，先在旁边目录克隆并完成健康检查，
+再切换服务目录；不要在未备份时对现有目录执行 `git init` 或强制覆盖。Git 更新
+只应覆盖受版本控制的代码、静态资源、脚本和文档。以下内容必须保留在部署环境，
+并在切换前后核对权限和可读性：
+
+| 保留项 | 处理原则 |
+|---|---|
+| `.env` | 生产配置和密钥；只编辑实际值，生产 `APP_BASE_URL` 使用 HTTPS |
+| `data/workstation.db` 及 `-wal`/`-shm` | 业务数据；停服务或按备份脚本要求生成一致性副本 |
+| `backups/` | 备份文件；不要随代码清理 |
+| `logs/`、`notification-handoff.jsonl` | 观测和人工补偿记录；按权限/轮转策略保留 |
+| 宝塔 Nginx 配置、证书和防火墙规则 | 由宝塔/系统单独管理，不从仓库模板直接覆盖 |
+| systemd unit | `/etc/systemd/system/kyanet-workstation.service`，由系统管理员管理 |
+
+不要把生产 `.env`、数据库、备份或日志复制回 Git 工作树。若必须继续手动上传，
+也应只上传与提交对应的代码文件，并逐项排除上表内容；长期维护仍以 Git 提交作为
+唯一发布基线。
+
 ## Linux：Nginx + PM2
 
 ```bash
@@ -25,6 +61,167 @@ pm2 startup
 ```
 
 复制 `deploy/nginx.kyanet-workstation.conf`，替换示例域名和证书路径后运行 `sudo nginx -t`，再 reload。不要直接使用模板中的示例域名申请证书。
+
+## Linux：systemd 单实例
+
+systemd 与 PM2 二选一管理应用，不能同时启动同一个端口。若从 PM2 切换，先在
+运行 PM2 的用户下停止并移除该应用，再启用下面的 unit；不要删除数据库或备份：
+
+```bash
+pm2 stop kyanet-workstation
+pm2 delete kyanet-workstation
+pm2 save
+```
+
+创建专用运行用户并确保它能读写 `.env`、`data/`、`backups/`、`logs/` 和 handoff
+journal（已有专用用户时跳过创建）：
+
+```bash
+sudo useradd --system --home /var/www/kyanet-workstation --shell /usr/sbin/nologin kyanet || true
+sudo chown -R kyanet:kyanet /var/www/kyanet-workstation
+sudo chmod 600 /var/www/kyanet-workstation/.env
+```
+
+写入 `/etc/systemd/system/kyanet-workstation.service`：
+
+```ini
+[Unit]
+Description=Kyanet WorkStation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kyanet
+Group=kyanet
+WorkingDirectory=/var/www/kyanet-workstation
+EnvironmentFile=/var/www/kyanet-workstation/.env
+ExecStart=/usr/bin/node /var/www/kyanet-workstation/server/app.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`ExecStart` 必须使用实际 Node 24 的绝对路径。NodeSource 通常为
+`/usr/bin/node`；如果使用 NVM，请以 `readlink -f "$(command -v node)"` 的结果
+替换，并确认该路径对 `User=kyanet` 可执行。启用并检查：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now kyanet-workstation
+sudo systemctl status kyanet-workstation --no-pager
+journalctl -u kyanet-workstation -n 50 --no-pager
+curl -fsS http://127.0.0.1:3000/api/health
+ss -ltnp | grep ':3000'
+```
+
+更新代码或 Node 后使用 `sudo systemctl restart kyanet-workstation`，失败时先查看
+`journalctl -u kyanet-workstation`，确认 health、监听地址和 Nginx，再决定回滚。
+不要同时保留 PM2 自启动和 systemd 自启动。
+
+## Ubuntu 24.04：Node.js 20 → 24 LTS
+
+项目发布基线为 Node.js 24.x。升级前先确认当前 Node 的来源和服务管理方式，保留这些输出作为回滚记录；不要在未确认来源时混用系统包管理器和 NVM：
+
+```bash
+node -v
+npm -v
+command -v node
+readlink -f "$(command -v node)"
+systemctl status kyanet-workstation --no-pager || true
+pm2 list || true
+```
+
+### 系统级安装（NodeSource，适合 PM2/systemd）
+
+以下命令会把 Ubuntu 的 Node.js 包切换到 NodeSource 的 24.x 源，不需要先删除旧版：
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg
+
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+  | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
+  | sudo tee /etc/apt/sources.list.d/nodesource.list
+
+sudo apt update
+apt-cache policy nodejs
+sudo apt install -y nodejs
+```
+
+确认版本和原生模块 ABI（Node 24 基线为 ABI `137`）：
+
+```bash
+node -v
+npm -v
+command -v node
+node -p "process.versions.modules"
+```
+
+在应用目录重新安装生产依赖并检查 `better-sqlite3`。这不会覆盖 `.env` 或数据库文件：
+
+```bash
+cd /var/www/kyanet-workstation
+npm ci --omit=dev --foreground-scripts
+node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqlite3 ok')"
+```
+
+若原生模块加载失败，再执行一次显式重建并复查：
+
+```bash
+npm rebuild better-sqlite3
+node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqlite3 ok')"
+```
+
+按实际进程管理器重启服务，并确认应用仍只监听预期的回环/私网地址：
+
+```bash
+# PM2
+pm2 restart kyanet-workstation --update-env
+pm2 save
+pm2 status
+pm2 logs kyanet-workstation --lines 50
+
+# 或 systemd（二选一）
+sudo systemctl daemon-reload
+sudo systemctl restart kyanet-workstation
+sudo systemctl status kyanet-workstation --no-pager
+
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+### NVM 安装
+
+如果 `command -v node` 指向 `.nvm`，不要添加 NodeSource 源，直接在运行服务的同一用户下执行：
+
+```bash
+nvm install 24
+nvm alias default 24
+nvm use 24
+node -v
+npm -v
+node -p "process.versions.modules"
+
+cd /var/www/kyanet-workstation
+npm ci --omit=dev --foreground-scripts
+npm rebuild better-sqlite3
+pm2 update
+pm2 restart kyanet-workstation --update-env
+pm2 save
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+NVM 场景必须确认 PM2 daemon 和 systemd unit 使用的是同一套 Node 24 路径；否则终端中的 `node -v` 可能已升级，而实际服务仍运行 Node 20。
+
+### 失败时回滚
+
+升级前保存的 Node 路径、包版本和 PM2/systemd 配置是回滚依据。若健康检查或原生模块加载失败，先停止新进程，恢复上一 Node 版本和依赖，再重启服务；不要删除数据库或备份。系统包回滚版本以 `apt-cache policy nodejs` 中实际可用版本为准，NVM 则使用 `nvm use <previous-major>`。回滚后再次执行 `node -v`、ABI 检查和 `/api/health`。
 
 ## 反向代理与 TLS 发布门禁（D-004）
 

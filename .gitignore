@@ -11,6 +11,7 @@ data/*.db-wal
 data/*.jsonl
 backups/*.db
 backups/*.gz
+backups/**
 # Internal deployment notes may contain real hosts, credentials, or topology.
 docs/internal/
 @old_files/*

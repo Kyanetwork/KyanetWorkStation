@@ -104,8 +104,20 @@
 - [x] `python ./.trellis/scripts/task.py validate .trellis/tasks/08-27-release-environment-validation` 通过。
 - [x] 运行安全审计：`rg` 检查真实域名、凭据、token、Webhook URL、用户数据、
       `.db`/`.gz`/`.jsonl` 临时文件未进入提交；审阅跨层 DTO、错误和日志字段。
-- [x] 使用真实部署参数前再次取得用户确认；未提供参数时将 D-004/V-002/V-003
-      保留为阻塞/待执行，不宣称发布完成。
+- [x] 使用真实部署参数前再次取得用户确认；未提供参数时将 D-004 及目标特定的
+      V-002/V-003 保留为阻塞/待执行，不宣称发布完成。
+
+## 6. 本轮验证补充
+
+- [x] 发现并修复旧版 SQLite 缺少 `account_*` 列时的索引创建顺序缺陷，在
+  `tests/backup-sqlite.test.js` 增加回归，并同步三套数据库 schema 的索引责任。
+- [x] 兼容 DDL 在并发重复对象错误后会复查列/索引再决定是否抛出；旧 schema 回归
+  验证既有数据、空默认值、索引目标列和重复初始化幂等性。
+- [x] 使用 `.env` 指向的本机 SQLite 生成脱敏 `.db.gz`，完成 checksum、完整性、
+  关键表、隔离应用启动和临时目录清理证据；发布目标不同仍需重演 V-002。
+- [x] 使用 `.env` 中真实 SMTP/Feishu provider 完成成功消息；使用本地不可达
+  Webhook 目标完成失败、3 次有限重试、重启恢复和管理员人工 retry 证据。
+- [ ] D-004 仍需实际反向代理/TLS 边界；本机回环或 header stub 不计入证据。
 
 ## 回滚点与停止条件
 

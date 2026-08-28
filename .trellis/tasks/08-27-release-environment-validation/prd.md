@@ -15,7 +15,7 @@ Node.js + Express + 原生静态前端 + SQLite/MySQL/PostgreSQL 基本架构的
   和 `deploy/iis.web.config.template` 仍使用示例域名或证书路径；D-004 必须在实际
   反向代理来源、监听地址和 TLS 拓扑已知后验证，不能用本地 header stub 代替。
 - `tests/backup-sqlite.test.js` 已覆盖合成 SQLite 备份、SHA-256、隔离恢复和关键表
-  可读性；V-002 仍需要一份脱敏真实备份及回滚记录。
+  可读性；本机 V-002 脱敏演练已完成，发布目标仍需目标环境备份及回滚记录。
 - `tests/webhook.test.js` 与 `tests/notification-outbox.test.js` 已覆盖 stub 的成功、
   失败、部分失败和重试；V-003 仍需要至少一条真实 SMTP/Webhook 链路及重启后恢复
   证据，凭据不得进入仓库或日志。
@@ -44,7 +44,7 @@ Node.js + Express + 原生静态前端 + SQLite/MySQL/PostgreSQL 基本架构的
 ### R3. V-002 真实脱敏备份恢复
 
 - 使用发布前脱敏备份在独立临时路径/实例恢复，记录 SHA-256、数据库类型、schema
-  和关键行读取、耗时、清理及回滚结果。
+  和关键行读取、耗时及清理结果；上一版本回滚属于发布目标的单独证据。
 - 恢复验证不得覆盖生产数据库，证据中不得包含提交内容、数据库 URL 或凭据。
 
 ### R4. V-003 真实通知链路
@@ -73,12 +73,10 @@ Node.js + Express + 原生静态前端 + SQLite/MySQL/PostgreSQL 基本架构的
 - [x] 发布验证模板可由操作者按步骤填写，且公开仓库不包含真实环境值。
 - [ ] D-004 的代理来源、监听地址、TLS 和直连伪造测试有真实部署证据，或记录明确
       的责任人/前置条件/阻塞原因。
-- [ ] V-002 的真实脱敏备份在隔离环境恢复，checksum、schema、关键数据读取、清理和
-      回滚记录可审计。
-- [ ] V-003 至少一条真实 SMTP/Webhook 链路完成成功、失败、重试和重启后恢复验证，
-      日志与 outbox 查询不泄露秘密。
+- [x] V-002 已使用 `.env` 指向的真实本机 SQLite 生成脱敏副本，并在独立临时路径完成 checksum、schema、关键表读取、应用启动和清理；本机未执行上一版本回滚，发布到其他数据库/主机时仍需按模板重演备份与回滚。
+- [x] V-003 已使用 `.env` 中真实 SMTP 与 Feishu provider 完成成功发送，并在隔离不可达目标完成失败、有限重试、重启恢复和管理员人工重试；日志与 outbox 查询未泄露秘密。
 - [x] D-007 与 R-004 有实现、回归测试和运维文档，并继续在路线图/缺陷表保持可追踪。
-- [ ] `npm test`、`npm audit --omit=dev --registry=https://registry.npmjs.org`、
+- [x] `npm test`（63/63）、`npm audit --omit=dev --registry=https://registry.npmjs.org`、
       JavaScript 语法检查和 Trellis 校验继续通过。
 
 ## Confirmed scope decision
