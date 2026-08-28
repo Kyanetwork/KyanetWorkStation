@@ -9,6 +9,9 @@
   const smtpTestMsg = document.getElementById("smtpTestMsg");
   const webhookTestMsg = document.getElementById("webhookTestMsg");
   const statusSettingsMsg = document.getElementById("statusSettingsMsg");
+  const aiStatusText = document.getElementById("aiStatusText");
+  const aiProfilesList = document.getElementById("aiProfilesList");
+  const aiStatusMsg = document.getElementById("aiStatusMsg");
   const inboxMsg = document.getElementById("inboxMsg");
   const inboxList = document.getElementById("inboxList");
   const toastWrap = document.getElementById("toastWrap");
@@ -22,6 +25,7 @@
   const moduleWorktask = document.getElementById("moduleWorktask");
   const moduleWorktaskCreate = document.getElementById("moduleWorktaskCreate");
   const inboxModel = window.KwsInboxModel;
+  const aiModel = window.KwsAiModel;
 
   const state = {
     active: "inbox",
@@ -38,6 +42,14 @@
     statusSettings: {
       profile: { enabled: true, apiBaseUrl: "http://127.0.0.1:8080", timeoutMs: 5000 },
       minecraft: { enabled: true }
+    },
+    ai: {
+      enabled: false,
+      available: false,
+      reason: "",
+      activeProfile: null,
+      profiles: [],
+      suggestions: {}
     },
     ui: {
       displayTimezone: "Asia/Shanghai",
@@ -222,6 +234,132 @@
     renderStatusSettings(data);
   }
 
+  function aiReasonLabel(reason, enabled, available) {
+    if (!enabled) return "已关闭（AI_COPILOT_ENABLED=false）";
+    if (available) return "可用";
+    return ({
+      no_active_profile: "未选择 active profile",
+      encryption_key_unavailable: "主密钥不可用",
+      profile_key_unavailable: "active profile 不可用"
+    }[reason]) || "暂不可用";
+  }
+
+  function renderAiProfiles(profiles) {
+    if (!aiProfilesList) return;
+    if (!profiles.length) {
+      aiProfilesList.innerHTML = `<p class="meta">尚未保存 profile。保存后可在这里切换 active profile。</p>`;
+      return;
+    }
+    aiProfilesList.innerHTML = profiles.map((profile) => {
+      const active = state.ai.activeProfile && state.ai.activeProfile.id === profile.id;
+      const protocolLabel = ({
+        "openai-chat": "OpenAI Chat / 兼容",
+        "openai-responses": "OpenAI Responses",
+        "anthropic-messages": "Anthropic Messages"
+      }[profile.protocol]) || profile.protocol || "未知协议";
+      return `<div class="ai-profile-row">
+        <div>
+          <strong>${escapeHtml(profile.name || "未命名 profile")}${active ? " · active" : ""}</strong>
+          <div class="ai-profile-meta">${escapeHtml(protocolLabel)} · ${escapeHtml(profile.model || "未设置模型")} · ${escapeHtml(profile.baseUrl || "未设置地址")}</div>
+          <div class="ai-profile-meta">API Key：${profile.keyConfigured ? escapeHtml(profile.keyMask || "••••••••") : "未配置"}</div>
+        </div>
+        <div class="ai-profile-actions">
+          <button type="button" data-action="ai-edit-profile" data-id="${escapeHtml(profile.id)}">编辑</button>
+          ${active ? "" : `<button type="button" data-action="ai-activate-profile" data-id="${escapeHtml(profile.id)}">设为 active</button>`}
+          <button type="button" data-action="ai-delete-profile" data-id="${escapeHtml(profile.id)}">删除</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function renderAiStatus(data) {
+    const profiles = Array.isArray(data && data.profiles)
+      ? data.profiles.map((profile) => aiModel.normalizeProfile(profile))
+      : [];
+    const activeProfile = data && data.activeProfile ? aiModel.normalizeProfile(data.activeProfile) : null;
+    state.ai.enabled = data && data.enabled === true;
+    state.ai.available = data && data.available === true;
+    state.ai.reason = data && typeof data.reason === "string" ? data.reason : "";
+    state.ai.activeProfile = activeProfile;
+    state.ai.profiles = profiles;
+    if (aiStatusText) {
+      aiStatusText.textContent = `状态：${aiReasonLabel(state.ai.reason, state.ai.enabled, state.ai.available)}${activeProfile ? ` · 当前：${activeProfile.name || activeProfile.id}` : ""}`;
+    }
+    renderAiProfiles(profiles);
+  }
+
+  async function loadAiStatus() {
+    const data = await api("/api/admin/ai/status", null, { method: "GET" });
+    renderAiStatus(data);
+  }
+
+  function resetAiProfileForm() {
+    document.getElementById("aiProfileId").value = "";
+    document.getElementById("aiProfileName").value = "";
+    document.getElementById("aiProfileProtocol").value = "openai-chat";
+    document.getElementById("aiProfileBaseUrl").value = "";
+    document.getElementById("aiProfileModel").value = "";
+    document.getElementById("aiProfileApiKey").value = "";
+  }
+
+  function editAiProfile(id) {
+    const profile = state.ai.profiles.find((item) => item.id === id);
+    if (!profile) return;
+    document.getElementById("aiProfileId").value = profile.id;
+    document.getElementById("aiProfileName").value = profile.name;
+    document.getElementById("aiProfileProtocol").value = profile.protocol;
+    document.getElementById("aiProfileBaseUrl").value = profile.baseUrl;
+    document.getElementById("aiProfileModel").value = profile.model;
+    document.getElementById("aiProfileApiKey").value = "";
+    document.getElementById("aiProfileName").focus();
+  }
+
+  async function saveAiProfile() {
+    clearMessage(aiStatusMsg);
+    const payload = {
+      id: document.getElementById("aiProfileId").value.trim() || undefined,
+      name: document.getElementById("aiProfileName").value.trim(),
+      protocol: document.getElementById("aiProfileProtocol").value,
+      baseUrl: document.getElementById("aiProfileBaseUrl").value.trim(),
+      model: document.getElementById("aiProfileModel").value.trim(),
+      key: document.getElementById("aiProfileApiKey").value
+    };
+    const btn = document.getElementById("aiProfileSaveBtn");
+    await withButtonBusy(btn, "保存中...", async () => {
+      await api("/api/admin/ai/profiles", payload);
+      await loadAiStatus();
+      resetAiProfileForm();
+      notify(aiStatusMsg, "ok", "AI profile 已保存");
+    });
+  }
+
+  async function activateAiProfile(id) {
+    const btn = Array.from(document.querySelectorAll('button[data-action="ai-activate-profile"]'))
+      .find((candidate) => candidate.dataset.id === id);
+    const run = async () => {
+      await api("/api/admin/ai/profiles/active", { id });
+      await loadAiStatus();
+      notify(aiStatusMsg, "ok", "active profile 已切换，新请求将使用该 profile");
+    };
+    if (btn) await withButtonBusy(btn, "切换中...", run);
+    else await run();
+  }
+
+  async function deleteAiProfile(id) {
+    const profile = state.ai.profiles.find((item) => item.id === id);
+    if (!profile || !confirm(`确认删除 AI profile“${profile.name || id}”吗？`)) return;
+    const btn = Array.from(document.querySelectorAll('button[data-action="ai-delete-profile"]'))
+      .find((candidate) => candidate.dataset.id === id);
+    const run = async () => {
+      await api("/api/admin/ai/profiles/delete", { id });
+      await loadAiStatus();
+      if (document.getElementById("aiProfileId").value === id) resetAiProfileForm();
+      notify(aiStatusMsg, "ok", "AI profile 已删除");
+    };
+    if (btn) await withButtonBusy(btn, "删除中...", run);
+    else await run();
+  }
+
   async function saveStatusProfileSettings() {
     clearMessage(statusSettingsMsg);
     const btn = document.getElementById("statusProfileSaveBtn");
@@ -309,6 +447,87 @@
     ].map(([status, label]) => `<button type="button" data-action="worktask-status" data-id="${id}" data-status="${status}" ${item.status === status ? "disabled" : ""}>${label}</button>`).join("");
   }
 
+  function aiSuggestionKey(source, id) {
+    return `${source}-${id}`;
+  }
+
+  function renderAiDecisionButtons(suggestionId, field) {
+    if (!aiModel.isDecisionField(field)) return "";
+    const id = escapeHtml(suggestionId);
+    const safeField = escapeHtml(field);
+    return `<button type="button" data-action="ai-decision" data-suggestion-id="${id}" data-decision="accepted" data-fields="${safeField}">接受</button>
+      <button type="button" data-action="ai-decision" data-suggestion-id="${id}" data-decision="rejected" data-fields="${safeField}">拒绝</button>`;
+  }
+
+  function renderAiSuggestionField(label, field, value, suggestionId, options = {}) {
+    const textValue = value || "暂无建议";
+    const controls = options.copy
+      ? `<button type="button" data-action="ai-copy" data-copy-value="${escapeHtml(value || "")}">复制</button>`
+      : "";
+    const fill = options.fill
+      ? `<button type="button" data-action="ai-fill-reply" data-suggestion-id="${escapeHtml(suggestionId)}">填入回复</button>`
+      : "";
+    const decisions = options.decision === false ? "" : renderAiDecisionButtons(suggestionId, field);
+    return `<div class="ai-suggestion-field${options.wide ? " is-wide" : ""}">
+      <strong>${escapeHtml(label)}</strong>
+      <p>${escapeHtml(textValue)}</p>
+      <div class="ai-suggestion-actions">${controls}${fill}${decisions}</div>
+    </div>`;
+  }
+
+  function renderAiPanel(item, suggestion, options = {}) {
+    const source = escapeHtml(item.source);
+    const id = escapeHtml(item.id);
+    const key = aiSuggestionKey(item.source, item.id);
+    const suggestionId = suggestion ? escapeHtml(suggestion.id) : "";
+    const generateButton = `<button type="button" data-action="ai-suggest" data-source="${source}" data-id="${id}"${options.loading ? " disabled" : state.ai.available ? "" : " disabled"}>${suggestion ? "重新生成" : "生成 AI 建议"}</button>`;
+    if (options.loading) {
+      return `<section class="ai-suggestion-panel" data-ai-key="${escapeHtml(key)}">
+        <div class="ai-suggestion-head"><strong>AI Copilot</strong>${generateButton}</div>
+        <p class="ai-suggestion-note" role="status" aria-live="polite">正在请求当前 active profile，请稍候……</p>
+      </section>`;
+    }
+    if (options.error) {
+      return `<section class="ai-suggestion-panel" data-ai-key="${escapeHtml(key)}">
+        <div class="ai-suggestion-head"><strong>AI Copilot</strong>${generateButton}</div>
+        <p class="ai-suggestion-note" role="alert">${escapeHtml(options.error)}</p>
+      </section>`;
+    }
+    if (!suggestion) {
+      const note = state.ai.available
+        ? "生成前会将该条目的最小工作字段发送到当前 Provider；联系方式、管理员备注和账号快照不会发送。"
+        : `当前不可用：${aiReasonLabel(state.ai.reason, state.ai.enabled, state.ai.available)}`;
+      return `<section class="ai-suggestion-panel" data-ai-key="${escapeHtml(key)}">
+        <div class="ai-suggestion-head"><strong>AI Copilot</strong>${generateButton}</div>
+        <p class="ai-suggestion-note">${escapeHtml(note)}</p>
+      </section>`;
+    }
+
+    const normalized = aiModel.normalizeSuggestion(suggestion);
+    const suggestionData = normalized.suggestion;
+    const similar = normalized.similarItems.length
+      ? `<ul>${normalized.similarItems.map((similarItem) => `<li>${escapeHtml(similarItem.entityType === "worktask" ? "WorkTask" : "反馈")} #${escapeHtml(similarItem.entityId)}：${escapeHtml(similarItem.title || "无标题")}（${escapeHtml(similarItem.status || "-")}，${Math.round(similarItem.score * 100)}%）</li>`).join("")}</ul>`
+      : "<p>未发现达到阈值的相似条目。</p>";
+    const providerText = [normalized.provider.name, normalized.provider.protocol, normalized.provider.model]
+      .filter(Boolean)
+      .join(" · ") || "当前 Provider";
+    const decisionEnabled = normalized.status === "available";
+    return `<section class="ai-suggestion-panel" data-ai-key="${escapeHtml(key)}" data-suggestion-id="${suggestionId}">
+      <div class="ai-suggestion-head"><strong>AI Copilot 建议 · ${escapeHtml(providerText)}</strong>${generateButton}</div>
+      <p class="ai-suggestion-note">生成于 ${escapeHtml(formatDateTimeDisplay(normalized.generatedAt))}，状态：${escapeHtml(normalized.status)}；建议仅供人工确认，过期时间：${escapeHtml(formatDateTimeDisplay(normalized.expiresAt))}</p>
+      <div class="ai-suggestion-grid">
+        ${renderAiSuggestionField("摘要", "summary", suggestionData.summary, normalized.id, { copy: true, wide: true, decision: decisionEnabled })}
+        ${renderAiSuggestionField("建议类型", "category", suggestionData.category, normalized.id, { copy: true, decision: decisionEnabled })}
+        ${item.source === "worktask" ? renderAiSuggestionField("建议优先级", "priority", suggestionData.priority, normalized.id, { copy: true, decision: decisionEnabled }) : ""}
+        ${item.source === "worktask" ? renderAiSuggestionField("建议标签", "tags", suggestionData.tags.join(", "), normalized.id, { copy: true, decision: decisionEnabled }) : ""}
+        ${renderAiSuggestionField("对外回复草稿", "replyDraft", suggestionData.replyDraft, normalized.id, { fill: true, wide: true, decision: decisionEnabled })}
+        ${renderAiSuggestionField("建议依据", "rationale", suggestionData.rationale, normalized.id, { wide: true, decision: decisionEnabled })}
+        <div class="ai-suggestion-field is-wide"><strong>缺失信息</strong><p>${escapeHtml(suggestionData.missingInfo.join("；") || "未指出")}</p></div>
+        <div class="ai-suggestion-field is-wide"><strong>相似条目</strong>${similar}</div>
+      </div>
+    </section>`;
+  }
+
   function renderInboxItem(item) {
     const detail = item.detailFields || {};
     const id = escapeHtml(item.id);
@@ -364,6 +583,7 @@
       </summary>
       <div class="inbox-detail">
         ${controls}
+        ${renderAiPanel(item, state.ai.suggestions[aiSuggestionKey(item.source, item.id)])}
         <div class="ops">
           ${renderInboxStatusButtons(item)}
           <button type="button" data-action="${homeAction}" data-id="${id}" data-show="${homeDisplay ? "0" : "1"}">${homeDisplay ? "取消主页展示" : "设为主页展示"}</button>
@@ -750,6 +970,98 @@
     });
   }
 
+  function findInboxItem(source, id) {
+    return state.inbox.items.find((item) => item.source === source && Number(item.id) === Number(id)) || null;
+  }
+
+  function findAiSuggestionById(id) {
+    return Object.values(state.ai.suggestions).find((item) => Number(item && item.id) === Number(id)) || null;
+  }
+
+  async function generateAiSuggestion(item, panel, button) {
+    if (!item || !panel) return;
+    const key = aiSuggestionKey(item.source, item.id);
+    await withButtonBusy(button, "生成中...", async () => {
+      panel.outerHTML = renderAiPanel(item, null, { loading: true });
+      const loadingPanel = Array.from(inboxList.querySelectorAll(".ai-suggestion-panel"))
+        .find((candidate) => candidate.dataset.aiKey === key);
+      try {
+        const data = await api("/api/admin/ai/suggest", {
+          entityType: item.source,
+          entityId: Number(item.id)
+        });
+        const suggestion = aiModel.normalizeSuggestion(data);
+        state.ai.suggestions[key] = suggestion;
+        if (loadingPanel) loadingPanel.outerHTML = renderAiPanel(item, suggestion);
+      } catch (error) {
+        if (loadingPanel) loadingPanel.outerHTML = renderAiPanel(item, null, { error: error.message });
+        throw error;
+      }
+    });
+  }
+
+  async function loadStoredAiSuggestion(item, panel) {
+    if (!item || !panel || panel.dataset.aiLoaded === "1") return;
+    panel.dataset.aiLoaded = "1";
+    const key = aiSuggestionKey(item.source, item.id);
+    if (state.ai.suggestions[key]) return;
+    try {
+      const data = await api(`/api/admin/ai/suggestions?entityType=${encodeURIComponent(item.source)}&entityId=${encodeURIComponent(item.id)}`, null, { method: "GET" });
+      const suggestions = Array.isArray(data) ? data : [];
+      if (!suggestions.length) return;
+      const suggestion = aiModel.normalizeSuggestion(suggestions[0]);
+      state.ai.suggestions[key] = suggestion;
+      if (panel.isConnected) panel.outerHTML = renderAiPanel(item, suggestion);
+    } catch (_) {
+      // Loading a previous candidate is best-effort; generation remains available.
+    }
+  }
+
+  async function decideAiSuggestion(button) {
+    const suggestion = findAiSuggestionById(button.dataset.suggestionId);
+    if (!suggestion) return;
+    const fields = button.dataset.fields
+      .split(",")
+      .map((field) => field.trim())
+      .filter((field) => aiModel.isDecisionField(field));
+    if (!fields.length) return;
+    await withButtonBusy(button, "保存中...", async () => {
+      const data = await api("/api/admin/ai/suggestions/decision", {
+        suggestionId: Number(suggestion.id),
+        decision: button.dataset.decision,
+        fields
+      });
+      suggestion.status = data.status || button.dataset.decision;
+      const item = findInboxItem(suggestion.entityType, suggestion.entityId);
+      const panel = button.closest(".ai-suggestion-panel");
+      if (item && panel) panel.outerHTML = renderAiPanel(item, suggestion);
+      notify(inboxMsg, "ok", button.dataset.decision === "accepted" ? "AI 建议已标记接受（业务内容仍需手动保存）" : "AI 建议已标记拒绝");
+    });
+  }
+
+  async function copyAiSuggestion(button) {
+    const value = button.dataset.copyValue || "";
+    if (!value) return;
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      notify(inboxMsg, "error", "当前浏览器不支持复制，请手动选择文本");
+      return;
+    }
+    await navigator.clipboard.writeText(value);
+    notify(inboxMsg, "ok", "建议内容已复制");
+  }
+
+  function fillAiReply(button) {
+    const suggestion = findAiSuggestionById(button.dataset.suggestionId);
+    if (!suggestion) return;
+    const item = findInboxItem(suggestion.entityType, suggestion.entityId);
+    if (!item) return;
+    const replyInput = document.getElementById(`inbox-reply-${aiSuggestionKey(item.source, item.id)}`);
+    if (!replyInput) return;
+    replyInput.value = suggestion.suggestion.replyDraft || "";
+    replyInput.focus();
+    notify(inboxMsg, "ok", "回复草稿已填入，请编辑后手动保存");
+  }
+
   function switchModule(module) {
     state.active = module;
     const isInbox = module === "inbox";
@@ -790,6 +1102,7 @@
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
+      await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (error) {
       showMessage(loginMsg, "error", error.message);
@@ -803,6 +1116,7 @@
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
+      await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (_) {
       loginCard.classList.remove("hidden");
@@ -832,6 +1146,14 @@
       clearMessage(smtpTestMsg);
       clearMessage(webhookTestMsg);
       clearMessage(statusSettingsMsg);
+      clearMessage(aiStatusMsg);
+      state.ai.enabled = false;
+      state.ai.available = false;
+      state.ai.reason = "";
+      state.ai.activeProfile = null;
+      state.ai.profiles = [];
+      state.ai.suggestions = {};
+      resetAiProfileForm();
       document.getElementById("smtpTestTo").value = "";
       document.getElementById("webhookTestContent").value = "";
       loginCard.classList.remove("hidden");
@@ -882,6 +1204,35 @@
       await saveMinecraftStatusSettings();
     } catch (error) {
       notify(statusSettingsMsg, "error", error.message);
+    }
+  });
+
+  document.getElementById("aiProfileSaveBtn").addEventListener("click", async () => {
+    try {
+      await saveAiProfile();
+    } catch (error) {
+      notify(aiStatusMsg, "error", error.message);
+    }
+  });
+
+  document.getElementById("aiProfileResetBtn").addEventListener("click", () => {
+    resetAiProfileForm();
+    clearMessage(aiStatusMsg);
+  });
+
+  aiProfilesList.addEventListener("click", async (event) => {
+    const btn = event.target.closest("button[data-action]");
+    if (!btn) return;
+    try {
+      if (btn.dataset.action === "ai-edit-profile") {
+        editAiProfile(btn.dataset.id);
+      } else if (btn.dataset.action === "ai-activate-profile") {
+        await activateAiProfile(btn.dataset.id);
+      } else if (btn.dataset.action === "ai-delete-profile") {
+        await deleteAiProfile(btn.dataset.id);
+      }
+    } catch (error) {
+      notify(aiStatusMsg, "error", error.message);
     }
   });
 
@@ -970,6 +1321,26 @@
   inboxList.addEventListener("click", async (event) => {
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
+
+    if (["ai-suggest", "ai-decision", "ai-copy", "ai-fill-reply"].includes(btn.dataset.action)) {
+      try {
+        if (btn.dataset.action === "ai-suggest") {
+          const item = findInboxItem(btn.dataset.source, btn.dataset.id);
+          const panel = btn.closest(".ai-suggestion-panel");
+          await generateAiSuggestion(item, panel, btn);
+        } else if (btn.dataset.action === "ai-decision") {
+          await decideAiSuggestion(btn);
+        } else if (btn.dataset.action === "ai-copy") {
+          await copyAiSuggestion(btn);
+        } else {
+          fillAiReply(btn);
+        }
+      } catch (error) {
+        notify(inboxMsg, "error", error.message);
+      }
+      return;
+    }
+
     const itemElement = btn.closest(".inbox-item");
     const id = Number(btn.dataset.id);
     const source = itemElement ? itemElement.dataset.source : "";
@@ -1074,6 +1445,16 @@
       notify(inboxMsg, "error", error.message);
     }
   });
+
+  inboxList.addEventListener("toggle", (event) => {
+    const details = event.target;
+    if (!details || details.tagName !== "DETAILS" || !details.open) return;
+    const item = findInboxItem(details.dataset.source, details.dataset.id);
+    const panel = details.querySelector(".ai-suggestion-panel");
+    if (item && panel) {
+      loadStoredAiSuggestion(item, panel);
+    }
+  }, true);
 
   document.getElementById("feedbackList").addEventListener("click", async (event) => {
     const btn = event.target.closest("button[data-action]");

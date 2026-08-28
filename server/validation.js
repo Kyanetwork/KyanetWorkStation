@@ -4,6 +4,9 @@ const ALLOWED_STATUS = new Set(["new", "reviewed", "resolved", "notplanned"]);
 const ALLOWED_WORKTASK_TYPES = new Set(["WorkTask提交", "工单提交", "任务安排", "协作请求", "其他"]);
 const ALLOWED_WORKTASK_STATUS = new Set(["new", "scheduled", "in_progress", "completed", "cancelled"]);
 const ALLOWED_WORKTASK_PRIORITY = new Set(["low", "medium", "high", "urgent"]);
+const ALLOWED_AI_PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
+const ALLOWED_AI_SUGGESTION_FIELDS = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
+const AI_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SIMPLE_URL_PATTERN = /^https?:\/\/.+/i;
 
@@ -481,6 +484,162 @@ function validateMinecraftStatusSettingsPayload(payload) {
   };
 }
 
+function normalizeAiBaseUrl(value) {
+  const raw = normalizeString(value);
+  if (!raw || raw.length > 300 || !SIMPLE_URL_PATTERN.test(raw)) {
+    return { valid: false, message: "baseUrl 必须是有效的 http/https 地址" };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    return { valid: false, message: "baseUrl 必须是有效的 http/https 地址" };
+  }
+  if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) {
+    return { valid: false, message: "baseUrl 必须使用 http 或 https 协议" };
+  }
+  if (parsed.username || parsed.password) {
+    return { valid: false, message: "baseUrl 不得包含账号或密码" };
+  }
+  if (parsed.search || parsed.hash) {
+    return { valid: false, message: "baseUrl 不得包含 query 或 fragment" };
+  }
+
+  const normalized = `${parsed.protocol}//${parsed.host}${parsed.pathname}`.replace(/\/+$/, "");
+  return { valid: true, value: normalized || `${parsed.protocol}//${parsed.host}` };
+}
+
+function validateAiProfilePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const hasId = hasOwn(body, "id") && body.id !== undefined && body.id !== null && body.id !== "";
+  if (hasId && typeof body.id !== "string") {
+    return { valid: false, message: "profile id 不合法" };
+  }
+  const id = normalizeString(body.id);
+  const name = normalizeString(body.name);
+  const protocol = normalizeString(body.protocol);
+  const model = normalizeString(body.model);
+  const keyProvided = hasOwn(body, "key");
+  const key = keyProvided && typeof body.key === "string" ? body.key.trim() : "";
+
+  if (id && !AI_PROFILE_ID_PATTERN.test(id)) {
+    return { valid: false, message: "profile id 不合法" };
+  }
+  if (!name || name.length > 64) {
+    return { valid: false, message: "name 长度必须在 1-64 之间" };
+  }
+  if (!ALLOWED_AI_PROTOCOLS.has(protocol)) {
+    return { valid: false, message: "protocol 不是受支持的 AI 协议" };
+  }
+  const baseUrl = normalizeAiBaseUrl(body.baseUrl);
+  if (!baseUrl.valid) {
+    return baseUrl;
+  }
+  if (!model || model.length > 120) {
+    return { valid: false, message: "model 长度必须在 1-120 之间" };
+  }
+  if (keyProvided && typeof body.key !== "string") {
+    return { valid: false, message: "key 必须是字符串" };
+  }
+  if (key.length > 512) {
+    return { valid: false, message: "key 长度不能超过 512" };
+  }
+  if (!id && !key) {
+    return { valid: false, message: "新 profile 必须提供 key" };
+  }
+
+  return {
+    valid: true,
+    data: {
+      id,
+      name,
+      protocol,
+      baseUrl: baseUrl.value,
+      model,
+      key
+    }
+  };
+}
+
+function normalizeAiProfileIdPayload(payload, fieldName, message) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const raw = hasOwn(body, fieldName) ? body[fieldName] : "";
+  if (raw !== undefined && raw !== null && raw !== "" && typeof raw !== "string") {
+    return { valid: false, message: message || "profile id 不合法" };
+  }
+  const value = normalizeString(raw);
+  if (!value) {
+    return { valid: true, data: { profileId: "" } };
+  }
+  if (!AI_PROFILE_ID_PATTERN.test(value)) {
+    return { valid: false, message: message || "profile id 不合法" };
+  }
+  return { valid: true, data: { profileId: value } };
+}
+
+function validateAiProfileActivePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const fieldName = hasOwn(body, "profileId") ? "profileId" : hasOwn(body, "activeProfileId") ? "activeProfileId" : "id";
+  return normalizeAiProfileIdPayload(body, fieldName, "active profile id 不合法");
+}
+
+function validateAiProfileDeletePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const fieldName = hasOwn(body, "profileId") ? "profileId" : "id";
+  const result = normalizeAiProfileIdPayload(body, fieldName, "profile id 不合法");
+  if (result.valid && !result.data.profileId) {
+    return { valid: false, message: "profile id 不合法" };
+  }
+  return result;
+}
+
+function validateAiEntityPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const entityType = normalizeString(body.entityType);
+  const rawId = body.entityId;
+  const entityId = typeof rawId === "number" ? rawId : Number(rawId);
+  if (!["feedback", "worktask"].includes(entityType)) {
+    return { valid: false, message: "entityType 不合法" };
+  }
+  if (!Number.isSafeInteger(entityId) || entityId <= 0) {
+    return { valid: false, message: "entityId 不合法" };
+  }
+  return { valid: true, data: { entityType, entityId } };
+}
+
+function validateAiSuggestPayload(payload) {
+  return validateAiEntityPayload(payload);
+}
+
+function validateAiSuggestionsQueryPayload(payload) {
+  return validateAiEntityPayload(payload);
+}
+
+function validateAiSuggestionDecisionPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const rawId = body.suggestionId;
+  const suggestionId = typeof rawId === "number" ? rawId : Number(rawId);
+  const decision = normalizeString(body.decision);
+  const fields = body.fields === undefined ? [] : body.fields;
+  if (!Number.isSafeInteger(suggestionId) || suggestionId <= 0) {
+    return { valid: false, message: "suggestionId 不合法" };
+  }
+  if (!["accepted", "rejected"].includes(decision)) {
+    return { valid: false, message: "decision 不合法" };
+  }
+  if (!Array.isArray(fields) || fields.length > ALLOWED_AI_SUGGESTION_FIELDS.size) {
+    return { valid: false, message: "fields 不合法" };
+  }
+  const normalizedFields = [];
+  for (const field of fields) {
+    if (typeof field === "string" && ALLOWED_AI_SUGGESTION_FIELDS.has(field) && !normalizedFields.includes(field)) {
+      normalizedFields.push(field);
+    }
+  }
+  return { valid: true, data: { suggestionId, decision, fields: normalizedFields } };
+}
+
 module.exports = {
   ALLOWED_STATUS,
   ALLOWED_TYPES,
@@ -503,5 +662,13 @@ module.exports = {
   validateSmtpTestPayload,
   validateWebhookTestPayload,
   validateStatusProfileSettingsPayload,
-  validateMinecraftStatusSettingsPayload
+  validateMinecraftStatusSettingsPayload,
+  ALLOWED_AI_PROTOCOLS,
+  ALLOWED_AI_SUGGESTION_FIELDS,
+  validateAiProfilePayload,
+  validateAiProfileActivePayload,
+  validateAiProfileDeletePayload,
+  validateAiSuggestPayload,
+  validateAiSuggestionsQueryPayload,
+  validateAiSuggestionDecisionPayload
 };

@@ -48,6 +48,17 @@ const {
 } = require("./db");
 const { fetchMeowStatusDashboard } = require("./meowstatus");
 const {
+  saveProfile,
+  setActiveProfile,
+  deleteProfile,
+  getAiProfileStatus
+} = require("./ai-profiles");
+const {
+  generateSuggestion,
+  listSuggestions,
+  recordSuggestionDecision
+} = require("./ai-copilot");
+const {
   createNotificationHandoff,
   listNotificationHandoffs,
   retryNotificationHandoff,
@@ -78,7 +89,13 @@ const {
   validateSmtpTestPayload,
   validateWebhookTestPayload,
   validateStatusProfileSettingsPayload,
-  validateMinecraftStatusSettingsPayload
+  validateMinecraftStatusSettingsPayload,
+  validateAiProfilePayload,
+  validateAiProfileActivePayload,
+  validateAiProfileDeletePayload,
+  validateAiSuggestPayload,
+  validateAiSuggestionsQueryPayload,
+  validateAiSuggestionDecisionPayload
 } = require("./validation");
 const {
   createRequireSameOriginForAdminMutation,
@@ -152,6 +169,20 @@ const adminLimiter = rateLimit({
   }
 });
 
+const aiLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: {
+      code: "AI_RATE_LIMITED",
+      message: "AI 建议请求过于频繁，请稍后再试"
+    }
+  }
+});
+
 function asyncHandler(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
@@ -163,6 +194,39 @@ function configuredNotificationProviders() {
   if (config.smtp.enabled) providers.push("smtp");
   if (config.webhook.enabled) providers.push("webhook");
   return providers;
+}
+
+function sendAiProfileError(res, error) {
+  const code = error && error.code;
+  if (code === "AI_KEY_UNAVAILABLE") {
+    return sendError(res, 503, code, "AI profile 密钥不可用，请检查部署密钥配置");
+  }
+  if (code === "AI_PROFILE_CONFLICT") {
+    return sendError(res, 409, code, "AI profile 名称或数量冲突");
+  }
+  if (code === "NOT_FOUND") {
+    return sendError(res, 404, code, "AI profile 不存在");
+  }
+  if (code === "INVALID_PAYLOAD") {
+    return sendError(res, 400, code, "AI profile 配置不合法");
+  }
+  throw error;
+}
+
+function sendAiError(res, error) {
+  const code = error && error.code;
+  if (code === "INVALID_PAYLOAD") return sendError(res, 400, code, "AI 建议请求不合法");
+  if (code === "NOT_FOUND") return sendError(res, 404, code, "业务记录或 AI 建议不存在");
+  if (code === "AI_UNAVAILABLE" || code === "AI_KEY_UNAVAILABLE") {
+    return sendError(res, 503, code, "AI Copilot 当前不可用，请检查开关、active profile 和部署密钥");
+  }
+  if (code === "AI_BUSY") return sendError(res, 429, code, "AI 建议请求正在处理，请稍后再试");
+  if (code === "AI_TIMEOUT") return sendError(res, 504, code, "AI provider 请求超时，请稍后重试");
+  if (code === "AI_PROVIDER_FAILED" || code === "AI_INVALID_RESPONSE") {
+    return sendError(res, 502, code, "AI provider 暂时无法提供有效建议");
+  }
+  if (code === "AI_SUGGESTION_CONFLICT") return sendError(res, 409, code, "AI 建议已过期或已经处理");
+  throw error;
 }
 
 async function queueNotifications(entityType, entityId) {
@@ -442,6 +506,105 @@ app.post("/api/admin/logout", requireAdminSession, asyncHandler(async (req, res)
   await destroySessionByCookieToken(req.adminToken);
   clearSessionCookie(res);
   res.json({ ok: true });
+}));
+
+app.get("/api/admin/ai/status", requireAdminSession, asyncHandler(async (req, res) => {
+  const data = await getAiProfileStatus();
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/ai/profiles", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiProfilePayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await saveProfile(validation.data);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiProfileError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/profiles/active", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiProfileActivePayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await setActiveProfile(validation.data.profileId);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiProfileError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/profiles/delete", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiProfileDeletePayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await deleteProfile(validation.data.profileId);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiProfileError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/suggest", requireAdminSession, aiLimiter, asyncHandler(async (req, res) => {
+  const validation = validateAiSuggestPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const requestAbortController = new AbortController();
+  const abortOnClose = () => requestAbortController.abort();
+  req.once("close", abortOnClose);
+  try {
+    const data = await generateSuggestion({
+      ...validation.data,
+      requestId: req.requestId,
+      actor: req.adminUser.username,
+      signal: requestAbortController.signal
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  } finally {
+    req.removeListener("close", abortOnClose);
+  }
+}));
+
+app.get("/api/admin/ai/suggestions", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiSuggestionsQueryPayload({
+    entityType: req.query && req.query.entityType,
+    entityId: req.query && req.query.entityId
+  });
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await listSuggestions(validation.data);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/suggestions/decision", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiSuggestionDecisionPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await recordSuggestionDecision({
+      ...validation.data,
+      actor: req.adminUser.username
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  }
 }));
 
 app.get("/api/admin/status/settings", requireAdminSession, asyncHandler(async (req, res) => {

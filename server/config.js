@@ -225,6 +225,11 @@ const config = {
   accessLogEnabled: parseBoolOrDefault(process.env.ACCESS_LOG_ENABLED, true),
   accessLogSkipHealth: parseBoolOrDefault(process.env.ACCESS_LOG_SKIP_HEALTH, true),
   accessLogSlowMs: parseIntOrDefault(process.env.ACCESS_LOG_SLOW_MS, 800),
+  ai: {
+    enabled: parseBoolOrDefault(process.env.AI_COPILOT_ENABLED, false),
+    profileEncryptionKey: process.env.AI_PROFILE_ENCRYPTION_KEY || "",
+    profileEncryptionKeyValid: /^[a-f0-9]{64}$/iu.test(process.env.AI_PROFILE_ENCRYPTION_KEY || "")
+  },
   dbPath: path.resolve(ROOT_DIR, process.env.DB_PATH || "./data/workstation.db"),
   cookieName: process.env.SESSION_COOKIE_NAME || "kws_sid",
   sessionTtlHours: parseIntOrDefault(process.env.SESSION_TTL_HOURS, 168),

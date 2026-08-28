@@ -8,6 +8,12 @@ const client = (config.dbClient || "sqlite").toLowerCase();
 
 const STATUS_PROFILE_SETTING_KEY = "status.profile";
 const MINECRAFT_STATUS_SETTING_KEY = "status.minecraft";
+const AI_PROVIDER_PROFILES_SETTING_KEY = "ai_provider_profiles";
+const DEFAULT_AI_PROVIDER_PROFILES = {
+  version: 1,
+  activeProfileId: "",
+  profiles: []
+};
 const DEFAULT_STATUS_PROFILE = {
   enabled: false,
   apiBaseUrl: config.meowStatusBaseUrl,
@@ -254,7 +260,24 @@ function sqliteSchemaStatements() {
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS ai_copilot_suggestion (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      profile_id TEXT NOT NULL,
+      protocol TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available',
+      result_json TEXT NOT NULL,
+      accepted_fields TEXT NOT NULL DEFAULT '[]',
+      decided_by TEXT NOT NULL DEFAULT '',
+      decided_at TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)"
   ];
 }
 
@@ -359,6 +382,23 @@ function mysqlSchemaStatements() {
       setting_key VARCHAR(128) PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at VARCHAR(40) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS ai_copilot_suggestion (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      entity_type VARCHAR(32) NOT NULL,
+      entity_id BIGINT NOT NULL,
+      profile_id VARCHAR(128) NOT NULL,
+      protocol VARCHAR(64) NOT NULL,
+      model VARCHAR(120) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'available',
+      result_json TEXT NOT NULL,
+      accepted_fields TEXT NOT NULL,
+      decided_by VARCHAR(128) NOT NULL DEFAULT '',
+      decided_at VARCHAR(40) NULL,
+      created_at VARCHAR(40) NOT NULL,
+      expires_at VARCHAR(40) NOT NULL,
+      INDEX idx_ai_suggestion_entity_created (entity_type, entity_id, created_at),
+      INDEX idx_ai_suggestion_expires_at (expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   ];
 }
@@ -461,7 +501,24 @@ function postgresSchemaStatements() {
       setting_key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS ai_copilot_suggestion (
+      id BIGSERIAL PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id BIGINT NOT NULL,
+      profile_id TEXT NOT NULL,
+      protocol TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available',
+      result_json TEXT NOT NULL,
+      accepted_fields TEXT NOT NULL DEFAULT '[]',
+      decided_by TEXT NOT NULL DEFAULT '',
+      decided_at TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)"
   ];
 }
 
@@ -478,6 +535,7 @@ async function initializeDatabase() {
   await ensureSubmissionAccountColumns();
   await ensureAccountSessionSchema();
   await ensureStatusSettings();
+  await ensureAiProviderProfilesSetting();
 }
 
 async function columnExists(tableName, columnName) {
@@ -801,6 +859,167 @@ async function setSettingJson(key, value) {
   return value;
 }
 
+async function getAiProviderProfiles() {
+  const value = await getSettingJson(AI_PROVIDER_PROFILES_SETTING_KEY, DEFAULT_AI_PROVIDER_PROFILES);
+  const profiles = Array.isArray(value.profiles) ? value.profiles : [];
+  return {
+    version: value.version === 1 ? 1 : DEFAULT_AI_PROVIDER_PROFILES.version,
+    activeProfileId: typeof value.activeProfileId === "string" ? value.activeProfileId : "",
+    profiles
+  };
+}
+
+async function setAiProviderProfiles(value) {
+  const next = value && typeof value === "object" ? value : DEFAULT_AI_PROVIDER_PROFILES;
+  return setSettingJson(AI_PROVIDER_PROFILES_SETTING_KEY, {
+    version: next.version === 1 ? 1 : DEFAULT_AI_PROVIDER_PROFILES.version,
+    activeProfileId: typeof next.activeProfileId === "string" ? next.activeProfileId : "",
+    profiles: Array.isArray(next.profiles) ? next.profiles : []
+  });
+}
+
+function mapAiSuggestionRow(row) {
+  let resultJson = {};
+  let acceptedFields = [];
+  try {
+    const parsed = JSON.parse(row.result_json || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      resultJson = parsed;
+    }
+  } catch (_) {
+    resultJson = {};
+  }
+  try {
+    const parsed = JSON.parse(row.accepted_fields || "[]");
+    if (Array.isArray(parsed)) {
+      acceptedFields = parsed.filter((field) => typeof field === "string");
+    }
+  } catch (_) {
+    acceptedFields = [];
+  }
+  return {
+    id: toNumber(row.id),
+    entityType: row.entity_type,
+    entityId: toNumber(row.entity_id),
+    profileId: row.profile_id,
+    protocol: row.protocol,
+    model: row.model,
+    status: row.status,
+    resultJson,
+    acceptedFields,
+    decidedBy: row.decided_by || "",
+    decidedAt: row.decided_at || "",
+    createdAt: row.created_at,
+    expiresAt: row.expires_at
+  };
+}
+
+function encodeAiSuggestionResult(input) {
+  const candidate = input && Object.prototype.hasOwnProperty.call(input, "resultJson")
+    ? input.resultJson
+    : input && input.result;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return "{}";
+  }
+  const encoded = JSON.stringify(candidate);
+  if (Buffer.byteLength(encoded, "utf8") > 32 * 1024) {
+    throw new Error("AI suggestion result is too large");
+  }
+  return encoded;
+}
+
+async function createAiSuggestion(input = {}) {
+  const resultJson = encodeAiSuggestionResult(input);
+  const acceptedFields = Array.isArray(input.acceptedFields)
+    ? JSON.stringify(input.acceptedFields.filter((field) => typeof field === "string").slice(0, 5))
+    : "[]";
+  const createdAt = typeof input.createdAt === "string" && input.createdAt ? input.createdAt : nowIso();
+  const expiresAt = typeof input.expiresAt === "string" && input.expiresAt ? input.expiresAt : createdAt;
+  const params = [
+    String(input.entityType || "").slice(0, 32),
+    toNumber(input.entityId),
+    String(input.profileId || "").slice(0, 128),
+    String(input.protocol || "").slice(0, 64),
+    String(input.model || "").slice(0, 120),
+    String(input.status || "available").slice(0, 32),
+    resultJson,
+    acceptedFields,
+    String(input.decidedBy || "").slice(0, 128),
+    input.decidedAt ? String(input.decidedAt).slice(0, 40) : null,
+    createdAt,
+    expiresAt
+  ];
+  const marks = params.map((_, index) => placeholder(index + 1));
+  const columns = "entity_type, entity_id, profile_id, protocol, model, status, result_json, accepted_fields, decided_by, decided_at, created_at, expires_at";
+  const values = marks.join(", ");
+  const sql = client === "postgres"
+    ? `INSERT INTO ai_copilot_suggestion (${columns}) VALUES (${values}) RETURNING id`
+    : `INSERT INTO ai_copilot_suggestion (${columns}) VALUES (${values})`;
+  const result = await execute(sql, params);
+  return result.lastInsertId;
+}
+
+async function getAiSuggestionById(id) {
+  const p1 = placeholder(1);
+  const row = await queryOne(
+    `SELECT id, entity_type, entity_id, profile_id, protocol, model, status, result_json, accepted_fields, decided_by, decided_at, created_at, expires_at
+     FROM ai_copilot_suggestion WHERE id = ${p1} LIMIT 1`,
+    [id]
+  );
+  return row ? mapAiSuggestionRow(row) : null;
+}
+
+async function listAiSuggestions({ entityType = "", entityId, now = nowIso() } = {}) {
+  const conditions = [`expires_at > ${placeholder(1)}`];
+  const params = [typeof now === "string" && now ? now : nowIso()];
+  let index = 2;
+  if (entityType) {
+    conditions.push(`entity_type = ${placeholder(index++)}`);
+    params.push(String(entityType).slice(0, 32));
+  }
+  if (entityId !== undefined && entityId !== null) {
+    conditions.push(`entity_id = ${placeholder(index++)}`);
+    params.push(toNumber(entityId));
+  }
+  const limitPlaceholder = placeholder(index++);
+  params.push(100);
+  const rows = await queryAll(
+    `SELECT id, entity_type, entity_id, profile_id, protocol, model, status, result_json, accepted_fields, decided_by, decided_at, created_at, expires_at
+     FROM ai_copilot_suggestion WHERE ${conditions.join(" AND ")}
+     ORDER BY created_at DESC, id DESC LIMIT ${limitPlaceholder}`,
+    params
+  );
+  return rows.map(mapAiSuggestionRow);
+}
+
+async function recordAiSuggestionDecision(id, decision, fields = [], actor = "") {
+  const normalizedDecision = decision === "accepted" || decision === "rejected" ? decision : "";
+  if (!normalizedDecision) return 0;
+  const allowedFields = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
+  const normalizedFields = Array.isArray(fields)
+    ? [...new Set(fields.filter((field) => allowedFields.has(field)))]
+    : [];
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const p3 = placeholder(3);
+  const p4 = placeholder(4);
+  const p5 = placeholder(5);
+  const p6 = placeholder(6);
+  const result = await execute(
+    `UPDATE ai_copilot_suggestion
+     SET status = ${p1}, accepted_fields = ${p2}, decided_by = ${p3}, decided_at = ${p4}
+     WHERE id = ${p5} AND status = 'available' AND expires_at > ${p6}`,
+    [normalizedDecision, JSON.stringify(normalizedFields), String(actor || "").slice(0, 128), nowIso(), id, nowIso()]
+  );
+  return result.changes;
+}
+
+async function deleteExpiredAiSuggestions(now = nowIso()) {
+  const p1 = placeholder(1);
+  const result = await execute(`DELETE FROM ai_copilot_suggestion WHERE expires_at <= ${p1}`, [now]);
+  return result.changes;
+}
+
 async function ensureSettingJson(key, defaults) {
   const p1 = placeholder(1);
   const row = await queryOne(`SELECT setting_key FROM workstation_setting WHERE setting_key = ${p1} LIMIT 1`, [key]);
@@ -814,6 +1033,10 @@ async function ensureStatusSettings() {
   const now = nowIso();
   await ensureSettingJson(STATUS_PROFILE_SETTING_KEY, defaultStatusProfile(now));
   await ensureSettingJson(MINECRAFT_STATUS_SETTING_KEY, defaultMinecraftStatus(now));
+}
+
+async function ensureAiProviderProfilesSetting() {
+  await ensureSettingJson(AI_PROVIDER_PROFILES_SETTING_KEY, DEFAULT_AI_PROVIDER_PROFILES);
 }
 
 async function getStatusSettings() {
@@ -1198,6 +1421,41 @@ async function getWorktaskById(id) {
     [id]
   );
   return row ? mapWorktaskRow(row) : null;
+}
+
+async function listAiSourceItems(limit = 100) {
+  const safeLimit = Math.max(1, Math.min(100, toNumber(limit) || 100));
+  const p1 = placeholder(1);
+  const feedbackRows = await queryAll(
+    `SELECT id, title, content, status, created_at
+     FROM feedback ORDER BY created_at DESC, id DESC LIMIT ${p1}`,
+    [safeLimit]
+  );
+  const worktaskRows = await queryAll(
+    `SELECT id, title, content, status, priority, created_at
+     FROM worktask ORDER BY created_at DESC, id DESC LIMIT ${p1}`,
+    [safeLimit]
+  );
+  return [...feedbackRows.map((row) => ({
+    entityType: "feedback",
+    entityId: toNumber(row.id),
+    title: row.title || "",
+    content: row.content || "",
+    status: row.status || "",
+    priority: "",
+    createdAt: row.created_at || ""
+  })), ...worktaskRows.map((row) => ({
+    entityType: "worktask",
+    entityId: toNumber(row.id),
+    title: row.title || "",
+    content: row.content || "",
+    status: row.status || "",
+    priority: row.priority || "",
+    createdAt: row.created_at || ""
+  }))]
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+    .slice(0, safeLimit)
+    .map(({ createdAt, ...item }) => item);
 }
 
 function mapNotificationDeliveryRow(row) {
@@ -1700,6 +1958,7 @@ module.exports = {
   getAdminByUsername,
   getFeedbackById,
   getWorktaskById,
+  listAiSourceItems,
   upsertAdminUser,
   createSessionRecord,
   deleteSessionByTokenHash,
@@ -1728,6 +1987,13 @@ module.exports = {
   getStatusSettings,
   updateStatusProfileSettings,
   updateMinecraftStatusSettings,
+  getAiProviderProfiles,
+  setAiProviderProfiles,
+  createAiSuggestion,
+  getAiSuggestionById,
+  listAiSuggestions,
+  recordAiSuggestionDecision,
+  deleteExpiredAiSuggestions,
   enqueueNotificationDelivery,
   enqueueNotificationDeliveries,
   listDueNotificationDeliveries,

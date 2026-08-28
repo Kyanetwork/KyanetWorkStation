@@ -147,3 +147,37 @@ test("log config custom values are parsed", () => {
   assert.equal(config.accessLogSkipHealth, false);
   assert.equal(config.accessLogSlowMs, 1500);
 });
+
+test("AI Copilot is disabled by default and does not expose a valid key", () => {
+  const config = loadConfigWithEnv({
+    AI_COPILOT_ENABLED: undefined,
+    AI_PROFILE_ENCRYPTION_KEY: undefined
+  });
+
+  assert.equal(config.ai.enabled, false);
+  assert.equal(config.ai.profileEncryptionKeyValid, false);
+});
+
+test("AI Copilot recognizes a 64-character hexadecimal encryption key", () => {
+  const config = loadConfigWithEnv({
+    AI_COPILOT_ENABLED: "true",
+    AI_PROFILE_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  });
+
+  assert.equal(config.ai.enabled, true);
+  assert.equal(config.ai.profileEncryptionKeyValid, true);
+  assert.equal(config.ai.profileEncryptionKey.length, 64);
+});
+
+test("invalid AI encryption key never appears in runtime validation errors", () => {
+  const secret = "not-a-provider-secret";
+  const config = loadConfigWithEnv({
+    AI_COPILOT_ENABLED: "true",
+    AI_PROFILE_ENCRYPTION_KEY: secret,
+    DB_CLIENT: "sqlite",
+    DB_PATH: "./data/test.db"
+  });
+
+  const result = config.validateRuntimeConfig(config);
+  assert.equal(result.errors.some((message) => message.includes(secret)), false);
+});
