@@ -10,6 +10,22 @@
 
 日志级别由 `LOG_LEVEL` 控制，可通过 `LOG_TO_FILE=true` 写入 `LOG_DIR/app.log`。生产环境应由 PM2、Nginx 或系统日志服务负责轮转和权限隔离；不要让日志无限增长。
 
+### PM2 进程观测
+
+当生产选择 PM2 时，应用进程应保持单实例 fork 模式，并由
+`ecosystem.config.cjs` 的 `autorestart=true` 和 `max_memory_restart` 提供基础恢复。
+发布后至少保留以下脱敏结果：
+
+```bash
+pm2 status
+pm2 show kyanet-workstation
+pm2 save
+```
+
+服务器重启后的验收还需再次检查 `pm2 status`、应用 PID/Node 路径和
+`GET /api/health`。`pm2 startup` 生成的是 PM2 守护进程的开机恢复服务；不要同时启用
+项目级 systemd unit，否则两个进程管理器可能竞争同一端口。
+
 ## 健康检查
 
 `GET /api/health` 返回服务名和时间；`HEALTH_EXPOSE_COUNTS=true` 时还返回业务计数，不建议公开启用。health 通过不代表外部 MeowStatus、SMTP、Webhook 或备份可用，发布门禁需要分别检查。

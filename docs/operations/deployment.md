@@ -7,6 +7,14 @@
 - `.env`、数据库、备份、日志和真实域名配置只存在于部署环境。
 - 生产部署前必须完成[发布门禁](../testing/release-checklist.md)。
 
+## 当前进程管理选择
+
+本次云服务器发布选择 PM2 管理单实例，暂不启用项目级
+`kyanet-workstation.service`。PM2 的 `autorestart` 会在应用异常退出时重新拉起进程，
+`max_memory_restart` 会在超过内存阈值时重启；`pm2 startup` 只负责让 PM2 守护进程在
+系统启动后恢复保存的进程列表。它生成的 systemd 启动项不等于启用本项目的 systemd
+unit。两种管理器不能同时绑定 3000 端口。
+
 ## 发布同步与文件边界
 
 生产环境推荐使用 Git 同步已审核的提交；前提是该提交已经推送到远端，且服务器
@@ -46,19 +54,46 @@ node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqli
 ## Linux：Nginx + PM2
 
 ```bash
-sudo mkdir -p /var/www/kyanet-workstation
-sudo chown -R "$USER:$USER" /var/www/kyanet-workstation
-# 将已审核的项目文件同步到 /var/www/kyanet-workstation
-cd /var/www/kyanet-workstation
-cp .env.example .env
+APP_DIR=/var/www/kyanet-workstation  # 按实际服务器目录替换
+sudo mkdir -p "$APP_DIR"
+sudo chown -R "$USER:$USER" "$APP_DIR"
+# 将已审核的项目文件同步到 "$APP_DIR"
+cd "$APP_DIR"
+# 仅首次部署创建配置；已有生产 .env 必须保留
+[ -f .env ] || cp .env.example .env
 # npm 12：仅 package.json 中 allowScripts 声明的 better-sqlite3 会运行安装脚本
 npm ci --omit=dev --foreground-scripts
 npm run init-admin
 npm install -g pm2
-pm2 start ecosystem.config.cjs
-pm2 save
 pm2 startup
+# 执行上一步打印出的 sudo ... pm2 startup ... 命令（只需首次执行）
+pm2 start ecosystem.config.cjs --only kyanet-workstation --update-env
+pm2 save
+pm2 status
+pm2 show kyanet-workstation
 ```
+
+`ecosystem.config.cjs` 使用 `__dirname` 解析应用目录，因此不依赖固定服务器路径。若
+3000 已被手动启动的 Node 进程占用，先确认其 PID、启动方式和
+日志，再在维护窗口优雅停止旧进程，确认端口释放后再执行 `pm2 start`，不要直接强制
+杀掉未知进程。
+
+更新代码或 Node 后：
+
+```bash
+cd "$APP_DIR"
+npm ci --omit=dev --foreground-scripts
+node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqlite3 ok')"
+pm2 restart kyanet-workstation --update-env
+pm2 save
+pm2 status
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+在维护窗口可用 `pm2 logs kyanet-workstation --lines 50` 查看最近日志。要验证开机恢复，
+先确认 `pm2 save` 已完成，再重启服务器；重新登录后检查 `pm2 status`、`pm2 show
+kyanet-workstation` 和 health。不要把 `pm2 startup` 生成的 PM2 unit 与下方项目级
+systemd unit 同时启用。
 
 复制 `deploy/nginx.kyanet-workstation.conf`，替换示例域名和证书路径后运行 `sudo nginx -t`，再 reload。不要直接使用模板中的示例域名申请证书。
 

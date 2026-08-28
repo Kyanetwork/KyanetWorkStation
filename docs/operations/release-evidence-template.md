@@ -38,6 +38,10 @@
 | SMTP/Webhook/MeowStatus 开关 | `<KEY=enabled/disabled>`，密钥未记录 |
 | 日志与备份目录权限 | `<PERMISSION_EVIDENCE>` |
 
+进程管理器：`<pm2|systemd|other>`；若使用 PM2，记录 `pm2 status`、`pm2 show`、
+`pm2 save` 和开机恢复检查；若使用 systemd，记录 unit 名称与 `systemctl status`。
+同一端口只能由一个进程管理器托管。
+
 确认应用直连只在预期监听地址可达；若代理边界或跳数尚未确认，责任人、前置条件
 和阻塞原因必须写在“阻塞项”中，不能用请求头 stub 代替。
 

@@ -82,3 +82,72 @@ prebuild is unavailable. Do not replace the allow-list with a global
 
 Reference files: `package.json`, `server/app.js`, `server/db.js`,
 `server/validation.js`, `server/security.js`, and `tests/*.test.js`.
+
+## Production process management contract
+
+### 1. Scope / Trigger
+
+适用于 Node.js 应用在 Linux 反向代理后的长期运行、Node 版本升级和发布重启；它约束
+PM2/systemd 的选择，不改变应用代码的 Express/SQLite 架构。
+
+### 2. Signatures
+
+- PM2: `pm2 start ecosystem.config.cjs --only kyanet-workstation --update-env`、
+  `pm2 save`、`pm2 startup`、`pm2 restart kyanet-workstation --update-env`
+- PM2 evidence: `pm2 status`、`pm2 show kyanet-workstation`、
+  `curl -fsS http://127.0.0.1:3000/api/health`
+- systemd alternative: `systemctl enable --now kyanet-workstation` and
+  `systemctl status kyanet-workstation --no-pager`
+
+### 3. Contracts
+
+- 同一个监听端口只能由一个进程管理器托管；PM2 与项目级 systemd unit 不得同时启用。
+- `ecosystem.config.cjs` 使用 `cwd=__dirname`，保持部署目录可迁移；应用为单实例
+  `fork`，并启用 `autorestart=true` 与 `max_memory_restart`。
+- PM2 的 `autorestart` 处理进程退出/内存阈值；`pm2 startup` 只配置 PM2 守护进程的
+  开机恢复，必须在 `pm2 save` 后验证。
+- 生产 `.env`、数据库、备份、日志和 handoff journal 不得被 Git 同步或示例配置覆盖。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| PM2 `status/show` 为 online 且 health 200 | 可继续发布，记录 PID/Node 路径摘要 |
+| 3000 已被未知进程占用 | 暂停 PM2 启动，先确认 PID、所有者和回滚路径 |
+| `pm2 save` 未执行或 startup 用户不一致 | 不宣称开机恢复，补齐同一用户的 startup/save |
+| PM2 与项目级 systemd 同时配置 | 停止切换并只保留一个托管者，避免端口竞争 |
+| health 失败或监听非预期地址 | 停止发布，查看 PM2/应用日志并按上一版本回滚 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：从实际应用目录启动 PM2，`cwd=__dirname`，保存进程列表，重启服务器后
+  `pm2 status` 和 health 均恢复。
+- Base：仅在维护窗口执行 `pm2 restart`，确认依赖/ABI 和 health 后继续。
+- Bad：用固定示例 `cwd`、覆盖已有 `.env`、直接强杀未知进程，或让 PM2/systemd
+  同时绑定 3000。
+
+### 6. Tests Required
+
+- `node --check ecosystem.config.cjs`：配置语法和 `__dirname` 可加载。
+- 部署环境记录 `pm2 status/show/save`、Node/npm/ABI、监听地址和 health。
+- 服务器重启后再次断言 PM2 online、应用 PID/Node 路径和 health；失败不得以 Nginx
+  301 单独视为应用已恢复。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```bash
+cp .env.example .env
+pm2 start ecosystem.config.cjs
+sudo systemctl enable --now kyanet-workstation
+```
+
+#### Correct
+
+```bash
+[ -f .env ] || cp .env.example .env
+pm2 start ecosystem.config.cjs --only kyanet-workstation --update-env
+pm2 save
+pm2 startup
+```

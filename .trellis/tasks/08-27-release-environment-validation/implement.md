@@ -117,7 +117,11 @@
   关键表、隔离应用启动和临时目录清理证据；发布目标不同仍需重演 V-002。
 - [x] 使用 `.env` 中真实 SMTP/Feishu provider 完成成功消息；使用本地不可达
   Webhook 目标完成失败、3 次有限重试、重启恢复和管理员人工 retry 证据。
-- [ ] D-004 仍需实际反向代理/TLS 边界；本机回环或 header stub 不计入证据。
+- [x] 云服务器已提供 Node 24 依赖安装、`better-sqlite3` 加载、回环监听、宝塔 Nginx
+  配置检查、HTTP→HTTPS 跳转和 HTTPS health 结果；证据摘要写入被忽略的
+  `docs/internal/release-2026-08-27.md`。
+- [ ] D-004 仍需 PM2 托管/开机恢复、证书链与 Host/Proto 观察、公网 IP:3000 阻断及
+  直连伪造转发头结果；本机回环或 header stub 不计入证据。
 
 ## 回滚点与停止条件
 

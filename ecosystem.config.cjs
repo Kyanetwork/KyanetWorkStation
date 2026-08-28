@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "kyanet-workstation",
       script: "server/app.js",
-      cwd: "/var/www/kyanet-workstation",
+      cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
