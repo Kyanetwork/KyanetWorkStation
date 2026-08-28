@@ -10,7 +10,7 @@
 | D-002 | 已修复/历史路由移除 | 旧 Account 列表已从活动路由移除；历史 mapper 仅作迁移保留，不再作为活动响应 | `server/app.js:322-355`、`server/db.js:1422-1550` | 路由 404 与匿名 API 冒烟 |
 | D-003 | 已缓解 | 旧 Account 回调和会话入口已移除；未来新协议仍需 state/nonce | `server/app.js:322-355` | 路由缺失回归；未来新协议做 state 重放测试 |
 | D-004 | P0 未完成 | `TRUST_PROXY>0` 时仍直接采纳首个转发头；若应用端口被直连暴露，客户端可伪造 Host/Proto 参与同源判断 | `server/security.js:14-67` | 增加实际代理边界（受信地址/CIDR 或受控回环约束），并覆盖直连伪造、正确代理和直连正常来源 |
-| D-005 | 已修复 | Node 24 与 better-sqlite3 ABI 已匹配 | `package.json:18-24`、`package-lock.json` | ABI 137 加载、干净安装和 npm test |
+| D-005 | 已修复 | Node 24 下 `better-sqlite3 12.11.1` 在 Express JSON 管理员登录请求中触发原生环境清理断言；已升级到 13.0.3（N-API）并加入运行时回归 | `package.json:18-24`、`package-lock.json`、`tests/runtime-compatibility.test.js`、`tests/account-submission.test.js` | Node 24 干净安装、SQLite 加载、管理员登录和 `npm test` |
 | D-006 | 已修复 | Express/body-parser/qs/Nodemailer 已升级，canonical audit 为 0 | `package.json:25-31`、`package-lock.json` | `npm audit --omit=dev --registry=https://registry.npmjs.org` |
 | D-007 | 已修复/待实链路验证 | MeowStatus Dashboard 现在限制 JSON MIME/响应体/字段/挂件数量，favicon 仅接受有界 raster data URL；异常仍只影响状态卡片 | `server/meowstatus.js`、`public/index/main.js`、`tests/meowstatus.test.js` | 本地边界回归已覆盖；发布环境继续观察上游契约 |
 | D-008 | 已实现/待实链路验证 | 通知改为数据库 outbox、有限重试和管理员重试；真实 provider 仍需部署验证 | `server/app.js:161-255,508-524`、`server/db.js:1194-1333` | 持久化投递、失败状态和重启后重试测试 |
@@ -35,6 +35,6 @@
 | V-001 | 已解决 | 没有稳定的 health → 提交 → 登录 → 列表 API 冒烟 | `tests/account-submission.test.js` 已提供临时 DB/端口/子进程清理的可重复冒烟 |
 | V-002 | 本机已完成/发布目标待重演 | 已从 `.env` 指向的真实本机 SQLite 生成脱敏副本，在隔离路径完成 checksum、integrity/schema、关键表读取和应用启动冒烟；非本机发布目标仍需按模板重演 | 内部记录 `docs/internal/release-2026-08-27.md`；公开仓库仅保留工具和模板 |
 | V-003 | 本机已完成 | 已使用真实 `.env` provider 完成 SMTP 与 Feishu 成功测试，并用不可达隔离目标完成失败、有限重试、重启恢复和管理员人工重试；生产目标变更时需重新确认 | 内部记录 `docs/internal/release-2026-08-27.md`；不记录目标地址或凭据 |
-| V-004 | P1 | 没有真实浏览器 UI 回归 | P1 首页/收件箱实现时加入浏览器验收 |
+| V-004 | 已解决 | 缺少真实浏览器 UI 回归 | 本次 P1 已完成四页亮/暗主题、620px 窄屏、键盘焦点、登录/收件箱/筛选/展开/退出冒烟；管理员初始 401 为预期未登录探测 |
 | V-005 | P1 | MySQL/PostgreSQL 只有脚本参数测试，缺少真实集成 | 选择性加入 CI/预发布矩阵 |
 | V-006 | 已解决 | README/旧文档遗漏 MeowStatus 路由和配置 | 已补齐 README、API、配置和状态说明；后续改动继续以对应权威文档同步 |

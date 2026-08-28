@@ -2,9 +2,21 @@
 
 ## Boundary
 
-本任务只修改静态前端的 HTML/CSS/JavaScript 和必要的前端文档/测试。后端现有
+本任务主要修改静态前端的 HTML/CSS/JavaScript 和必要的前端文档/测试。后端现有
 认证、授权、数据库表、列表 API、状态 mutation API、通知 outbox 和 MeowStatus
-适配器保持不变。UI 层不得把原始数据库列或管理员私有字段暴露到公开页面。
+适配器保持不变。验收期间发现 Node 24 下旧 SQLite 原生依赖会在管理员登录请求中
+触发进程断言，因此额外纳入已验证的 `better-sqlite3` 依赖/锁文件升级与运行时回归；
+不改变数据库 schema 或路由协议。UI 层不得把原始数据库列或管理员私有字段暴露到
+公开页面。
+
+## Runtime compatibility follow-up
+
+在收件箱登录冒烟中，Node `v24.19.0` + `better-sqlite3@12.11.1` 虽可通过简单
+内存数据库加载，却会在 Express JSON 管理员登录请求结束时触发
+`node::RemoveEnvironmentCleanupHook` 原生断言。最小修复是把直接依赖与锁文件一起
+升级到 `better-sqlite3 ^13.0.3`（N-API），保留 `server/db.js` 数据访问边界，并以
+`tests/runtime-compatibility.test.js` 与既有 `tests/account-submission.test.js` 锁定
+“原生加载 + 登录请求后进程仍存活”的回归。该补丁不引入新的运行时或前端技术栈。
 
 ## Architecture
 
@@ -138,8 +150,10 @@ SMTP/Webhook 测试、MeowStatus/Minecraft 状态设置、导出与通知 handof
 ## Verification design
 
 - 静态检查：`node --check public/theme.js public/index/main.js public/feedback/main.js
-  public/worktask/main.js public/admin/admin.js`、`git diff --check`。
+  public/worktask/main.js public/admin/admin.js public/admin/inbox-model.js`、`git diff --check`。
 - 回归：`npm test`、Trellis task validate；如 Node/SQLite 环境变化导致基线失败，
   记录真实阻塞而不改写成功结论。
+- Node 24 原生依赖回归：`npm ci --foreground-scripts`、内存 SQLite 加载和管理员登录/API
+  冒烟；锁定 `better-sqlite3 ^13.0.3`，避免仅验证 ABI 数字。
 - 浏览器冒烟：四页亮色/暗色、640px 窄屏、键盘焦点、登录失败/成功、收件箱空/错/展
   开/操作、公开页隐私字段检查。

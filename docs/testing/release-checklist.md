@@ -14,14 +14,17 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 `package.json#allowScripts` 中仅允许 `better-sqlite3`；执行带有前台脚本的
 `npm ci --foreground-scripts` 后，若预构建包不可用，再运行
 `npm rebuild better-sqlite3`，确认 `process.versions.modules=137` 且原生模块可加载。
+当前 Node 24 发布锁定 `better-sqlite3 ^13.0.3`；不要只凭 ABI 数字判断兼容性，
+还要执行管理员登录回归，因为旧的 12.11.1 在 Express JSON 请求上下文中曾触发
+原生环境清理断言。
 
-### 当前环境基线记录（2026-08-27）
+### 当前环境基线记录（2026-08-28）
 
 - Node.js：`v24.19.0`；npm：`12.0.2`；当前运行时模块 ABI：`137`，N-API：`10`。
-- 依赖目标：`better-sqlite3 ^12.11.1`、`express ^4.22.2`、`nodemailer ^9.0.5`。
-- 已在当前工作区重建 `better-sqlite3` 并验证内存数据库可打开；另在临时目录以
-  canonical npm registry 执行 `npm ci --foreground-scripts`，干净安装后原生模块
-  加载成功（ABI 137）；此前临时干净安装为 46/46，当前工作区含新增回归为 63/63。
+- 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`。
+- 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
+  干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
+  当前完整测试为 `69/69`。
 
 ## 必须覆盖的行为
 
@@ -40,7 +43,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 | 门禁 | 证据 | 状态 |
 |---|---|---|
 | 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
-| 单元/集成测试 | `npm test` 输出和退出码 | 此前临时干净安装 46/46；当前工作区 63/63 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：69/69 |
 | 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | canonical registry 当前 0 项 |
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |

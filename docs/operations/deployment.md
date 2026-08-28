@@ -2,7 +2,8 @@
 
 ## 通用原则
 
-- 使用 Node.js 24.x LTS，并确保 `better-sqlite3` 与实际 Node ABI 匹配。
+- 使用 Node.js 24.x LTS；当前锁文件目标为 `better-sqlite3 ^13.0.3`，并确保原生模块
+  在实际运行时加载成功。不要用旧的 12.x 锁文件替换当前发布基线。
 - 应用默认绑定回环地址，由 Nginx、IIS 或 Caddy 处理公网 TLS。
 - `.env`、数据库、备份、日志和真实域名配置只存在于部署环境。
 - 生产部署前必须完成[发布门禁](../testing/release-checklist.md)。

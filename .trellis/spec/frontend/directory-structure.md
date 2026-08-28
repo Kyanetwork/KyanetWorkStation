@@ -2,9 +2,10 @@
 
 ## Runtime shape
 
-The frontend is served as static files by Express. It uses native HTML, inline
-page CSS, and browser JavaScript; there is no bundler, source tree, framework,
-component library, or TypeScript build.
+The frontend is served as static files by Express. It uses native HTML, a
+shared `workstation.css` base plus small page-specific style blocks, and browser
+JavaScript; there is no bundler, source tree, framework, component library, or
+TypeScript build.
 
 ~~~text
 public/
@@ -16,6 +17,7 @@ public/
 ├── worktask/main.js       # WorkTask form submission
 ├── admin/index.html       # admin panel markup and inline styles
 ├── admin/admin.js         # admin state, API calls, rendering, event delegation
+├── workstation.css         # shared cold-color tokens, geometry, focus, and responsive base
 ├── theme.js               # shared light/dark preference
 └── images/                # checked-in favicon assets
 ~~~
@@ -30,8 +32,8 @@ matching directory and use theme.js only for the cross-page theme concern.
   form/view.
 - Put page behavior in that folder's main.js; keep the script small and
   initialize it after the DOM exists.
-- Reuse existing page functions or theme.js before creating a shared helper.
-  There is currently no shared component directory.
+- Reuse existing page functions, `theme.js`, or `workstation.css` before
+  creating a shared helper. There is currently no shared component directory.
 - Keep API paths and field names aligned with docs/api/reference.md and the
   backend validators. Do not make the browser depend on database column names.
 

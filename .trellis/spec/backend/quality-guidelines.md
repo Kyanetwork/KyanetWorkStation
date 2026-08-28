@@ -67,6 +67,79 @@ containing only `better-sqlite3`. The reproducibility check uses
 prebuild is unavailable. Do not replace the allow-list with a global
 `--dangerously-allow-all-scripts` bypass or commit `node_modules`.
 
+## Node 24 better-sqlite3 login compatibility contract
+
+### 1. Scope / Trigger
+
+This contract applies to the Node 24 release baseline and any dependency
+change that can affect SQLite access during an Express JSON request. It was
+added after `better-sqlite3@12.11.1` could trigger a native environment-cleanup
+assertion on the administrator login path even though a simple ABI load passed.
+
+### 2. Signatures
+
+- `npm ci --foreground-scripts` — reproducible dependency installation.
+- `node -e "require('better-sqlite3')(':memory:').close()"` — native load probe.
+- `POST /api/admin/login` — authenticated request smoke path.
+- `npm test` — full Node 24 regression suite.
+
+### 3. Contracts
+
+- The direct dependency is `better-sqlite3 ^13.0.3`; `package.json` and
+  `package-lock.json` must be changed together.
+- A release check must verify both native SQLite loading and an administrator
+  JSON login/API smoke path; `process.versions.modules` alone is insufficient.
+- The v13 N-API binding remains behind the existing `server/db.js` boundary; no
+  route may call the native driver directly.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Node 24 + lockfile v13 install | `npm ci --foreground-scripts` exits 0 and the load probe succeeds |
+| SQLite load succeeds but admin login crashes/exits | Release fails; inspect native dependency before changing routes |
+| Package and lock ranges differ | Release fails; regenerate the lockfile |
+| Node runtime is outside the declared 24.x gate | Treat as a separate compatibility check, not Node 24 release evidence |
+
+### 5. Good / Base / Bad Cases
+
+- Good: clean Node 24 install, SQLite memory probe, admin login and full tests
+  all pass with `better-sqlite3 13.0.3`.
+- Base: an existing deployment runs `npm ci`, restarts the single process, and
+  confirms `/api/health` plus one admin login before serving traffic.
+- Bad: a 12.x binary is accepted because ABI 137 loads, while the JSON login
+  path is not exercised.
+
+### 6. Tests Required
+
+- `tests/runtime-compatibility.test.js` asserts the Node 24 dependency range,
+  installed major version, and a real in-memory query.
+- `tests/account-submission.test.js` must keep the child-process health →
+  anonymous submission → admin login flow so a process exit cannot be hidden.
+- The release gate runs `npm ci --foreground-scripts`, `npm test`, and the
+  canonical-registry audit after any native dependency update.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```bash
+npm install --no-save better-sqlite3@13.0.3
+node -e "require('better-sqlite3')(':memory:').close()"
+```
+
+This leaves the repository declaration on 12.x and does not prove a clean
+deployment or login request.
+
+#### Correct
+
+```bash
+npm install --save better-sqlite3@^13.0.3
+npm ci --foreground-scripts
+node -e "require('better-sqlite3')(':memory:').close()"
+npm test
+```
+
 ## Review checklist
 
 - [ ] The changed route has validation, auth/source guards, and the expected

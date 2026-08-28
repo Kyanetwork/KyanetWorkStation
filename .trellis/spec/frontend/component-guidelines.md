@@ -47,12 +47,16 @@ shape; do not create a speculative component framework.
 
 ## Styling and accessibility
 
-Styles are inline in each page's style block. Preserve the existing CSS
-variables, responsive breakpoints, light/dark data-theme selector, and reduced
-visual complexity. Every form control should retain its associated label,
-visible validation/status text should use textContent, and notifications should
-keep aria-live="polite" as in the admin toast region. Images need meaningful
-alt text or an intentionally empty alt for decorative icons.
+Use `public/workstation.css` as the shared base for cold-color tokens, square
+geometry, focus rings, status messages, and responsive behavior. Keep only
+page-specific layout rules in each page's style block, and load the shared
+stylesheet after those blocks so the square-control contract cannot be
+reintroduced accidentally. Preserve the existing CSS variables, responsive
+breakpoints, light/dark `data-theme` selector, and reduced visual complexity.
+Every form control should retain its associated label, visible validation/status
+text should use `textContent`, and notifications should keep
+`aria-live="polite"` as in the admin toast region. Images need meaningful `alt`
+text or an intentionally empty alt for decorative icons.
 
 ## Common mistakes
 

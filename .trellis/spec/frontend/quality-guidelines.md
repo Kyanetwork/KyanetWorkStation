@@ -19,6 +19,9 @@ browser check ran if it did not.
 
 - Use semantic HTML labels, buttons, forms, and visible status messages.
 - Keep page scripts loaded after markup and initialize once.
+- Load `/workstation.css` on every Workstation page; verify its shared tokens,
+  square controls (`border-radius: 0`), focus ring, and responsive rules are not
+  overridden by page-specific styles.
 - Check response.ok and data.ok for every fetch.
 - Escape untrusted values before innerHTML; prefer textContent where templating
   is unnecessary.

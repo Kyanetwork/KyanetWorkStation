@@ -17,4 +17,5 @@ docs/internal/
 @old_files/*
 .vscode/
 .idea/
+.playwright-cli/
 public/favicon.*
