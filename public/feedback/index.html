@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <title>KWS 反馈 | Kyanetwork</title>
   <style>
     :root {
@@ -35,14 +35,14 @@
       margin: 0;
       font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       color: var(--text);
-      background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      background: var(--ws-bg);
       min-height: 100vh;
     }
     .wrap { max-width: 840px; margin: 0 auto; padding: 28px 16px 40px; }
     .hero {
       margin-bottom: 16px;
       padding: 22px;
-      border-radius: 14px;
+      border-radius: 0;
       background: var(--card);
       border: 1px solid var(--border);
       box-shadow: 0 8px 24px rgba(31, 85, 168, 0.08);
@@ -64,7 +64,7 @@
       color: var(--brand);
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 0;
       padding: 5px 14px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -72,7 +72,7 @@
     }
     .theme-btn {
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       background: var(--card);
       color: var(--text);
       cursor: pointer;
@@ -90,7 +90,7 @@
     .link-entry a:hover { text-decoration: underline; }
     .card {
       background: var(--card);
-      border-radius: 14px;
+      border-radius: 0;
       border: 1px solid var(--border);
       box-shadow: 0 10px 30px rgba(18, 64, 145, 0.1);
       padding: 20px;
@@ -102,7 +102,7 @@
       margin: 8px 0 0;
       padding: 10px 12px;
       border: 1px dashed var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.6;
@@ -111,7 +111,7 @@
     select,input,textarea,button { width: 100%; font: inherit; }
     input,textarea,select {
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       padding: 11px 12px;
       outline: none;
       background: var(--card);
@@ -124,15 +124,15 @@
     textarea { min-height: 150px; resize: vertical; }
     .btn {
       border: 0;
-      border-radius: 10px;
+      border-radius: 0;
       padding: 12px 14px;
       color: #fff;
       font-weight: 700;
       cursor: pointer;
-      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+      background: var(--ws-accent-strong);
     }
     .btn[disabled] { opacity: 0.65; cursor: not-allowed; }
-    .msg { margin-top: 14px; font-size: 14px; border-radius: 8px; padding: 10px 12px; display: none; }
+    .msg { margin-top: 14px; font-size: 14px; border-radius: 0; padding: 10px 12px; display: none; }
     .msg.ok { color: var(--ok); border: 1px solid #b8e9cc; display: block; }
     .msg.error { color: var(--danger); border: 1px solid #f6c4cd; display: block; }
     .site-footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7; }
@@ -142,6 +142,7 @@
       .theme-btn { padding-inline: 7px; }
     }
   </style>
+  <link rel="stylesheet" href="/workstation.css">
 </head>
 <body>
   <main class="wrap">
@@ -194,7 +195,7 @@
 
         <button class="btn" id="submitBtn" type="submit">提交反馈</button>
       </form>
-      <div id="message" class="msg"></div>
+      <div id="message" class="msg" role="status" aria-live="polite"></div>
     </section>
 
     <footer class="site-footer">

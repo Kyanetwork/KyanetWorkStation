@@ -32,7 +32,7 @@
       min-height: 100vh;
       font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       color: var(--text);
-      background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      background: var(--ws-bg);
     }
     .wrap {
       max-width: 980px;
@@ -42,7 +42,7 @@
     .hero {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 0;
       padding: 22px;
       margin-bottom: 14px;
     }
@@ -63,7 +63,7 @@
     .badge {
       display: inline-block;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 0;
       padding: 4px 10px;
       font-size: 12px;
       color: var(--muted);
@@ -73,7 +73,7 @@
       align-items: center;
       justify-content: center;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       background: var(--card);
       color: var(--text);
       cursor: pointer;
@@ -96,7 +96,7 @@
       color: inherit;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 0;
       padding: 16px;
     }
     .entry h2 { margin: 0 0 6px; font-size: 20px; }
@@ -112,7 +112,7 @@
       margin-top: 14px;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 0;
       padding: 16px;
     }
     .showcase h2 {
@@ -137,7 +137,7 @@
     }
     .status-panel {
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       padding: 12px;
       background: color-mix(in srgb, var(--card) 88%, var(--bg-1) 12%);
       min-height: 124px;
@@ -151,7 +151,7 @@
       align-items: center;
       gap: 6px;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 0;
       padding: 5px 10px;
       color: var(--brand);
       font-weight: 700;
@@ -173,7 +173,7 @@
     .mc-card {
       border: 1px solid var(--border);
       border-left: 4px solid var(--muted);
-      border-radius: 8px;
+      border-radius: 0;
       padding: 9px;
       background: var(--card);
     }
@@ -198,7 +198,7 @@
     .server-icon {
       width: 24px;
       height: 24px;
-      border-radius: 5px;
+      border-radius: 0;
       image-rendering: pixelated;
       flex: 0 0 auto;
     }
@@ -220,7 +220,7 @@
     }
     .show-col {
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 0;
       padding: 10px;
       background: color-mix(in srgb, var(--card) 86%, var(--bg-1) 14%);
       min-height: 150px;
@@ -238,7 +238,7 @@
     }
     .show-item {
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 0;
       padding: 8px;
       background: var(--card);
     }
@@ -283,10 +283,11 @@
       .status-grid { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="/workstation.css">
 </head>
 <body>
   <main class="wrap">
-    <section class="hero">
+    <section class="hero" aria-labelledby="homeTitle">
       <div class="topbar">
         <span class="badge">KWS Simple Entry</span>
         <div class="topbar-actions">
@@ -294,11 +295,11 @@
           <button id="themeToggle" class="theme-btn">切换深色</button>
         </div>
       </div>
-      <h1>KyanetWorkStation 入口</h1>
-      <p>提供简洁入口结构，后续会进行扩展。你可以从这里进入反馈提交与 WorkTask 提交/任务安排。</p>
+      <h1 id="homeTitle">KyanetWorkStation 公开工作入口</h1>
+      <p>从这里提交反馈或 WorkTask，并查看已公开的处理进展与服务状态。</p>
     </section>
 
-    <section class="grid">
+    <section class="grid" aria-label="公开工作入口">
       <a class="entry" href="/feedback/">
         <h2>反馈系统</h2>
         <p>问题反馈、建议收集、体验意见。</p>
@@ -311,9 +312,9 @@
       </a>
     </section>
 
-    <section class="showcase">
-      <h2>当前处理进展</h2>
-      <p>这里展示被设置为允许在主页显示的正在处理的反馈与进行中的任务，在你提交前请检查是否有重复提交。</p>
+    <section class="showcase" aria-labelledby="progressTitle">
+      <h2 id="progressTitle">当前处理进展</h2>
+      <p>仅展示已允许公开的处理中反馈与进行中任务。提交前可先检查是否存在重复事项。</p>
       <div class="show-grid">
         <article class="show-col">
           <h3>正在处理的反馈</h3>
@@ -326,8 +327,8 @@
       </div>
     </section>
 
-    <section id="meowStatusSection" class="showcase hidden">
-      <h2>状态信息</h2>
+    <section id="meowStatusSection" class="showcase hidden" aria-labelledby="statusTitle">
+      <h2 id="statusTitle">服务状态</h2>
       <p>这里同步展示 MeowStatus 的公开状态与 Minecraft 服务器挂件状态（如果开启相关功能）。</p>
       <div class="status-grid">
         <article id="profileStatusPanel" class="status-panel hidden">

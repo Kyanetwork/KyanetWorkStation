@@ -9,17 +9,30 @@
   const smtpTestMsg = document.getElementById("smtpTestMsg");
   const webhookTestMsg = document.getElementById("webhookTestMsg");
   const statusSettingsMsg = document.getElementById("statusSettingsMsg");
+  const inboxMsg = document.getElementById("inboxMsg");
+  const inboxList = document.getElementById("inboxList");
   const toastWrap = document.getElementById("toastWrap");
 
+  const tabInbox = document.getElementById("tabInbox");
   const tabFeedback = document.getElementById("tabFeedback");
   const tabWorktask = document.getElementById("tabWorktask");
   const tabWorktaskCreate = document.getElementById("tabWorktaskCreate");
+  const moduleInbox = document.getElementById("moduleInbox");
   const moduleFeedback = document.getElementById("moduleFeedback");
   const moduleWorktask = document.getElementById("moduleWorktask");
   const moduleWorktaskCreate = document.getElementById("moduleWorktaskCreate");
+  const inboxModel = window.KwsInboxModel;
 
   const state = {
-    active: "feedback",
+    active: "inbox",
+    inbox: {
+      loaded: false,
+      loading: false,
+      requestId: 0,
+      items: [],
+      feedbackData: null,
+      worktaskData: null
+    },
     feedback: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
     worktask: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
     statusSettings: {
@@ -238,15 +251,140 @@
   }
 
   function feedbackStatusLabel(status) {
-    return ({ new: "新反馈", reviewed: "已查看", resolved: "已解决", notplanned: "暂不处理" }[status]) || status;
+    return ({ new: "新反馈", reviewed: "已查看", resolved: "已解决", notplanned: "暂不处理" }[status]) || status || "-";
   }
 
   function worktaskStatusLabel(status) {
-    return ({ new: "新工单", scheduled: "已安排", in_progress: "进行中", completed: "已完成", cancelled: "已取消" }[status]) || status;
+    return ({ new: "新工单", scheduled: "已安排", in_progress: "进行中", completed: "已完成", cancelled: "已取消" }[status]) || status || "-";
   }
 
   function worktaskPriorityLabel(priority) {
-    return ({ low: "低", medium: "中", high: "高", urgent: "紧急" }[priority]) || priority;
+    return ({ low: "低", medium: "中", high: "高", urgent: "紧急" }[priority]) || priority || "-";
+  }
+
+  function inboxSourceLabel(source) {
+    return source === "worktask" ? "WorkTask" : "反馈";
+  }
+
+  function inboxStatusLabel(item) {
+    return item.source === "worktask"
+      ? worktaskStatusLabel(item.status)
+      : feedbackStatusLabel(item.status);
+  }
+
+  function renderInboxDetailField(label, value, options = {}) {
+    const rendered = options.linkify
+      ? (value ? linkifySafeText(value) : "-")
+      : escapeHtml(value || "-");
+    return `<div class="inbox-detail-field${options.wide ? " is-wide" : ""}">
+      <span class="inbox-detail-label">${escapeHtml(label)}</span>
+      <div class="inbox-detail-value">${rendered}</div>
+    </div>`;
+  }
+
+  function renderInboxInputField(label, id, value, ariaLabel, placeholder) {
+    const safeId = escapeHtml(id);
+    return `<div class="inbox-detail-field">
+      <label class="inbox-detail-label" for="${safeId}">${escapeHtml(label)}</label>
+      <input id="${safeId}" aria-label="${escapeHtml(ariaLabel)}" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder || "")}">
+    </div>`;
+  }
+
+  function renderInboxStatusButtons(item) {
+    const id = escapeHtml(item.id);
+    if (item.source === "feedback") {
+      return [
+        ["new", "新反馈"],
+        ["reviewed", "已查看"],
+        ["resolved", "已解决"],
+        ["notplanned", "暂不处理"]
+      ].map(([status, label]) => `<button type="button" data-action="feedback-status" data-id="${id}" data-status="${status}" ${item.status === status ? "disabled" : ""}>${label}</button>`).join("");
+    }
+    return [
+      ["new", "新工单"],
+      ["scheduled", "已安排"],
+      ["in_progress", "进行中"],
+      ["completed", "已完成"],
+      ["cancelled", "已取消"]
+    ].map(([status, label]) => `<button type="button" data-action="worktask-status" data-id="${id}" data-status="${status}" ${item.status === status ? "disabled" : ""}>${label}</button>`).join("");
+  }
+
+  function renderInboxItem(item) {
+    const detail = item.detailFields || {};
+    const id = escapeHtml(item.id);
+    const source = escapeHtml(item.source);
+    const sourceLabel = escapeHtml(inboxSourceLabel(item.source));
+    const statusLabel = escapeHtml(inboxStatusLabel(item));
+    const priorityLabel = item.source === "worktask" ? escapeHtml(worktaskPriorityLabel(item.priority)) : "";
+    const account = accountSnapshotText(detail);
+    const homeDisplay = Boolean(detail.showOnHome);
+    const homeAction = item.source === "worktask" ? "worktask-home-display" : "feedback-home-display";
+    const deleteAction = item.source === "worktask" ? "worktask-delete" : "feedback-delete";
+    const noteAction = item.source === "worktask" ? "worktask-note-reply" : "feedback-note-reply";
+    const noteId = `${source}-${id}`;
+    const controls = item.source === "worktask"
+      ? `<div class="inbox-detail-grid">
+          ${renderInboxDetailField("类型", detail.type)}
+          ${renderInboxDetailField("联系方式", detail.contact)}
+          ${renderInboxDetailField("期望时间", formatDateTimeDisplay(detail.expectedAt))}
+          ${renderInboxDetailField("计划时间", formatDateTimeDisplay(detail.scheduledAt))}
+          ${renderInboxDetailField("标签", detail.tags)}
+          ${renderInboxDetailField("关联账号", account)}
+          ${renderInboxInputField("负责人", `inbox-assignee-${id}`, detail.assignee, `WorkTask #${id} 负责人`, "负责人（可选）")}
+          ${renderInboxDetailField("详细内容", detail.content || item.summary, { linkify: true, wide: true })}
+        </div>
+        <div class="ops">
+          <label class="inbox-inline-field" for="inbox-scheduled-${id}">
+            <span>计划时间</span>
+            <input id="inbox-scheduled-${id}" aria-label="WorkTask #${id} 计划时间" type="datetime-local" value="${escapeHtml(toDateTimeLocalValue(detail.scheduledAt))}">
+          </label>
+          <button type="button" data-action="worktask-arrange" data-id="${id}">保存安排</button>
+          <button type="button" data-action="worktask-clear-assignee" data-id="${id}">清空负责人</button>
+          <button type="button" data-action="worktask-clear-scheduled" data-id="${id}">清空计划时间</button>
+        </div>`
+      : `<div class="inbox-detail-grid">
+          ${renderInboxDetailField("类型", detail.type)}
+          ${renderInboxDetailField("联系方式", detail.contact)}
+          ${renderInboxDetailField("关联账号", account)}
+          ${renderInboxDetailField("详细内容", detail.content || item.summary, { linkify: true, wide: true })}
+        </div>`;
+
+    return `<details class="inbox-item" data-source="${source}" data-id="${id}">
+      <summary>
+        <div class="inbox-summary-main">
+          <h3 class="inbox-summary-title">${escapeHtml(item.title)}</h3>
+          <div class="inbox-summary-meta">
+            <span class="inbox-tag">${sourceLabel}</span>
+            <span>${statusLabel}</span>
+            ${priorityLabel ? `<span>优先级：${priorityLabel}</span>` : ""}
+            <span class="inbox-summary-excerpt">${escapeHtml(item.summary || "暂无摘要")}</span>
+          </div>
+        </div>
+        <time class="inbox-summary-time" datetime="${escapeHtml(item.updatedAt)}">${escapeHtml(formatDateTimeDisplay(item.updatedAt))}</time>
+      </summary>
+      <div class="inbox-detail">
+        ${controls}
+        <div class="ops">
+          ${renderInboxStatusButtons(item)}
+          <button type="button" data-action="${homeAction}" data-id="${id}" data-show="${homeDisplay ? "0" : "1"}">${homeDisplay ? "取消主页展示" : "设为主页展示"}</button>
+          <button type="button" class="del" data-action="${deleteAction}" data-id="${id}">删除</button>
+        </div>
+        <div class="ops">
+          <textarea id="inbox-note-${noteId}" aria-label="${sourceLabel} #${id} 管理员备注" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000">${escapeHtml(detail.adminNote)}</textarea>
+          <textarea id="inbox-reply-${noteId}" aria-label="${sourceLabel} #${id} 对外回复" rows="2" placeholder="对外回复（可在主页展示）" maxlength="2000">${escapeHtml(detail.publicReply)}</textarea>
+          <button type="button" data-action="${noteAction}" data-id="${id}">保存备注/回复</button>
+        </div>
+      </div>
+    </details>`;
+  }
+
+  function renderInboxList(items) {
+    if (!inboxList) return;
+    if (!items.length) {
+      inboxList.innerHTML = `<p class="empty-state">当前筛选条件下没有待处理记录。</p>`;
+      return;
+    }
+    inboxList.innerHTML = items.map(renderInboxItem).join("");
   }
 
   function homeDisplayLabel(showOnHome) {
@@ -463,6 +601,90 @@
     document.getElementById("globalLoadTime").textContent = `最近加载：${formatDateTimeDisplay(new Date())}`;
   }
 
+  function inboxFilters() {
+    return {
+      source: document.getElementById("inboxSourceFilter").value,
+      status: document.getElementById("inboxStatusFilter").value,
+      priority: document.getElementById("inboxPriorityFilter").value,
+      keyword: document.getElementById("inboxKeyword").value.trim()
+    };
+  }
+
+  function inboxListPayload(filters, source) {
+    const feedbackStatuses = new Set(["new", "reviewed", "resolved", "notplanned"]);
+    const worktaskStatuses = new Set(["new", "scheduled", "in_progress", "completed", "cancelled"]);
+    const payload = {
+      page: 1,
+      pageSize: 100,
+      keyword: filters.keyword
+    };
+    if (source === "feedback") {
+      if (feedbackStatuses.has(filters.status)) payload.status = filters.status;
+    } else {
+      if (worktaskStatuses.has(filters.status)) payload.status = filters.status;
+      payload.priority = filters.priority;
+    }
+    return payload;
+  }
+
+  async function loadInbox() {
+    if (!inboxModel) {
+      throw new Error("收件箱模块加载失败，请刷新页面重试");
+    }
+    const requestId = state.inbox.requestId + 1;
+    state.inbox.requestId = requestId;
+    state.inbox.loading = true;
+    clearMessage(inboxMsg);
+    inboxList.setAttribute("aria-busy", "true");
+    inboxList.innerHTML = '<p class="empty-state">正在加载工作收件箱…</p>';
+    try {
+      const filters = inboxFilters();
+      const includeFeedback = !filters.source || filters.source === "feedback";
+      const includeWorktask = !filters.source || filters.source === "worktask";
+      const [feedbackData, worktaskData] = await Promise.all([
+        includeFeedback
+          ? api("/api/admin/feedback/list", inboxListPayload(filters, "feedback"))
+          : Promise.resolve({ items: [], totalPages: 1, total: 0 }),
+        includeWorktask
+          ? api("/api/admin/worktask/list", inboxListPayload(filters, "worktask"))
+          : Promise.resolve({ items: [], totalPages: 1, total: 0 })
+      ]);
+
+      if (requestId !== state.inbox.requestId) return;
+      const feedbackItems = (Array.isArray(feedbackData.items) ? feedbackData.items : []).map(inboxModel.mapFeedback);
+      const worktaskItems = (Array.isArray(worktaskData.items) ? worktaskData.items : []).map(inboxModel.mapWorktask);
+      const merged = inboxModel.mergeInboxItems(feedbackItems, worktaskItems);
+      state.inbox.items = inboxModel.filterInboxItems(merged, filters);
+      state.inbox.feedbackData = feedbackData;
+      state.inbox.worktaskData = worktaskData;
+      state.inbox.loaded = true;
+
+      renderInboxList(state.inbox.items);
+      document.getElementById("inboxCount").textContent = `${state.inbox.items.length} 条`;
+      const boundary = document.getElementById("inboxBoundaryNote");
+      const hasMore = inboxModel.hasMoreInboxItems(feedbackData, worktaskData);
+      boundary.classList.toggle("hidden", !hasMore);
+      if (hasMore) {
+        document.getElementById("inboxBoundaryText").textContent = "当前仅加载每类来源的前 100 条近期记录；需要更早记录时请进入专项管理页。";
+      }
+      document.getElementById("globalLoadTime").textContent = `最近加载：${formatDateTimeDisplay(new Date())}`;
+    } catch (error) {
+      if (requestId !== state.inbox.requestId) return;
+      state.inbox.loaded = false;
+      state.inbox.items = [];
+      document.getElementById("inboxCount").textContent = "0 条";
+      document.getElementById("inboxBoundaryNote").classList.add("hidden");
+      inboxList.innerHTML = `<p class="empty-state">收件箱加载失败，请检查登录状态后重试。</p>`;
+      showMessage(inboxMsg, "error", error && error.message ? error.message : "收件箱加载失败");
+      throw error;
+    } finally {
+      if (requestId === state.inbox.requestId) {
+        state.inbox.loading = false;
+        inboxList.setAttribute("aria-busy", "false");
+      }
+    }
+  }
+
   function resetWorktaskCreateForm() {
     document.getElementById("createType").value = "任务安排";
     document.getElementById("createPriority").value = "medium";
@@ -530,16 +752,26 @@
 
   function switchModule(module) {
     state.active = module;
+    const isInbox = module === "inbox";
     const isFeedback = module === "feedback";
     const isWorktask = module === "worktask";
     const isWorktaskCreate = module === "worktaskCreate";
+    tabInbox.classList.toggle("active", isInbox);
     tabFeedback.classList.toggle("active", isFeedback);
     tabWorktask.classList.toggle("active", isWorktask);
     tabWorktaskCreate.classList.toggle("active", isWorktaskCreate);
+    tabInbox.setAttribute("aria-selected", String(isInbox));
+    tabFeedback.setAttribute("aria-selected", String(isFeedback));
+    tabWorktask.setAttribute("aria-selected", String(isWorktask));
+    tabWorktaskCreate.setAttribute("aria-selected", String(isWorktaskCreate));
+    moduleInbox.classList.toggle("hidden", !isInbox);
     moduleFeedback.classList.toggle("hidden", !isFeedback);
     moduleWorktask.classList.toggle("hidden", !isWorktask);
     moduleWorktaskCreate.classList.toggle("hidden", !isWorktaskCreate);
 
+    if (isInbox && !state.inbox.loaded && !state.inbox.loading) {
+      loadInbox().catch((err) => showMessage(inboxMsg, "error", err.message));
+    }
     if (isFeedback && !state.feedback.loaded) {
       loadFeedback().catch((err) => showMessage(globalMsg, "error", err.message));
     }
@@ -558,7 +790,7 @@
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
-      switchModule("feedback");
+      switchModule("inbox");
     } catch (error) {
       showMessage(loginMsg, "error", error.message);
     }
@@ -571,7 +803,7 @@
       loginCard.classList.add("hidden");
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
-      switchModule("feedback");
+      switchModule("inbox");
     } catch (_) {
       loginCard.classList.remove("hidden");
       adminPanel.classList.add("hidden");
@@ -587,6 +819,12 @@
     try {
       await api("/api/admin/logout", {});
     } finally {
+      state.inbox.loaded = false;
+      state.inbox.loading = false;
+      state.inbox.requestId += 1;
+      state.inbox.items = [];
+      state.inbox.feedbackData = null;
+      state.inbox.worktaskData = null;
       state.feedback.loaded = false;
       state.worktask.loaded = false;
       resetWorktaskCreateForm();
@@ -603,7 +841,10 @@
 
   document.getElementById("refreshBtn").addEventListener("click", async () => {
     try {
-      if (state.active === "feedback") await loadFeedback();
+      if (state.active === "inbox") {
+        state.inbox.loaded = false;
+        await loadInbox();
+      } else if (state.active === "feedback") await loadFeedback();
       else if (state.active === "worktask") await loadWorktask();
       else clearMessage(worktaskCreateMsg);
       notify(globalMsg, "ok", "当前板块已刷新");
@@ -644,9 +885,23 @@
     }
   });
 
+  tabInbox.addEventListener("click", () => switchModule("inbox"));
   tabFeedback.addEventListener("click", () => switchModule("feedback"));
   tabWorktask.addEventListener("click", () => switchModule("worktask"));
   tabWorktaskCreate.addEventListener("click", () => switchModule("worktaskCreate"));
+
+  document.getElementById("inboxFilterForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.inbox.loaded = false;
+    try {
+      await loadInbox();
+    } catch (error) {
+      notify(inboxMsg, "error", error.message);
+    }
+  });
+
+  document.getElementById("inboxFeedbackLink").addEventListener("click", () => switchModule("feedback"));
+  document.getElementById("inboxWorktaskLink").addEventListener("click", () => switchModule("worktask"));
 
   document.getElementById("createWorktaskBtn").addEventListener("click", async () => {
     try {
@@ -702,6 +957,121 @@
       notify(worktaskMsg, "ok", `WorkTask CSV 导出完成，共 ${rows.length} 条`);
     } catch (error) {
       notify(worktaskMsg, "error", error.message);
+    }
+  });
+
+  async function refreshInboxAfterMutation() {
+    state.inbox.loaded = false;
+    state.feedback.loaded = false;
+    state.worktask.loaded = false;
+    await loadInbox();
+  }
+
+  inboxList.addEventListener("click", async (event) => {
+    const btn = event.target.closest("button[data-action]");
+    if (!btn) return;
+    const itemElement = btn.closest(".inbox-item");
+    const id = Number(btn.dataset.id);
+    const source = itemElement ? itemElement.dataset.source : "";
+    const noteKey = `${source}-${btn.dataset.id}`;
+    try {
+      if (btn.dataset.action === "feedback-status") {
+        await withButtonBusy(btn, "更新中...", async () => {
+          await api("/api/admin/feedback/status", { id, status: btn.dataset.status });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "反馈状态已更新");
+      }
+      if (btn.dataset.action === "feedback-delete") {
+        if (!confirm("确认删除该反馈吗？该操作不可恢复。")) return;
+        await withButtonBusy(btn, "删除中...", async () => {
+          await api("/api/admin/feedback/delete", { id });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "反馈已删除");
+      }
+      if (btn.dataset.action === "feedback-home-display") {
+        const showOnHome = btn.dataset.show === "1";
+        await withButtonBusy(btn, "保存中...", async () => {
+          await api("/api/admin/feedback/home-display", { id, showOnHome });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", showOnHome ? "反馈已设置为主页显示" : "反馈已从主页隐藏");
+      }
+      if (btn.dataset.action === "feedback-note-reply") {
+        const noteInput = document.getElementById(`inbox-note-${noteKey}`);
+        const replyInput = document.getElementById(`inbox-reply-${noteKey}`);
+        await withButtonBusy(btn, "保存中...", async () => {
+          await api("/api/admin/feedback/note-reply", {
+            id,
+            adminNote: noteInput ? noteInput.value : "",
+            publicReply: replyInput ? replyInput.value : ""
+          });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "反馈备注/回复已保存");
+      }
+      if (btn.dataset.action === "worktask-status") {
+        await withButtonBusy(btn, "更新中...", async () => {
+          await api("/api/admin/worktask/status", { id, status: btn.dataset.status });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "WorkTask 状态已更新");
+      }
+      if (btn.dataset.action === "worktask-arrange") {
+        const assigneeInput = document.getElementById(`inbox-assignee-${btn.dataset.id}`);
+        const scheduledInput = document.getElementById(`inbox-scheduled-${btn.dataset.id}`);
+        await withButtonBusy(btn, "保存中...", async () => {
+          await api("/api/admin/worktask/arrange", {
+            id,
+            assignee: assigneeInput ? assigneeInput.value.trim() : "",
+            scheduledAt: scheduledInput ? toIsoOrEmpty(scheduledInput.value) : ""
+          });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "WorkTask 安排已保存");
+      }
+      if (btn.dataset.action === "worktask-clear-assignee" || btn.dataset.action === "worktask-clear-scheduled") {
+        const payload = { id };
+        if (btn.dataset.action === "worktask-clear-assignee") payload.assignee = null;
+        else payload.scheduledAt = null;
+        await withButtonBusy(btn, "清除中...", async () => {
+          await api("/api/admin/worktask/arrange", payload);
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", btn.dataset.action === "worktask-clear-assignee" ? "WorkTask 负责人已清空" : "WorkTask 计划时间已清空");
+      }
+      if (btn.dataset.action === "worktask-delete") {
+        if (!confirm("确认删除该 WorkTask 吗？该操作不可恢复。")) return;
+        await withButtonBusy(btn, "删除中...", async () => {
+          await api("/api/admin/worktask/delete", { id });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "WorkTask 已删除");
+      }
+      if (btn.dataset.action === "worktask-home-display") {
+        const showOnHome = btn.dataset.show === "1";
+        await withButtonBusy(btn, "保存中...", async () => {
+          await api("/api/admin/worktask/home-display", { id, showOnHome });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", showOnHome ? "WorkTask 已设置为主页显示" : "WorkTask 已从主页隐藏");
+      }
+      if (btn.dataset.action === "worktask-note-reply") {
+        const noteInput = document.getElementById(`inbox-note-${noteKey}`);
+        const replyInput = document.getElementById(`inbox-reply-${noteKey}`);
+        await withButtonBusy(btn, "保存中...", async () => {
+          await api("/api/admin/worktask/note-reply", {
+            id,
+            adminNote: noteInput ? noteInput.value : "",
+            publicReply: replyInput ? replyInput.value : ""
+          });
+          await refreshInboxAfterMutation();
+        });
+        notify(inboxMsg, "ok", "WorkTask 备注/回复已保存");
+      }
+    } catch (error) {
+      notify(inboxMsg, "error", error.message);
     }
   });
 
