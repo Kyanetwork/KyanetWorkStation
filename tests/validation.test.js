@@ -6,7 +6,9 @@ const {
   validateAdminLoginPayload,
   validateHomeDisplayPayload,
   validateSmtpTestPayload,
-  validateWorktaskArrangePayload
+  validateWorktaskArrangePayload,
+  validateNotificationHandoffRetryPayload,
+  validateStatusProfileSettingsPayload
 } = require("../server/validation");
 
 test("validateFeedbackPayload accepts valid payload", () => {
@@ -72,5 +74,22 @@ test("validateWorktaskArrangePayload preserves explicit clear operations", () =>
 
 test("validateWorktaskArrangePayload rejects an empty update object", () => {
   const result = validateWorktaskArrangePayload({ id: 12 });
+  assert.equal(result.valid, false);
+});
+
+test("validateNotificationHandoffRetryPayload accepts only UUID handoff ids", () => {
+  const valid = validateNotificationHandoffRetryPayload({ handoffId: "00000000-0000-0000-0000-000000000000" });
+  const invalid = validateNotificationHandoffRetryPayload({ handoffId: "not-a-uuid" });
+  assert.equal(valid.valid, true);
+  assert.equal(valid.data.handoffId, "00000000-0000-0000-0000-000000000000");
+  assert.equal(invalid.valid, false);
+});
+
+test("validateStatusProfileSettingsPayload rejects embedded URL credentials", () => {
+  const result = validateStatusProfileSettingsPayload({
+    enabled: true,
+    apiBaseUrl: "https://user:pass@example.test",
+    timeoutMs: 5000
+  });
   assert.equal(result.valid, false);
 });

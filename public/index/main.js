@@ -73,8 +73,15 @@
   }
 
   function minecraftOnlineText(payload) {
-    if (!payload) return "未知";
+    if (!payload || typeof payload.online !== "boolean") return "未知";
     return payload.online ? "在线" : "离线";
+  }
+
+  function isSafeFaviconDataUrl(value) {
+    if (typeof value !== "string" || value.length > 256 * 1024) {
+      return false;
+    }
+    return /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(value);
   }
 
   function minecraftPlayersText(payload) {
@@ -172,7 +179,7 @@
     container.innerHTML = widgets.map((widget) => {
       const payload = widget.lastPayload;
       const onlineState = payload && payload.online === true ? "online" : payload && payload.online === false ? "offline" : "unknown";
-      const iconHtml = payload && payload.favicon && String(payload.favicon).startsWith("data:image")
+      const iconHtml = payload && isSafeFaviconDataUrl(payload.favicon)
         ? `<img class="server-icon" src="${escapeHtml(payload.favicon)}" alt="">`
         : `<img class="server-icon hidden" alt="">`;
       const target = payload && payload.target ? payload.target : `${widget.config.host || "-"}:${widget.config.port || "-"}`;

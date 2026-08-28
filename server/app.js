@@ -47,6 +47,12 @@ const {
   listDueNotificationDeliveries
 } = require("./db");
 const { fetchMeowStatusDashboard } = require("./meowstatus");
+const {
+  createNotificationHandoff,
+  listNotificationHandoffs,
+  retryNotificationHandoff,
+  sanitizeError: sanitizeNotificationError
+} = require("./notification-handoff");
 const { sendError } = require("./errors");
 const {
   buildSessionCookieOptions,
@@ -66,6 +72,7 @@ const {
   validateWorktaskStatusPayload,
   validateWorktaskArrangePayload,
   validateDeletePayload,
+  validateNotificationHandoffRetryPayload,
   validateHomeDisplayPayload,
   validateNoteReplyPayload,
   validateSmtpTestPayload,
@@ -164,12 +171,35 @@ async function queueNotifications(entityType, entityId) {
   try {
     return await enqueueNotificationDeliveries({ entityType, entityId, providers });
   } catch (error) {
+    let handoff = { persisted: false, error: "handoff creation failed" };
+    try {
+      handoff = await createNotificationHandoff({
+        dbPath: config.dbPath,
+        entityType,
+        entityId,
+        providers,
+        error
+      });
+    } catch (handoffError) {
+      handoff.error = sanitizeNotificationError(handoffError);
+    }
     logger.error({
       event: "notification.outbox.enqueue.error",
       entityType,
       entityId,
-      error: error && error.message ? error.message : String(error)
+      providers,
+      handoffPersisted: handoff.persisted,
+      error: sanitizeNotificationError(error)
     }, "notification outbox enqueue failed");
+    if (!handoff.persisted) {
+      logger.error({
+        event: "notification.handoff.persistence.error",
+        entityType,
+        entityId,
+        providers,
+        error: handoff.error || "unknown persistence error"
+      }, "notification handoff persistence failed; manual compensation required");
+    }
     return [];
   }
 }
@@ -529,6 +559,54 @@ app.post("/api/admin/notifications/retry", requireAdminSession, asyncHandler(asy
     }, "notification worker failed");
   });
   return res.json({ ok: true });
+}));
+
+app.get("/api/admin/notification-handoffs", requireAdminSession, asyncHandler(async (req, res) => {
+  const rawLimit = Number.parseInt(req.query && req.query.limit, 10);
+  const limit = Number.isSafeInteger(rawLimit) && rawLimit > 0 ? rawLimit : undefined;
+  const data = await listNotificationHandoffs({ dbPath: config.dbPath, limit });
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/notification-handoffs/retry", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateNotificationHandoffRetryPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const handoffId = validation.data.handoffId;
+
+  const result = await retryNotificationHandoff({
+    dbPath: config.dbPath,
+    handoffId,
+    enqueue: ({ entityType, entityId, providers }) => enqueueNotificationDeliveries({ entityType, entityId, providers })
+  });
+  if (result.status === "missing") {
+    return sendError(res, 404, "NOT_FOUND", "补偿记录不存在");
+  }
+  if (result.persisted === false) {
+    logger.error({
+      event: "notification.handoff.persistence.error",
+      handoffId,
+      status: result.status
+    }, "notification handoff state was not persisted");
+  }
+  if (result.status === "resolved" && !result.replayed) {
+    processNotificationOutbox().catch((error) => {
+      logger.error({
+        event: "notification.worker.error",
+        error: sanitizeNotificationError(error)
+      }, "notification worker failed");
+    });
+  }
+  return res.json({
+    ok: true,
+    data: {
+      handoffId: result.handoffId,
+      status: result.status,
+      attempts: result.attempts,
+      persisted: result.persisted !== false
+    }
+  });
 }));
 
 app.post("/api/admin/feedback/list", requireAdminSession, asyncHandler(async (req, res) => {

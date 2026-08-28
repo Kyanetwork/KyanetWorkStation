@@ -8,6 +8,7 @@ Thumbs.db
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.jsonl
 backups/*.db
 backups/*.gz
 # Internal deployment notes may contain real hosts, credentials, or topology.

@@ -346,6 +346,14 @@ function validateDeletePayload(payload) {
   return { valid: true, data: { id } };
 }
 
+function validateNotificationHandoffRetryPayload(payload) {
+  const handoffId = normalizeString(payload.handoffId);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(handoffId)) {
+    return { valid: false, message: "handoffId 不合法" };
+  }
+  return { valid: true, data: { handoffId } };
+}
+
 function parseBooleanLike(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") {
@@ -437,6 +445,16 @@ function validateStatusProfileSettingsPayload(payload) {
   if (apiBaseUrl && !SIMPLE_URL_PATTERN.test(apiBaseUrl)) {
     return { valid: false, message: "apiBaseUrl 必须是 http/https 地址" };
   }
+  if (apiBaseUrl) {
+    try {
+      const parsedUrl = new URL(apiBaseUrl);
+      if (parsedUrl.username || parsedUrl.password) {
+        return { valid: false, message: "apiBaseUrl 不得包含账号或密码" };
+      }
+    } catch (_) {
+      return { valid: false, message: "apiBaseUrl 必须是 http/https 地址" };
+    }
+  }
 
   return {
     valid: true,
@@ -479,6 +497,7 @@ module.exports = {
   validateWorktaskStatusPayload,
   validateWorktaskArrangePayload,
   validateDeletePayload,
+  validateNotificationHandoffRetryPayload,
   validateHomeDisplayPayload,
   validateNoteReplyPayload,
   validateSmtpTestPayload,

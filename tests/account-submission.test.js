@@ -5,6 +5,7 @@ const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const BetterSqlite3 = require("better-sqlite3");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const APP_PATH = path.join(ROOT_DIR, "server", "app.js");
@@ -40,7 +41,7 @@ async function waitForHealth(baseUrl, child, output) {
   throw new Error(`KWS server did not become healthy: ${lastError && lastError.message}\n${output.join("")}`);
 }
 
-async function startKwsServer() {
+async function startKwsServer(overrides = {}) {
   const port = await getFreePort();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-api-smoke-"));
   const dbPath = path.join(tempDir, "workstation.db");
@@ -65,7 +66,8 @@ async function startKwsServer() {
     WEBHOOK_ENABLED: "false",
     RATE_LIMIT_SUBMIT_MAX: "1000",
     RATE_LIMIT_LOGIN_MAX: "1000",
-    RATE_LIMIT_ADMIN_MAX: "1000"
+    RATE_LIMIT_ADMIN_MAX: "1000",
+    ...overrides
   };
   const child = spawn(process.execPath, [APP_PATH], {
     cwd: ROOT_DIR,
@@ -83,6 +85,7 @@ async function startKwsServer() {
   }
   return {
     baseUrl,
+    dbPath,
     stop: async () => {
       if (child.exitCode === null) {
         child.kill();
@@ -179,6 +182,17 @@ test("匿名 API、Account 下线、公开 DTO 和 WorkTask 清空流程可重�
     const adminCookie = cookieFrom(login.response, "kws_sid");
     const headers = { cookie: adminCookie };
 
+    const handoffs = await requestJson(server.baseUrl, "/api/admin/notification-handoffs", { headers });
+    assert.equal(handoffs.response.status, 200);
+    assert.deepEqual(handoffs.data.data, []);
+    const missingHandoffRetry = await requestJson(server.baseUrl, "/api/admin/notification-handoffs/retry", {
+      method: "POST",
+      headers,
+      body: { handoffId: "00000000-0000-0000-0000-000000000000" }
+    });
+    assert.equal(missingHandoffRetry.response.status, 404);
+    assert.equal(missingHandoffRetry.data.error.code, "NOT_FOUND");
+
     const feedbackList = await requestJson(server.baseUrl, "/api/admin/feedback/list", {
       method: "POST",
       headers,
@@ -253,6 +267,53 @@ test("匿名 API、Account 下线、公开 DTO 和 WorkTask 清空流程可重�
     assert.equal(arrangedItem.scheduledAt, "");
     assert.equal(arrangedItem.status, "scheduled");
   } finally {
+    await server.stop();
+  }
+});
+
+test("通知 outbox 入队异常会留下可查询的脱敏 handoff 记录", async () => {
+  const server = await startKwsServer({
+    SMTP_ENABLED: "true",
+    SMTP_HOST: "smtp.example.test",
+    SMTP_FROM: "noreply@example.test",
+    SMTP_TO: "ops@example.test"
+  });
+  let brokenDb = null;
+  try {
+    brokenDb = new BetterSqlite3(server.dbPath);
+    brokenDb.exec("DROP TABLE notification_delivery");
+    brokenDb.close();
+    brokenDb = null;
+
+    const feedback = await requestJson(server.baseUrl, "/api/feedback", {
+      method: "POST",
+      body: feedbackPayload("outbox handoff")
+    });
+    assert.equal(feedback.response.status, 201);
+
+    const login = await requestJson(server.baseUrl, "/api/admin/login", {
+      method: "POST",
+      body: { username: "admin", password: "admin-password" }
+    });
+    const handoffs = await requestJson(server.baseUrl, "/api/admin/notification-handoffs", {
+      headers: { cookie: cookieFrom(login.response, "kws_sid") }
+    });
+    assert.equal(handoffs.response.status, 200);
+    assert.equal(handoffs.data.data.length, 1);
+    assert.equal(handoffs.data.data[0].status, "pending");
+    assert.deepEqual(handoffs.data.data[0].providers, ["smtp"]);
+    assert.doesNotMatch(JSON.stringify(handoffs.data), /smtp\.example|ops@example|admin-password|outbox handoff/iu);
+
+    const retry = await requestJson(server.baseUrl, "/api/admin/notification-handoffs/retry", {
+      method: "POST",
+      headers: { cookie: cookieFrom(login.response, "kws_sid") },
+      body: { handoffId: handoffs.data.data[0].handoffId }
+    });
+    assert.equal(retry.response.status, 200);
+    assert.equal(retry.data.data.status, "retrying");
+    assert.equal(retry.data.data.attempts, 1);
+  } finally {
+    if (brokenDb) brokenDb.close();
     await server.stop();
   }
 });
