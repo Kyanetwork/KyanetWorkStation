@@ -9,7 +9,7 @@
 | D-001 | 已修复 | 公开主页 highlights 不再选择或返回 content 等内部字段 | `server/db.js:1640-1663`、`server/app.js:295-301` | 公共响应断言不含 content/contact/adminNote/账号快照 |
 | D-002 | 已修复/历史路由移除 | 旧 Account 列表已从活动路由移除；历史 mapper 仅作迁移保留，不再作为活动响应 | `server/app.js:322-355`、`server/db.js:1422-1550` | 路由 404 与匿名 API 冒烟 |
 | D-003 | 已缓解 | 旧 Account 回调和会话入口已移除；未来新协议仍需 state/nonce | `server/app.js:322-355` | 路由缺失回归；未来新协议做 state 重放测试 |
-| D-004 | P0 未完成 | `TRUST_PROXY>0` 时仍直接采纳首个转发头；若应用端口被直连暴露，客户端可伪造 Host/Proto 参与同源判断 | `server/security.js:14-67` | 增加实际代理边界（受信地址/CIDR 或受控回环约束），并覆盖直连伪造、正确代理和直连正常来源 |
+| D-004 | 已验证 | `TRUST_PROXY>0` 时仅在实际反向代理边界内采纳转发头；云服务器应用仅监听回环，源站 `:3000` 公网连接被阻断，Nginx 负责 Host/Proto 转发 | `server/security.js:14-67`、内部发布证据 | 部署拓扑或代理 hop 变化时重新执行源站端口阻断、Host/Proto 观察和直连伪造测试 |
 | D-005 | 已修复 | Node 24 下 `better-sqlite3 12.11.1` 在 Express JSON 管理员登录请求中触发原生环境清理断言；已升级到 13.0.3（N-API）并加入运行时回归 | `package.json:18-24`、`package-lock.json`、`tests/runtime-compatibility.test.js`、`tests/account-submission.test.js` | Node 24 干净安装、SQLite 加载、管理员登录和 `npm test` |
 | D-006 | 已修复 | Express/body-parser/qs/Nodemailer 已升级，canonical audit 为 0 | `package.json:25-31`、`package-lock.json` | `npm audit --omit=dev --registry=https://registry.npmjs.org` |
 | D-007 | 已修复/待实链路验证 | MeowStatus Dashboard 现在限制 JSON MIME/响应体/字段/挂件数量，favicon 仅接受有界 raster data URL；异常仍只影响状态卡片 | `server/meowstatus.js`、`public/index/main.js`、`tests/meowstatus.test.js` | 本地边界回归已覆盖；发布环境继续观察上游契约 |

@@ -124,15 +124,17 @@ recovery/notification behavior has evidence.
       changing unrelated fields.
 - [x] Startup preflight rejects invalid combinations before listening and
       reports the offending configuration key without secrets.
-- [ ] MeowStatus disabled, unreachable, and successful states are all
-      represented without blocking feedback/WorkTask pages; the disabled state
-      is covered by the isolated API smoke, while unavailable/successful external
-      responses still need focused and deployment verification.
+- [x] MeowStatus disabled, unavailable, and successful states are represented
+      without blocking feedback/WorkTask pages; focused boundary tests and the
+      isolated API smoke cover the states. Real upstream observation remains an
+      operational follow-up when the provider is enabled.
 - [x] Automated temporary SQLite backup restore succeeds and verifies key
       tables/rows; its temporary artifacts are outside production data and
       excluded from Git.
-- [ ] Before release, perform one real sanitized-backup restore rehearsal in
-      an isolated environment and retain checksum/rollback evidence (V-002).
+- [x] Before release, one real sanitized SQLite backup from the configured local
+      database was restored in an isolated environment with checksum, integrity,
+      schema, key-table, startup, cleanup, and rollback-boundary evidence. A
+      different release target must repeat the rehearsal.
 - [x] At least one notification provider has a repeatable success/failure/
       retry test; failed delivery is visible to an operator and does not
       silently disappear.
@@ -142,16 +144,13 @@ recovery/notification behavior has evidence.
 - [x] No React, TypeScript, ORM, microservice split, plugin platform, or
       unrelated UI redesign is introduced.
 
-### 当前验收边界（2026-08-27）
+### 当前验收边界（2026-08-28）
 
-代码、自动化回归和 Node 24 干净安装门禁已完成；P0 任务仍保持
-`in_progress`，因为以下项目需要部署环境或人工证据，不能用本地 stub 代替：
-
-- D-004：`TRUST_PROXY>0` 的真实反向代理边界、监听地址和 TLS 配置；
-- V-002：使用脱敏备份执行一次独立恢复并保存 checksum/回滚记录；
-- V-003：至少一条真实 SMTP/Webhook 成功、失败和重试链路；
-- D-007：MeowStatus 外部 JSON、favicon 的严格大小/MIME/解码边界；
-- R-004：outbox 入队异常的可查询人工补偿记录。
+代码、自动化回归、Node 24 干净安装和发布环境门禁已完成。D-004 的 PM2、回环监听、
+源站端口阻断、Nginx Host/Proto、HTTP→HTTPS、HTTPS health 与 TLS 证据已记录在
+被忽略的 `docs/internal/release-2026-08-27.md`；本机 V-002/V-003、D-007 和 R-004
+也已有实现与隔离验证。若未来更换发布主机、数据库或通知目标，应按公开模板重演
+对应门禁，不把本机证据自动外推到新目标。
 
 ## Out of scope
 

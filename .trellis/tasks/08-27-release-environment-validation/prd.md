@@ -71,12 +71,13 @@ Node.js + Express + 原生静态前端 + SQLite/MySQL/PostgreSQL 基本架构的
 ## Acceptance Criteria
 
 - [x] 发布验证模板可由操作者按步骤填写，且公开仓库不包含真实环境值。
-- [ ] D-004 的代理来源、监听地址、TLS 和直连伪造测试有真实部署证据，或记录明确
-      的责任人/前置条件/阻塞原因。
+- [x] D-004 的代理来源、监听地址、TLS 和直连伪造测试已有真实部署证据；PM2
+      重启恢复、回环监听、源站 `:3000` 公网阻断、Nginx Host/Proto 转发、HTTP→HTTPS
+      和 HTTPS health 均已记录。直连伪造请求在网络层被阻断，未伪称应用层 403。
 - [x] V-002 已使用 `.env` 指向的真实本机 SQLite 生成脱敏副本，并在独立临时路径完成 checksum、schema、关键表读取、应用启动和清理；本机未执行上一版本回滚，发布到其他数据库/主机时仍需按模板重演备份与回滚。
 - [x] V-003 已使用 `.env` 中真实 SMTP 与 Feishu provider 完成成功发送，并在隔离不可达目标完成失败、有限重试、重启恢复和管理员人工重试；日志与 outbox 查询未泄露秘密。
 - [x] D-007 与 R-004 有实现、回归测试和运维文档，并继续在路线图/缺陷表保持可追踪。
-- [x] `npm test`（63/63）、`npm audit --omit=dev --registry=https://registry.npmjs.org`、
+- [x] `npm test`（69/69）、`npm audit --omit=dev --registry=https://registry.npmjs.org`、
       JavaScript 语法检查和 Trellis 校验继续通过。
 
 ## Confirmed scope decision

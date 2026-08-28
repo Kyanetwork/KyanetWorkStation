@@ -234,10 +234,9 @@ WorkTask/API 测试。
 - [x] 同步 `docs/api/reference.md`、`docs/architecture/current.md`、
       `docs/architecture/integration-boundaries.md`、配置/部署/安全/观测、
       发布门禁、路线图和缺陷表，区分已实现、验证中、计划和暂缓。
-- [ ] 在发布门禁记录实际 Node/npm、数据库类型、Git 提交、测试命令/结果、
-      真实恢复 checksum 和通知链路；不写真实主机、凭据、用户数据或完整
-      外部响应。自动化恢复测试结果已在 `docs/testing/release-checklist.md`
-      中记录，不能替代 V-002 的真实脱敏备份演练。
+- [x] 已在被忽略的发布门禁记录中记录实际 Node/npm/ABI、数据库类型摘要、测试
+      命令/结果、真实恢复 checksum、通知链路和云服务器 D-004 证据；未写入真实
+      主机、凭据、用户数据或完整外部响应。目标环境变更时按模板重演 V-002/V-003。
 - [x] 复查 Account 未来边界仍要求 state/nonce、一次性回调、DTO 分离、历史
       匿名不自动认领和凭据隔离；不把未来协议实现混入 P0。
 

@@ -22,7 +22,7 @@ P2 Kanban/项目管理 + 用户侧/运维侧 AI + 新 Account 联动
 
 ### P0-2 `p0-privacy-security-boundary`（代码边界已执行）
 
-修复公共 highlights 和历史 Account 列表的 DTO 泄露，补齐直连伪造转发头回归、WorkTask 安排中清空负责人/计划时间语义，记录未来 Account state/nonce 要求，并补回归测试。D-007 的 MeowStatus 外部响应和 favicon 严格大小/MIME 边界已在当前子任务完成本地实现；真实反向代理边界仍是发布门禁 D-004。
+修复公共 highlights 和历史 Account 列表的 DTO 泄露，补齐直连伪造转发头回归、WorkTask 安排中清空负责人/计划时间语义，记录未来 Account state/nonce 要求，并补回归测试。D-007 的 MeowStatus 外部响应和 favicon 严格大小/MIME 边界已完成本地实现；D-004 的真实反向代理边界已在当前云服务器发布中验证，拓扑变化时按发布模板重演。
 
 ### P0-3 `p0-runtime-test-baseline`（本任务已执行）
 
@@ -30,7 +30,7 @@ P2 Kanban/项目管理 + 用户侧/运维侧 AI + 新 Account 联动
 
 ### P0-4 `p0-operations-reliability`（代码基础能力已执行，发布证据待补）
 
-增加配置启动自检、MeowStatus 显式启用策略、隔离 SQLite 备份恢复自动演练、通知持久化投递状态/人工重试、outbox 入队失败 handoff、日志轮转和统一发布门禁。真实备份恢复、SMTP/Webhook、代理/TLS 和密钥检查仍需部署环境证据。
+增加配置启动自检、MeowStatus 显式启用策略、隔离 SQLite 备份恢复自动演练、通知持久化投递状态/人工重试、outbox 入队失败 handoff、日志轮转和统一发布门禁。本机真实备份/通知链路与当前云服务器代理/TLS 门禁已有记录；若发布目标或 provider 变更，必须按模板重演对应证据。
 
 ### P0 退出条件
 
