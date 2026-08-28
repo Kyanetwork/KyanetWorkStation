@@ -21,11 +21,11 @@
 | SQLite/MySQL/PostgreSQL | 已实现/P0 加固 | `server/db.js:1-14,158-429`；需匹配 Node 原生模块 ABI |
 | 备份脚本 | 已实现/P0 加固 | `scripts/backup-db*`、`scripts/verify-sqlite-backup.js`；恢复演练仍需真实证据 |
 | 旧 KyanetAccount 联动 | 已移除/数据保留 | 活动路由和提交 gating 已移除；历史 schema/数据待独立迁移 |
-| 统一 Workstation 首页 | P1 计划 | 统一摘要、收件箱和快捷入口 |
+| 统一 Workstation 首页 | 已实现/P1 | `public/index.html`、`public/index/main.js`；提供反馈、WorkTask、公开进展和服务状态入口 |
 | 我的提交/任务安全视图 | P1 计划 | 只返回安全 DTO，不能包含内部备注 |
-| 服务状态卡片与适配器边界 | P1 计划 | 先复用 MeowStatus，不建设通用插件平台 |
-| 管理员 AI Copilot | P1 计划 | 摘要、分类、优先级、相似条目、回复草稿 |
+| 服务状态卡片与适配器边界 | 已实现/P1 | `server/meowstatus.js`、`public/index/main.js`；当前仅复用 MeowStatus，不建设通用插件平台 |
+| 管理员 AI Copilot | 已实现/P1 | 默认关闭；多 profile 单 active 热切换；OpenAI Chat/Responses、Anthropic Messages；摘要、分类、优先级、标签、相似条目和回复草稿；建议仅供人工确认 |
 | Kanban、子任务、里程碑 | P2 计划 | 依赖 P1 工作收件箱稳定 |
-| 用户侧/运维侧 AI | P2 计划 | 依赖 Provider、脱敏和权限边界 |
+| 用户侧/运维侧 AI | P2 计划 | 依赖 Provider、脱敏和权限边界；当前不开放 |
 | 新 KyanetAccount 联动 | P2/独立计划 | 未来按新协议设计，不自动认领历史匿名记录 |
 | 原生文件上传、实时聊天、多租户、复杂 RBAC | 暂缓 | 当前不满足规模和维护成本目标 |

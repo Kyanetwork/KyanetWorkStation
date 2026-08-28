@@ -2,12 +2,14 @@
 
 KyanetWorkStation 是面向个人和小团队的轻量自托管工作中枢：把反馈、WorkTask、处理进展和服务状态放在一个低维护成本的入口中，并逐步增加可控的 AI 辅助。
 
-当前实现仍以反馈和任务收集为核心。Workstation 首页、统一工作收件箱和 AI Copilot 属于已确认的后续路线，不应视为已经完成的功能。
+当前实现已包含公开 Workstation 入口、管理员工作收件箱、MeowStatus 服务状态卡片和默认关闭的管理员 AI Copilot；更深的个人工作区、项目管理和账号联动仍按路线图推进。
 
 ## 当前能力
 
 - 反馈与 WorkTask 提交、状态流转、分页筛选和 CSV 导出
 - 管理员后台、主页处理进展、备注与对外回复
+- 统一 Workstation 公开入口、管理员工作收件箱和 MeowStatus 服务状态卡片
+- 管理员 AI Copilot：多 Provider profile 单 active 热切换、脱敏建议和人工确认（默认关闭）
 - SMTP/Webhook 通知及管理端测试入口；outbox 入队异常可通过私有 handoff 查询和人工补偿
 - MeowStatus/Minecraft 状态展示（外部响应、字段和 favicon 有界）
 - SQLite、MySQL、PostgreSQL 数据库驱动
@@ -70,7 +72,7 @@ MeowStatus 是可选外部服务，默认由 `MEOWSTATUS_ENABLED=false` 关闭�
 - 当前反馈和 WorkTask 支持匿名提交；匿名模式不提供历史查询，未来 Account 重构后再评估账号绑定。
 - 当前没有原生图片上传，反馈中的图片以文本链接为主。
 - 当前管理模型仍以单管理员为主，暂不承诺复杂 RBAC、多租户或组织架构。
-- 统一 Workstation 首页、工作收件箱、Kanban、AI 和更多服务聚合均按路线图分阶段推进。
+- 个人提交/任务历史视图、Kanban、更多服务聚合和用户侧/运维侧 AI 仍按路线图分阶段推进。
 - KyanetAccount 旧 schema/会话遗留仅用于迁移保留，不应成为新功能依赖。
 
 ## 开发命令

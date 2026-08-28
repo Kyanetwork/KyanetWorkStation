@@ -61,6 +61,18 @@
 
 MeowStatus 由 `MEOWSTATUS_ENABLED=false` 全局关闭时不会发起外部请求，公共接口返回 `state=disabled`，反馈和 WorkTask 不依赖其可用性。只有全局门开启且管理页对应卡片启用时才会访问外部 API；不可达时返回 `state=unavailable`，不阻塞核心业务。
 
+## 管理员 AI Copilot
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `AI_COPILOT_ENABLED` | `false` | AI 建议总开关；关闭时不发起 Provider 请求，基础业务继续可用 |
+| `AI_PROFILE_ENCRYPTION_KEY` | 空 | 32 字节随机主密钥的 64 位十六进制值；启用 AI 时必填，独立于数据库备份保管 |
+
+Provider profile（名称、协议、Base URL、模型和 API Key）在管理员面板保存。API Key 使用
+AES-256-GCM 加密写入 `workstation_setting`，列表只显示掩码；OpenAI-compatible 使用
+Bearer，Anthropic 使用 `x-api-key` 和固定版本头。最多保存 8 个 profile，但只有一个
+active profile。完整启停、备份和轮换流程见 [AI Copilot 运维手册](ai-copilot.md)。
+
 ## 备份
 
 | 变量 | 默认值 | 说明 |

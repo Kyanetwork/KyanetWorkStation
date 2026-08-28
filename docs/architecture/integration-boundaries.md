@@ -7,6 +7,7 @@
 | MeowStatus | 服务状态卡片数据源 | KWS → MeowStatus API | 超时/不可达时返回可展示错误，不阻塞主页其他内容 | 通过服务卡片适配器扩展，不先做插件市场 |
 | SMTP | 新反馈/任务通知 | KWS → SMTP | 写入 outbox 后有界重试；失败可查询和人工重试 | 凭据只进程环境，测试入口限管理员 |
 | Webhook | 机器人通知 | KWS → 配置的 Webhook | 写入 outbox 后按 provider 处理；失败可查询和人工重试 | URL/签名/响应体不得进入公开日志 |
+| AI Provider | 管理员主动建议 | KWS → 当前 active profile | 超时、限流、无效响应时只返回有界错误；核心业务继续可用 | 固定协议适配、最小字段出站、密钥密文存储；不自动写业务或通知 |
 | 反向代理 | TLS、域名和公网入口 | 代理 → KWS | 代理健康检查失败由部署系统处理 | 仅信任显式配置的转发头 |
 | 旧 KyanetAccount | 活动路径已移除、数据保留 | 历史票据/策略/用户快照 | 不恢复入口，等待独立迁移 | 未来独立重构，不迁移历史匿名归属 |
 
@@ -35,3 +36,13 @@
 ## 聚合原则
 
 聚合层只协调读取和展示，不拥有外部服务的业务真相。外部服务的写操作必须有独立授权、审计和人工确认；当前 Workstation 仅做读取状态和向已配置通知目标发送事件。
+
+## AI Provider 适配边界
+
+- `openai-chat` 用于 OpenAI 官方及 OpenAI-compatible 中转站，也覆盖 DeepSeek、GLM/Z.ai
+  等兼容端点；`openai-responses` 和 `anthropic-messages` 使用各自请求/响应格式。
+- Base URL、模型和 API Key 由管理员 profile 提供。认证头由服务端固定生成，不接受任意
+  自定义 Header；API Key 以 AES-256-GCM 密文保存，浏览器只收到掩码。
+- 每次建议只发送实体类型、标题、正文及必要工作字段；不发送联系方式、管理员备注、
+  账号快照、会话/Token、通知载荷或图片原文。Provider 输出经 schema 校验后保存为 7 天
+  候选，接受/拒绝不会替代现有业务操作。

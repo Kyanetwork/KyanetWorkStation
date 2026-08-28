@@ -17,6 +17,10 @@
 | D-009 | 已修复 | WorkTask arrange 支持显式清空负责人/计划时间 | `server/validation.js:293-338`、`server/db.js:1584-1626` | clear/unassign 语义测试 |
 | D-010 | 已修复 | 旧版 SQLite 缺少 `account_*` 列时，初始化先创建依赖列的索引，导致启动失败 | `server/db.js`、`tests/backup-sqlite.test.js` | 旧 schema 补列后再建索引；保留既有数据 |
 | D-011 | 已修复/待并发实链路验证 | 多进程初始化可能同时尝试补建 `account_*` 列/索引，后到进程把并发重复对象误判为启动失败 | `server/db.js`、`tests/backup-sqlite.test.js` | DDL 失败后复查对象；本地重复初始化/既有数据/索引目标已回归，部署时仍观察多进程启动 |
+| AI-D001 | 已修复/待真实 Provider 验证 | 缺少统一多协议 Provider 契约，业务路由无法安全接入不同 AI 端点 | `server/ai-provider.js`、`tests/ai-provider.test.js` | 本地 stub 已覆盖 Chat/Responses/Anthropic；真实 Provider 只在受控环境按运维手册验证 |
+| AI-D002 | 已修复 | AI 出站缺少字段 allow-list、超时、响应大小和并发边界 | `server/ai-copilot.js`、`server/ai-provider.js`、`tests/admin-ai.test.js` | 12 KiB 输入、32 KiB 响应、15 秒超时、2 并发和 10/5 分钟限流已有回归 |
+| AI-D003 | 已修复/待密钥轮换演练 | Provider Key 不能明文持久化或回显，且需要唯一 active profile | `server/ai-profiles.js`、`tests/ai-profiles.test.js`、`tests/ai-profile-api.test.js` | AES-GCM、掩码、热切换和删除 active 已覆盖；轮换仍需受控脚本与备份演练 |
+| AI-D004 | 已修复 | 缺少可过期、可查询、可人工决策的建议候选记录 | `server/db.js`、`server/ai-copilot.js`、`tests/ai-db.test.js`、`tests/admin-ai.test.js` | 7 天过滤、接受/拒绝审计和业务表不变已有回归 |
 
 ## 高概率风险
 
@@ -38,3 +42,4 @@
 | V-004 | 已解决 | 缺少真实浏览器 UI 回归 | 本次 P1 已完成四页亮/暗主题、620px 窄屏、键盘焦点、登录/收件箱/筛选/展开/退出冒烟；管理员初始 401 为预期未登录探测 |
 | V-005 | P1 | MySQL/PostgreSQL 只有脚本参数测试，缺少真实集成 | 选择性加入 CI/预发布矩阵 |
 | V-006 | 已解决 | README/旧文档遗漏 MeowStatus 路由和配置 | 已补齐 README、API、配置和状态说明；后续改动继续以对应权威文档同步 |
+| V-007 | 本机已完成/发布目标待重演 | AI profile、Provider 适配、建议审计和管理员 HTTP 链路缺少真实上游验证 | `tests/ai-provider.test.js`、`tests/admin-ai.test.js` 使用本地 stub；真实 Key/响应未写入仓库 | 在明确授权且使用脱敏内部记录的受控环境验证目标 Provider；AI 失败与关闭状态仍需保持核心业务可用 |

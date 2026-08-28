@@ -1,10 +1,10 @@
-# 外部状态、通知补偿与备份验证边界
+# 外部状态、通知补偿、备份验证与 AI Provider 边界
 
 ## 1. Scope / Trigger
 
-本规范适用于 MeowStatus 外部 Dashboard/favicon、通知 outbox 入队 handoff，以及
-SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数据库、API 和静态前端，
-必须在边界处限制大小、字段和错误可见性。
+本规范适用于 MeowStatus 外部 Dashboard/favicon、通知 outbox 入队 handoff、SQLite
+发布前隔离备份验证和管理员 AI Provider。它们同时跨越外部输入、文件/数据库、API
+和静态前端，必须在边界处限制大小、字段和错误可见性。
 
 ## 2. Signatures
 
@@ -15,6 +15,9 @@ SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数
 - `retryNotificationHandoff({ dbPath, handoffId, enqueue }) -> Promise<HandoffResult>`
 - `validateNotificationHandoffRetryPayload(payload) -> { valid, data?, message? }`
 - `node scripts/verify-sqlite-backup.js --backup <file.db|file.db.gz> -> JSON evidence`
+- `requestProviderSuggestion({ profile, prompt, requestId, signal, fetchImpl }) -> Promise<{ text, usage, providerRequestId }>`
+- `parseSuggestionText(text) -> SuggestionPayload`
+- `buildCopilotInput(entityType, record) -> { entityType, id, type, title, content, status, priority?, expectedAt?, tags? }`
 
 ## 3. Contracts
 
@@ -51,6 +54,25 @@ SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数
 - 输出不得包含完整路径、行内容、数据库 URL 或凭据；本地脚本成功不等于真实发布
   备份恢复已完成。
 
+### AI Provider 与 Copilot
+
+- profile 只允许 `openai-chat`、`openai-responses`、`anthropic-messages`；认证头由协议
+  固定生成，不接受页面传入的任意 Header。Base URL 必须是绝对 `http/https` 地址，不能
+  包含 userinfo、query 或 fragment；否则在验证层返回 `INVALID_PAYLOAD`。
+- API Key 只在服务端短暂内存路径出现，持久化为 `AI_PROFILE_ENCRYPTION_KEY` 保护的
+  AES-256-GCM 封装；列表只能返回 `keyConfigured`/掩码。AI 默认关闭，主密钥不可用时
+  只返回 `AI_UNAVAILABLE`/`AI_KEY_UNAVAILABLE`，不阻塞普通业务。
+- Provider 出站输入只能来自 `buildCopilotInput` 的 allow-list，必须包含不可信数据边界；
+  请求超时 15 秒、响应最多 32 KiB、单进程并发最多 2，管理员建议另有 10 次/5 分钟限流。
+  不记录完整 prompt/response、API Key 或带凭据的 URL。
+- Provider 输出先由 `parseSuggestionText` 去 fence、解析、限制长度/枚举并丢弃未知字段；
+  失败映射为 `AI_TIMEOUT`、`AI_PROVIDER_FAILED` 或 `AI_INVALID_RESPONSE`，原始上游正文
+  不可进入日志、数据库或 API 错误。
+- Provider `usage` 缺失或显式为 `null` 时，统一映射为 `inputTokens: null`、
+  `outputTokens: null`；不得把未知用量误报为 `0`。
+- 建议只写入 `ai_copilot_suggestion` 短期候选表；接受/拒绝只更新审计字段，“填入”只
+  修改浏览器表单，状态、删除、公开回复和通知必须继续走现有人工确认接口。
+
 ## 4. Validation & Error Matrix
 
 | 条件 | 结果 |
@@ -64,6 +86,9 @@ SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数
 | handoff 状态 resolved | 不重新入队，返回 resolved 结果 |
 | handoff 入队重试失败 | 追加 retrying/failed 与次数和脱敏错误 |
 | SQLite 备份扩展名未知、损坏、缺关键表或 integrity 失败 | CLI 非 0，错误不含路径/秘密 |
+| AI profile Base URL 含 query/fragment/userinfo 或协议未知 | 验证返回 `INVALID_PAYLOAD`，不发起外部请求 |
+| AI 开关关闭、无 active profile 或主密钥无法解密 | 返回 `AI_UNAVAILABLE`/`AI_KEY_UNAVAILABLE`，普通 API 继续工作 |
+| Provider 超时、非 2xx、超大响应或无效 JSON | 映射到有界 AI 错误码，不保存建议，不记录原始正文 |
 
 ## 5. Good / Base / Bad Cases
 
@@ -72,7 +97,11 @@ SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数
 - Base：MeowStatus/SMTP/Webhook 关闭时核心提交成功，不生成无意义 handoff；SQLite
   合成备份在临时只读连接通过完整性检查。
 - Bad：把上游原始对象、favicon SVG、Webhook URL、收件人/正文或数据库路径写入
-  公共响应、日志或 handoff；用 stub 或 CLI 退出 0 冒充真实代理/备份/通知证据。
+  公共响应、日志或 handoff；把 API Key 放进 URL query；用 stub 或 CLI 退出 0 冒充
+  真实代理/备份/通知证据。
+- Good AI：只使用固定协议认证和无 query 的 Base URL，最小化投影后调用 Provider，
+  无效输出被丢弃并保留可审计的短期候选状态。
+- Bad AI：把自定义 Header、联系方式、管理员备注或完整 Provider 响应直接转发给浏览器。
 
 ## 6. Tests Required
 
@@ -84,6 +113,9 @@ SQLite 发布前隔离备份验证。它们同时跨越外部输入、文件/数
   重试 envelope 断言。
 - `tests/backup-sqlite.test.js`：`.db.gz` hash/integrity/schema/关键表计数、损坏 gzip、
   缺表和未知扩展名非 0 断言。
+- `tests/validation.test.js`、`tests/ai-profiles.test.js`、`tests/ai-provider.test.js`、
+  `tests/ai-copilot.test.js`、`tests/admin-ai.test.js`：Base URL query 拒绝、协议认证、
+  脱敏投影、大小/超时/并发、输出 schema、未知 usage、短期候选和人工决策边界。
 - 发布前人工记录 D-004/V-002/V-003 的真实代理、脱敏备份和 SMTP/Webhook 证据；自动
   测试不得被描述为真实环境证据。
 
@@ -111,6 +143,20 @@ catch (error) {
   logger.error({ error: error.message });
   return [];
 }
+```
+
+### Wrong AI URL
+
+```js
+const url = `${baseUrl}/chat/completions?api_key=${apiKey}`;
+```
+
+### Correct AI URL
+
+```js
+// baseUrl 已在验证层拒绝 query/fragment/userinfo；密钥只放协议固定的请求头。
+const url = `${baseUrl}/chat/completions`;
+const headers = { Authorization: `Bearer ${apiKey}` };
 ```
 
 ### Correct

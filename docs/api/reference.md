@@ -38,6 +38,28 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/notify/smtp-test` | 发送 SMTP 测试邮件 |
 | `POST /api/admin/notify/webhook-test` | 发送 Webhook 测试消息 |
 
+### 管理员 AI Copilot
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /api/admin/ai/status` | 读取 AI 开关、可用性、active profile 和掩码 profile 列表 |
+| `POST /api/admin/ai/profiles` | 新建或更新 Provider profile；更新时 `key` 为空表示保留原密文 |
+| `POST /api/admin/ai/profiles/active` | 设置或清空唯一 active profile |
+| `POST /api/admin/ai/profiles/delete` | 删除 profile；删除 active 后不会自动切换 |
+| `POST /api/admin/ai/suggest` | 针对一条 `feedback` 或 `worktask` 生成短期建议 |
+| `GET /api/admin/ai/suggestions` | 按 `entityType`、`entityId` 查询未过期建议 |
+| `POST /api/admin/ai/suggestions/decision` | 接受/拒绝候选字段并记录管理员审计，不改业务表 |
+
+Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
+`anthropic-messages`。前者覆盖 OpenAI 官方、兼容中转站、DeepSeek 与 GLM/Z.ai；
+认证头由协议固定生成，不接受任意自定义 Header。API Key 永不出现在响应、日志或浏览器
+存储中。
+
+建议请求字段为 `{ entityType, entityId }`；返回值包含 `suggestion`、`similarItems`、
+`provider`、`generatedAt`、`expiresAt` 和有界 `usage`。出站输入只包含标题、正文和必要
+工作字段，不包含联系方式、管理员备注、账号快照或通知载荷。接受/拒绝只更新
+`ai_copilot_suggestion`，管理员仍须使用原有接口保存业务字段。
+
 ## 反馈管理
 
 | 方法与路径 | 用途 |
@@ -85,4 +107,4 @@ handoff 列表只返回 `handoffId`、`eventId`、业务类型/ID、`providers`�
 
 ## 错误与分页
 
-常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE` 和 `RATE_LIMITED`。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。
+常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE` 和 `RATE_LIMITED`。AI 路由另有 `AI_UNAVAILABLE`、`AI_KEY_UNAVAILABLE`、`AI_BUSY`、`AI_RATE_LIMITED`、`AI_TIMEOUT`、`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`、`AI_PROFILE_CONFLICT` 和 `AI_SUGGESTION_CONFLICT`；AI 不可用时普通提交、列表和通知流程继续工作。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。

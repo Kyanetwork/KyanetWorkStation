@@ -9,6 +9,23 @@
 - 输入有长度和枚举校验，统一错误响应不应返回堆栈给客户端。
 - 请求日志带 request ID，并对 `ticket`、`token`、`secret`、`password` 等查询参数做脱敏。
 
+## AI Copilot 边界
+
+- AI 默认关闭；只有管理员会话可以读取 profile、请求建议或记录决策。建议接口另有
+  10 次/5 分钟限流和单进程 2 个并发上限。
+- 只允许三种固定协议：OpenAI Chat/兼容、OpenAI Responses、Anthropic Messages。
+  认证头由服务端按协议生成，不接受页面传入的任意 Header。
+- API Key 只在提交和单次 Provider 请求的进程内路径出现；持久化时用
+  `AI_PROFILE_ENCRYPTION_KEY` 保护的 AES-256-GCM 密文封装。数据库备份不替代主密钥
+  备份，主密钥丢失时应保持 AI unavailable，不从日志或数据库猜测恢复。
+- Provider 出站只包含实体类型、标题、正文和必要的 WorkTask 字段；联系方式、管理员
+  备注、账号快照、会话/Token、通知载荷和图片原文不出站。模型输出先经过枚举/长度校验，
+  只保存到短期 `ai_copilot_suggestion` 候选记录。
+- 接受/拒绝只记录审计字段；“填入回复”只修改浏览器当前表单，状态、删除、公开回复、
+  SMTP/Webhook 仍必须由管理员通过原有操作明确提交。
+- 日志只记录 request ID、实体、profile/协议/model、耗时、状态和脱敏错误码，不记录
+  API Key、完整 prompt/response 或 Provider query。
+
 ## P0 必须修复或验证
 
 1. 公共 highlights 只返回公开 DTO，禁止返回 content、contact、adminNote 和账号快照。

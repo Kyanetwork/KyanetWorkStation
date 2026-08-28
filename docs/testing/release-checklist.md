@@ -24,7 +24,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`。
 - 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
   干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
-  当前完整测试为 `69/69`。
+  当前完整测试为 `102/102`。
 
 ## 必须覆盖的行为
 
@@ -35,6 +35,9 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - 备份脚本生成有效文件，并能在临时数据库完成 checksum、解压、schema 和关键表读取（`tests/backup-sqlite.test.js`）；本机真实 `.env` 数据库的脱敏隔离演练已记录，发布目标不同仍需重演。
 - SQLite 发布前可使用 `npm run verify-backup:sqlite -- --backup <PRIVATE_BACKUP_PATH>` 在隔离临时路径执行 checksum、`integrity_check` 和关键表摘要；该结果不能替代真实脱敏恢复记录。
 - MeowStatus 不可达、超时和关闭设置时，主页仍能给出可理解状态；上游 Dashboard/MIME/字段/favicon 超限不得阻塞提交。
+- 管理员 AI Copilot 默认关闭；启用时只能使用已配置的单 active profile，API Key 不出现在响应、日志、浏览器存储或备份明文中。
+- AI Provider 出站字段、认证头、超时、响应大小、并发和管理员限流有回归覆盖；AI 超时/不可用时普通提交、列表和通知仍可用。
+- AI 建议只写入短期候选表；接受/拒绝和“填入”不直接改变业务状态、删除记录、发送回复或触发通知。
 - SMTP/Webhook 至少一条链路在测试环境可发送，失败目标能被记录和重试。
 - outbox 入队异常可在私有 `notification-handoff.jsonl` 查询、脱敏并人工重试；journal 不可写时应暂停发布并记录人工补偿。
 
@@ -43,10 +46,11 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 | 门禁 | 证据 | 状态 |
 |---|---|---|
 | 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
-| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：69/69 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：102/102 |
 | 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | canonical registry 当前 0 项 |
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |
+| AI Copilot 边界 | AI profile/API/Provider/Copilot 回归与状态降级 | 本地 stub 与隔离 HTTP 已覆盖；真实 Provider 按运维手册受控验证 |
 | 备份恢复 | `tests/backup-sqlite.test.js` + 临时恢复记录和数据校验 | 本机真实脱敏副本已完成；发布目标不同需按模板重演 |
 | 通知链路 | SMTP/Webhook 测试结果、handoff journal（如触发） | 本机真实 SMTP/Feishu 与隔离重试已完成；目标变更需重新授权和验证 |
 | 代理与 TLS | Nginx/IIS/Caddy 配置测试 | 部署环境执行 |

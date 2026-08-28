@@ -11,6 +11,7 @@ Browser
       -> SQLite / MySQL / PostgreSQL
       -> MeowStatus（可选外部服务）
       -> SMTP/Webhook（可选通知）
+      -> AI Provider（管理员主动请求、可选）
 ```
 
 应用默认监听 `127.0.0.1:3000`，生产部署应由反向代理承接公网连接。PM2 以单实例 fork 模式运行，符合小规模、低资源目标。
@@ -27,6 +28,12 @@ Browser
 
 `server/validation.js` 负责输入规范化和字段长度/枚举校验；`server/security.js` 负责管理写请求的来源和 JSON 类型边界；`server/errors.js` 负责统一错误形状。
 
+管理员 AI Copilot 由三个边界模块组成：`server/ai-profiles.js` 管理最多 8 个 profile、
+唯一 active profile 和 AES-256-GCM 密文；`server/ai-provider.js` 负责 OpenAI Chat/
+Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小限制；
+`server/ai-copilot.js` 负责最小字段投影、相似条目、并发闸门、建议校验和短期候选审计。
+浏览器只收到掩码 profile 和建议 DTO，不接触 Provider Key。
+
 ## 数据层
 
 `server/db.js` 为当前数据访问边界：
@@ -35,6 +42,8 @@ Browser
 - 在各驱动上创建反馈、WorkTask、管理员、会话和设置表。
 - 通过兼容迁移补充主页展示、备注回复、Account 快照等列。
 - 提供分页、关键词、状态/优先级筛选和主页摘要查询。
+- `workstation_setting` 保存非敏感运行设置及 AI profile 元数据/密文；
+  `ai_copilot_suggestion` 保存短期建议、过期时间和人工决策审计。
 
 反馈和 WorkTask 保持独立业务表。未来工作台通过聚合读取层和安全 DTO 组合展示，不直接改变两张表的业务语义。
 
@@ -49,6 +58,8 @@ Browser
 - `server/notify.js` 封装 SMTP。
 - `server/webhook.js` 封装 generic、企业微信、飞书/Lark、钉钉和 Slack 载荷。
 - `server/meowstatus.js` 负责外部 Dashboard 请求、超时、响应体/MIME/字段边界和 favicon 规范化。
+- `server/ai-provider.js` 是唯一的 AI 外部 HTTP 出站边界；AI 失败只返回有界错误，不影响反馈、
+  WorkTask、通知或状态卡片。
 - 通知在业务写入成功后进入 `notification_delivery` outbox；启动及定时 worker 进行有界重试，管理员可查询失败并触发重试。极少数 outbox 入队异常写入同一私有数据目录的 `notification-handoff.jsonl`，由 `server/notification-handoff.js` 提供脱敏查询和人工重新入队，不改变业务写入语义。
 
 ## 启动顺序
@@ -58,3 +69,5 @@ Browser
 ## 数据可见性原则
 
 公共 highlights 只能返回公开标题、状态、公开回复和时间等必要字段；不能返回 content、contact、管理员备注、Account 快照或其他内部字段。管理员接口和未来用户安全视图必须使用明确的 DTO，不把数据库整行直接作为响应。
+
+AI 出站和响应均使用 allow-list；建议不能直接写入业务表、公开回复或通知 outbox。
