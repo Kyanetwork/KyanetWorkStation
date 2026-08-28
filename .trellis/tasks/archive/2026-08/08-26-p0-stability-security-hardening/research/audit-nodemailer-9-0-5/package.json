@@ -1,0 +1,7 @@
+{
+  "name": "audit-nodemailer-9-0-5",
+  "private": true,
+  "dependencies": {
+    "nodemailer": "9.0.5"
+  }
+}
