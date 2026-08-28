@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端修改必须遵循统一校验、API envelope、数据库边界和质量门禁。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"profile 设置和 ai_copilot_suggestion 表需要跨 SQLite/MySQL/PostgreSQL 参数化查询、映射和兼容初始化。"}
+{"file":".trellis/spec/backend/external-boundaries.md","reason":"Provider 是新的外部 HTTP 边界，需要有界响应、超时、错误脱敏和失败降级。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"AI 路由需要复用 sendError、异步传播和稳定错误码，且不能阻塞基础业务。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Provider 请求和 profile 操作的日志必须遵守 requestId、结构化字段和密钥/正文脱敏。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"实现和测试需遵循 Node 24、node:test、原生 SQLite ABI 与跨层质量检查。"}
+{"file":".trellis/spec/frontend/index.md","reason":"管理员静态页面修改需要遵循 DOM/API/主题和无框架边界。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"profile、suggestion 和表单填入状态应保持页面级、禁止 localStorage 持久化业务数据。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"AI 建议渲染需要 escapeHtml、键盘/亮暗主题/窄屏和手动 smoke 检查。"}
+{"file":".trellis/tasks/08-28-p1-admin-ai-copilot/research/provider-protocol-boundaries.md","reason":"Provider 协议、认证、路径和 Node fetch 约束的研究结论。"}

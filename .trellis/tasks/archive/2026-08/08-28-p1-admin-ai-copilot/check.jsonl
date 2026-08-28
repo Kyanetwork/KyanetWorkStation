@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/index.md","reason":"检查后端路由、错误 envelope、数据库和安全边界是否完整。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查三数据库 schema、参数化 SQL、过期清理和 row mapping。"}
+{"file":".trellis/spec/backend/external-boundaries.md","reason":"检查 Provider 出站数据、超时、响应大小和失败降级是否满足边界规范。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查管理员认证、CSRF/JSON middleware、错误码和异步错误传播。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"检查日志没有 API Key、prompt/response、URL query 或完整用户内容。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行全套 Node 24 测试、语法、审计和 ABI 兼容检查。"}
+{"file":".trellis/spec/frontend/index.md","reason":"检查管理员 AI 设置和收件箱交互的 DOM/API 边界。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查动态输出转义、主题、键盘、窄屏和错误状态。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核配置→数据库→Provider→API→静态前端的数据流和失败语义。"}
+{"file":".trellis/tasks/08-28-p1-admin-ai-copilot/research/provider-protocol-boundaries.md","reason":"复核三个协议适配器的请求/响应抽取和兼容性结论。"}
