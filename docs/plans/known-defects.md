@@ -12,7 +12,7 @@
 | D-004 | P0 未完成 | `TRUST_PROXY>0` 时仍直接采纳首个转发头；若应用端口被直连暴露，客户端可伪造 Host/Proto 参与同源判断 | `server/security.js:14-67` | 增加实际代理边界（受信地址/CIDR 或受控回环约束），并覆盖直连伪造、正确代理和直连正常来源 |
 | D-005 | 已修复 | Node 24 与 better-sqlite3 ABI 已匹配 | `package.json:18-24`、`package-lock.json` | ABI 137 加载、干净安装和 npm test |
 | D-006 | 已修复 | Express/body-parser/qs/Nodemailer 已升级，canonical audit 为 0 | `package.json:25-31`、`package-lock.json` | `npm audit --omit=dev --registry=https://registry.npmjs.org` |
-| D-007 | P1 | 外部 data:image favicon 和 Dashboard 响应边界仍需更细的资源限制 | `public/index/main.js:168-170`、`server/meowstatus.js:65-96` | MIME、大小、超时和异常响应测试 |
+| D-007 | 已修复/待实链路验证 | MeowStatus Dashboard 现在限制 JSON MIME/响应体/字段/挂件数量，favicon 仅接受有界 raster data URL；异常仍只影响状态卡片 | `server/meowstatus.js`、`public/index/main.js`、`tests/meowstatus.test.js` | 本地边界回归已覆盖；发布环境继续观察上游契约 |
 | D-008 | 已实现/待实链路验证 | 通知改为数据库 outbox、有限重试和管理员重试；真实 provider 仍需部署验证 | `server/app.js:161-255,508-524`、`server/db.js:1194-1333` | 持久化投递、失败状态和重启后重试测试 |
 | D-009 | 已修复 | WorkTask arrange 支持显式清空负责人/计划时间 | `server/validation.js:293-338`、`server/db.js:1584-1626` | clear/unassign 语义测试 |
 
@@ -23,7 +23,7 @@
 | R-001 | 已修复 | 配置 URL、端口和外部服务组合在启动前校验 | `server/config.js:73-188`、`server/app.js:709-717` | preflight 失败不监听/不初始化数据库 |
 | R-002 | P1 | 管理端浏览器分页导出大数据会增加内存和等待时间，且缺少操作审计 | `public/admin/admin.js:385-410,674-700` | 服务端流式导出、上限和审计 |
 | R-003 | P1 | 单管理员模型限制协作和追责 | `server/auth.js`、管理员路由 | 未来按规模评估 RBAC，不在当前 P0 扩张 |
-| R-004 | P1 | outbox 入队异常目前只写日志并让业务响应继续成功，可能没有可查询的失败记录 | `server/app.js:161-174` | 增加可查询 handoff failure 或明确的人工补偿边界，不允许无记录丢失 |
+| R-004 | 已修复/待实链路验证 | outbox 入队异常写入私有 JSONL handoff，可由管理员查询并有限次人工重试；journal 不可写时仍需人工补偿 | `server/notification-handoff.js`、`server/app.js`、`tests/notification-handoff.test.js` | 入队异常、重启读取、脱敏和重试回归；发布环境验证文件权限与备份 |
 | R-005 | 已修复 | 人工重试接口只允许 `failed/retrying` 状态，避免重置已 `delivered` 记录造成重复通知 | `server/db.js:1325-1333`、`tests/notification-outbox.test.js` | 已有 delivered 重试返回 0 的回归断言 |
 
 ## 验证缺口与文档欠账

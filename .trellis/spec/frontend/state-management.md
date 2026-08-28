@@ -51,3 +51,7 @@ presentation preference currently belongs there.
 
 Reference files: public/index/main.js, public/admin/admin.js, public/theme.js,
 and the mutation listeners in public/admin/admin.js:706-807.
+
+MeowStatus payloads are external server state. Treat a missing/non-boolean
+`online` value as `未知`, keep the `disabled/unavailable/ok` envelope, and do
+not let an invalid icon or widget field abort the refresh/render cycle.

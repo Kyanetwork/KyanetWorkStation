@@ -66,3 +66,13 @@ alt text or an intentionally empty alt for decorative icons.
 Reference files: public/index/main.js:101-185,
 public/admin/admin.js:281-364, public/admin/index.html:118-217, and
 public/theme.js.
+
+## External icon boundary
+
+The MeowStatus adapter is the authoritative validator for Minecraft favicon
+data URLs. The static page must retain a second lightweight check before
+building an `<img>` attribute: allow only `data:image/png|jpeg|jpg|gif|webp`
+base64 URLs and reject values longer than 256 KiB. Always pass accepted values
+through `escapeHtml`; never render an external URL or SVG returned by an
+upstream service. Invalid icons render as the existing hidden placeholder and
+must not prevent the status card from showing its text state.

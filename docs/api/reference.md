@@ -61,6 +61,12 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/worktask/note-reply` | 保存管理员备注和对外回复 |
 | `GET /api/admin/notifications` | 查询持久化通知投递记录 |
 | `POST /api/admin/notifications/retry` | 触发指定通知记录的人工重试 |
+| `GET /api/admin/notification-handoffs` | 查询 outbox 入队失败的脱敏人工补偿记录 |
+| `POST /api/admin/notification-handoffs/retry` | 按 handoff UUID 重新入队；成功后由后台 worker 投递 |
+
+handoff 列表只返回 `handoffId`、`eventId`、业务类型/ID、`providers`、状态、次数、
+时间和截断脱敏错误。retry 只接受 UUID；已解决记录不会重复入队，入队失败会保留
+`retrying`/`failed` 状态而不回滚业务记录。
 
 ## 已移除的旧 Account 接口
 

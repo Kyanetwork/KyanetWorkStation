@@ -48,8 +48,8 @@ Browser
 
 - `server/notify.js` 封装 SMTP。
 - `server/webhook.js` 封装 generic、企业微信、飞书/Lark、钉钉和 Slack 载荷。
-- `server/meowstatus.js` 负责外部 Dashboard 请求、超时和基本规范化。
-- 通知在业务写入成功后进入 `notification_delivery` outbox；启动及定时 worker 进行有界重试，管理员可查询失败并触发重试。
+- `server/meowstatus.js` 负责外部 Dashboard 请求、超时、响应体/MIME/字段边界和 favicon 规范化。
+- 通知在业务写入成功后进入 `notification_delivery` outbox；启动及定时 worker 进行有界重试，管理员可查询失败并触发重试。极少数 outbox 入队异常写入同一私有数据目录的 `notification-handoff.jsonl`，由 `server/notification-handoff.js` 提供脱敏查询和人工重新入队，不改变业务写入语义。
 
 ## 启动顺序
 

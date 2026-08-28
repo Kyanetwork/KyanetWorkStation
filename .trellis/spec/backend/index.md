@@ -13,6 +13,7 @@ stack.
 | [Error Handling](./error-handling.md) | API envelope, async propagation, and HTTP error mapping | Current |
 | [Quality Guidelines](./quality-guidelines.md) | JavaScript tests, security boundaries, and review checks | Current |
 | [Logging Guidelines](./logging-guidelines.md) | Pino fields, request ids, levels, and redaction | Current |
+| [External Boundaries](./external-boundaries.md) | MeowStatus, notification handoff, and isolated backup verification contracts | Current |
 
 ## Pre-development checklist
 

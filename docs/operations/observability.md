@@ -18,10 +18,31 @@
 
 通知采用数据库 `notification_delivery` outbox。反馈/WorkTask 写入成功后，为已启用的 SMTP/Webhook provider 建立 pending 记录；进程启动时和每 30 秒处理到期记录，失败按最多 3 次指数退避重试，最终状态为 `failed`。Webhook 多目标投递若部分成功，会记录成功/失败计数，并把失败目标索引写入脱敏的 `target` 标签；后续重试只发送失败目标，避免重复通知已成功目标。数据库只保存 provider、事件/业务 ID、脱敏目标标签、次数、时间和截断错误，不保存密码、签名或完整联系方式。管理员可通过 `/api/admin/notifications` 查询并通过 `/api/admin/notifications/retry` 触发人工重试。通知失败不回滚已经成功写入的反馈或 WorkTask。
 
+### Outbox 入队 handoff（R-004）
+
+极少数情况下，业务记录已写入但 `notification_delivery` outbox 入队失败。此时
+应用会把事件/业务 ID、provider 列表、状态、次数、时间和截断脱敏错误追加到私有
+`path.dirname(DB_PATH)/notification-handoff.jsonl`，仍向提交请求返回原有业务成功语义。
+journal 不得包含正文、联系方式、收件人、Webhook URL、密码、签名或请求体；单行和
+查询结果都有固定上限，读取时按 `handoffId` 折叠最新状态。
+
+管理员可使用：
+
+```text
+GET  /api/admin/notification-handoffs
+POST /api/admin/notification-handoffs/retry  {"handoffId":"<UUID>"}
+```
+
+人工重试只重新调用现有幂等 outbox 入队；成功记录 `resolved` 并由后台 worker 投递，
+失败记录 `retrying`/`failed`。已解决记录不会再次入队。journal 文件不可写时，日志只
+记录脱敏错误和事件标识；应暂停发布，按 event/entity ID 做人工补偿，不把日志或接口
+201 视为通知成功。
+
 ## 排障顺序
 
 1. 用响应头中的 request ID 定位应用日志。
 2. 检查状态码、耗时和错误级别，区分客户端输入、认证、外部服务和数据库错误。
 3. 查看 PM2/反向代理日志及磁盘空间。
 4. 对外部服务检查超时、响应大小、TLS 和凭据配置，不把密钥复制到工单。
-5. 若涉及数据风险，先保留备份和脱敏证据，再进行重启或回滚。
+5. 若发现 outbox 入队 handoff，先查询其状态并确认 journal 权限/备份，再执行人工重试。
+6. 若涉及数据风险，先保留备份和脱敏证据，再进行重启或回滚。

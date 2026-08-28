@@ -1,0 +1,15 @@
+{"file":".trellis/spec/backend/index.md","reason":"Check backend implementation against project quality gates"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check private journal path, parameterization, and no schema drift"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check admin handoff errors, status codes, and external failure isolation"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check full tests, syntax, audit, and secret scanning"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check bounded and redacted handoff/release logs"}
+{"file":".trellis/spec/frontend/index.md","reason":"Check static page contract and state handling"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Check safe favicon attribute rendering and escaping"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Check disabled/unavailable status transitions"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check browser/static frontend quality requirements"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check MeowStatus and handoff data-flow contracts end to end"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check duplicated helpers and existing boundary reuse"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/p0-code-evidence.md","reason":"Ground findings in prior P0 evidence and unresolved gates"}
+{"file":"docs/operations/backup-restore.md","reason":"Check real backup restore and handoff journal protection instructions"}
+{"file":"docs/testing/release-checklist.md","reason":"Check automated/manual gate status is not overstated"}
+{"file": ".trellis/spec/backend/external-boundaries.md", "reason": "Check the new external-boundary contracts and redaction behavior"}

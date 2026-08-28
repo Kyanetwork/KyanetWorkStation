@@ -1,0 +1,17 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend boundary and quality checklist for validation, handoff, and external adapters"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Preserve the existing multi-driver outbox and private data-path constraints"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Shared envelope, async failure, startup, and provider error contracts"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Required tests, syntax checks, secret scanning, and honest evidence"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Bounded/redacted logs for handoff and release verification"}
+{"file":".trellis/spec/frontend/index.md","reason":"Static frontend API and accessibility boundaries for MeowStatus states"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Safe favicon rendering, escaping, and DOM output rules"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Disabled/unavailable/success state rendering and server refresh behavior"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Browser and static frontend regression expectations"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace external payload, DTO, UI, and notification handoff data flow"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing outbox, error, config, and backup boundaries"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/p0-code-evidence.md","reason":"Confirmed D-004, D-007, R-004, V-002, and V-003 repository evidence"}
+{"file":".trellis/tasks/08-26-p0-stability-security-hardening/research/node24-runtime-compatibility.md","reason":"Node 24/ABI 137 release baseline"}
+{"file":"docs/operations/deployment.md","reason":"Existing proxy, listener, process, and rollback steps to extend without real hosts"}
+{"file":"docs/operations/backup-restore.md","reason":"Existing isolated restore and checksum evidence contract"}
+{"file":"docs/testing/release-checklist.md","reason":"Existing automated and manual release gates"}
+{"file": ".trellis/spec/backend/external-boundaries.md", "reason": "New cross-layer MeowStatus, handoff, and backup verification contracts"}

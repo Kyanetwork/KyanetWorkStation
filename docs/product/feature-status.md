@@ -16,10 +16,10 @@
 | 管理员登录与会话 | 已实现 | `server/app.js:370-398`、`server/auth.js` |
 | 管理列表、筛选、分页、状态、备注、CSV | 已实现 | `server/app.js:527-681`、`public/admin/admin.js` |
 | 主页处理进展 | 已实现/P0 加固 | `server/app.js:295-301`、`server/db.js:1640-1663`；公开查询已使用最小投影，仍需发布门禁验证 |
-| SMTP/Webhook 通知 | 已实现/P0 加固 | `server/notify.js`、`server/webhook.js`、`server/db.js:1194-1333`；已持久化 outbox 和有限重试，入队异常与真实 provider 仍需验证 |
-| MeowStatus/Minecraft 状态 | 已实现/P0 加固 | `server/app.js:303-337`、`server/meowstatus.js`；`MEOWSTATUS_ENABLED=false` 默认关闭，状态接口区分 disabled/unavailable/ok |
+| SMTP/Webhook 通知 | 已实现/P0 加固 | `server/notify.js`、`server/webhook.js`、`server/db.js:1194-1333`、`server/notification-handoff.js`；outbox 有限重试和入队失败 handoff 已覆盖，真实 provider 仍需验证 |
+| MeowStatus/Minecraft 状态 | 已实现/P0 加固 | `server/app.js:303-337`、`server/meowstatus.js`；`MEOWSTATUS_ENABLED=false` 默认关闭，响应/MIME/字段/favicon 有界，状态接口区分 disabled/unavailable/ok |
 | SQLite/MySQL/PostgreSQL | 已实现/P0 加固 | `server/db.js:1-14,158-429`；需匹配 Node 原生模块 ABI |
-| 备份脚本 | 已实现/P0 加固 | `scripts/backup-db*`；恢复演练仍需真实证据 |
+| 备份脚本 | 已实现/P0 加固 | `scripts/backup-db*`、`scripts/verify-sqlite-backup.js`；恢复演练仍需真实证据 |
 | 旧 KyanetAccount 联动 | 已移除/数据保留 | 活动路由和提交 gating 已移除；历史 schema/数据待独立迁移 |
 | 统一 Workstation 首页 | P1 计划 | 统一摘要、收件箱和快捷入口 |
 | 我的提交/任务安全视图 | P1 计划 | 只返回安全 DTO，不能包含内部备注 |

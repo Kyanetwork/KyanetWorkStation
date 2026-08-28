@@ -8,8 +8,8 @@ KyanetWorkStation 是面向个人和小团队的轻量自托管工作中枢：�
 
 - 反馈与 WorkTask 提交、状态流转、分页筛选和 CSV 导出
 - 管理员后台、主页处理进展、备注与对外回复
-- SMTP/Webhook 通知及管理端测试入口
-- MeowStatus/Minecraft 状态展示
+- SMTP/Webhook 通知及管理端测试入口；outbox 入队异常可通过私有 handoff 查询和人工补偿
+- MeowStatus/Minecraft 状态展示（外部响应、字段和 favicon 有界）
 - SQLite、MySQL、PostgreSQL 数据库驱动
 - PM2 运行与 Nginx、IIS、Caddy 反向代理模板
 - SQLite 和 RDBMS 备份脚本、结构化日志、基础限流和安全响应头
@@ -51,6 +51,7 @@ MeowStatus 是可选外部服务，默认由 `MEOWSTATUS_ENABLED=false` 关闭�
 - [配置参考](docs/operations/configuration.md)
 - [部署手册](docs/operations/deployment.md)
 - [备份与恢复](docs/operations/backup-restore.md)
+- [发布验证证据模板](docs/operations/release-evidence-template.md)
 - [安全基线](docs/operations/security.md)
 - [日志与观测](docs/operations/observability.md)
 - [测试与发布门禁](docs/testing/release-checklist.md)
@@ -80,6 +81,7 @@ npm run init-admin
 npm run backup-db:core
 npm run backup-db:rdbms
 npm run backup-db:win
+npm run verify-backup:sqlite -- --backup <PRIVATE_BACKUP_PATH>
 ```
 
 `npm test`、备份恢复和真实部署的证据要求见[发布门禁](docs/testing/release-checklist.md)。
