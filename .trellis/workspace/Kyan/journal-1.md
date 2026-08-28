@@ -87,3 +87,24 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: P0 发布环境验收与任务归档
+
+**Date**: 2026-08-28
+**Task**: P0 发布环境验收与任务归档
+**Branch**: `main`
+
+### Summary
+
+完成云服务器 D-004 发布边界验收记录：PM2 重启恢复、回环监听、源站 3000 公网阻断、Nginx Host/Proto 转发、HTTP 到 HTTPS 和 TLS/health 证据均已登记；同步路线图与缺陷表，提交 9406195，并按顺序归档发布验证子任务和 P0 父任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9406195` | (see git log) |
+
+### Status
+
+[OK] **Completed**
