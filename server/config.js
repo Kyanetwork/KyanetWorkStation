@@ -123,7 +123,8 @@ function validateRuntimeConfig(candidate = config) {
     ["RATE_LIMIT_ADMIN_MAX", candidate.rateLimit && candidate.rateLimit.adminMax, raw.rateLimitAdminMax, 1, 100000],
     ["MEOWSTATUS_TIMEOUT_MS", candidate.meowStatusTimeoutMs, raw.meowStatusTimeoutMs, 1000, 15000],
     ["MEOWSTATUS_REFRESH_MS", candidate.meowStatusRefreshMs, raw.meowStatusRefreshMs, 5000, 24 * 60 * 60 * 1000],
-    ["BACKUP_RETENTION_DAYS", candidate.backupRetentionDays, raw.backupRetentionDays, 1, 3650]
+    ["BACKUP_RETENTION_DAYS", candidate.backupRetentionDays, raw.backupRetentionDays, 1, 3650],
+    ["ADMIN_EXPORT_MAX_ROWS", candidate.adminExportMaxRows, raw.adminExportMaxRows, 100, 100000]
   ];
   for (const [key, value, rawValue, min, max] of positiveIntegerChecks) {
     if (isExplicitIntegerInvalid(rawValue, min, max) || !Number.isInteger(value) || value < min || value > max) {
@@ -197,6 +198,7 @@ const rawInput = {
   backupRetentionDays: process.env.BACKUP_RETENTION_DAYS,
   smtpPort: process.env.SMTP_PORT,
   webhookTimeoutMs: process.env.WEBHOOK_TIMEOUT_MS,
+  adminExportMaxRows: process.env.ADMIN_EXPORT_MAX_ROWS,
   healthExposeCounts: process.env.HEALTH_EXPOSE_COUNTS,
   allowHeaderlessAdminMutation: process.env.ADMIN_ALLOW_HEADERLESS_MUTATION,
   meowStatusEnabled: process.env.MEOWSTATUS_ENABLED,
@@ -252,6 +254,7 @@ const config = {
   meowStatusRefreshMs: parseIntOrDefault(process.env.MEOWSTATUS_REFRESH_MS, 10000),
   backupDir: path.resolve(ROOT_DIR, process.env.BACKUP_DIR || "./backups"),
   backupRetentionDays: parseIntOrDefault(process.env.BACKUP_RETENTION_DAYS, 30),
+  adminExportMaxRows: parseIntOrDefault(process.env.ADMIN_EXPORT_MAX_ROWS, 10000),
   smtp: {
     enabled: parseBoolOrDefault(process.env.SMTP_ENABLED, false),
     host: stringOrDefault(process.env.SMTP_HOST, ""),

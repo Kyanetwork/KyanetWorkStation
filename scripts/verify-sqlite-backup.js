@@ -16,7 +16,8 @@ const REQUIRED_TABLES = [
   "account_session",
   "notification_delivery",
   "ai_copilot_suggestion",
-  "workstation_setting"
+  "workstation_setting",
+  "admin_audit"
 ];
 
 function parseArgs(argv) {

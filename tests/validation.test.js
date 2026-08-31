@@ -17,6 +17,12 @@ const {
   validateAiSuggestionDecisionPayload
 } = require("../server/validation");
 
+const {
+  validateFeedbackExportPayload,
+  validateWorktaskExportPayload,
+  validateAuditListPayload
+} = require("../server/validation");
+
 test("validateFeedbackPayload accepts valid payload", () => {
   const result = validateFeedbackPayload({
     type: "Bug",
@@ -204,4 +210,42 @@ test("AI suggestion validators enforce entity and decision allow-lists", () => {
   assert.equal(invalidDecision.valid, true);
   assert.deepEqual(invalidDecision.data.fields, []);
   assert.equal(invalid.valid, false);
+});
+
+test("export validators preserve list filters and reject unsupported values", () => {
+  const feedback = validateFeedbackExportPayload({ status: "reviewed", keyword: " bug " });
+  const worktask = validateWorktaskExportPayload({ status: "scheduled", priority: "URGENT", keyword: " deploy " });
+  const invalidFeedback = validateFeedbackExportPayload({ status: "unknown" });
+  const invalidWorktask = validateWorktaskExportPayload({ priority: "unknown" });
+
+  assert.equal(feedback.valid, true);
+  assert.deepEqual(feedback.data, { status: "reviewed", keyword: "bug" });
+  assert.equal(worktask.valid, true);
+  assert.deepEqual(worktask.data, { status: "scheduled", priority: "urgent", keyword: "deploy" });
+  assert.equal(invalidFeedback.valid, false);
+  assert.equal(invalidWorktask.valid, false);
+});
+
+test("audit validator normalizes filters, caps page size, and rejects invalid ids and time ranges", () => {
+  const valid = validateAuditListPayload({
+    action: "feedback.status",
+    entityType: "feedback",
+    entityId: "42",
+    actor: "admin",
+    from: "2026-08-01T00:00:00.000Z",
+    to: "2026-08-31T23:59:59.999Z",
+    page: "2",
+    pageSize: "999"
+  });
+  const invalidId = validateAuditListPayload({ entityId: "not-an-id" });
+  const invalidRange = validateAuditListPayload({ from: "2026-09-01T00:00:00.000Z", to: "2026-08-01T00:00:00.000Z" });
+  const invalidPageType = validateAuditListPayload({ page: [2] });
+
+  assert.equal(valid.valid, true);
+  assert.equal(valid.data.entityId, 42);
+  assert.equal(valid.data.page, 2);
+  assert.equal(valid.data.pageSize, 100);
+  assert.equal(invalidId.valid, false);
+  assert.equal(invalidRange.valid, false);
+  assert.equal(invalidPageType.valid, false);
 });

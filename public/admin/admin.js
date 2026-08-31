@@ -723,47 +723,34 @@
     `).join("");
   }
 
-  function csvEscape(value) {
-    const text = String(value == null ? "" : value);
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
-  function exportCsv(rows, header, filenamePrefix) {
-    const csvText = [header, ...rows].map((line) => line.map(csvEscape).join(",")).join("\n");
-    const blob = new Blob(["\ufeff" + csvText], { type: "text/csv;charset=utf-8;" });
+  async function downloadServerCsv(pathname, payload) {
+    const response = await fetch(pathname, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {})
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const code = data.error && data.error.code;
+      const error = new Error(
+        code === "EXPORT_LIMIT_EXCEEDED"
+          ? (data.error.message || "导出结果超过上限，请缩小筛选范围后重试")
+          : ((data.error && data.error.message) || "CSV 导出失败")
+      );
+      error.code = code || "EXPORT_FAILED";
+      throw error;
+    }
+    const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = (response.headers.get("content-disposition") || "export.csv")
+      .match(/filename="?([^";]+)"?/i)?.[1] || "export.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-  }
-
-  async function fetchAllFeedbackForExport() {
-    const status = document.getElementById("feedbackStatusFilter").value;
-    const keyword = document.getElementById("feedbackKeyword").value.trim();
-    const first = await api("/api/admin/feedback/list", { status, keyword, page: 1, pageSize: 100 });
-    let all = (first.items || []).slice();
-    for (let p = 2; p <= (first.totalPages || 1); p += 1) {
-      const pageData = await api("/api/admin/feedback/list", { status, keyword, page: p, pageSize: 100 });
-      all = all.concat(pageData.items || []);
-    }
-    return all;
-  }
-
-  async function fetchAllWorktaskForExport() {
-    const status = document.getElementById("worktaskStatusFilter").value;
-    const priority = document.getElementById("worktaskPriorityFilter").value;
-    const keyword = document.getElementById("worktaskKeyword").value.trim();
-    const first = await api("/api/admin/worktask/list", { status, priority, keyword, page: 1, pageSize: 100 });
-    let all = (first.items || []).slice();
-    for (let p = 2; p <= (first.totalPages || 1); p += 1) {
-      const pageData = await api("/api/admin/worktask/list", { status, priority, keyword, page: p, pageSize: 100 });
-      all = all.concat(pageData.items || []);
-    }
-    return all;
+    return Number(response.headers.get("x-export-count") || 0);
   }
 
   async function loadFeedback() {
@@ -1279,13 +1266,16 @@
     try { state.feedback.page += 1; await loadFeedback(); } catch (error) { notify(feedbackMsg, "error", error.message); }
   });
 
-  document.getElementById("feedbackExportBtn").addEventListener("click", async () => {
+  document.getElementById("feedbackExportBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
     try {
-      const rows = await fetchAllFeedbackForExport();
-      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, feedbackStatusLabel(it.status), it.accountUserId || "", it.accountEmailSnapshot || "", it.accountDisplayNameSnapshot || "", it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "status", "accountUserId", "accountEmailSnapshot", "accountDisplayNameSnapshot", "createdAt", "updatedAt"], "feedback_export");
-      notify(feedbackMsg, "ok", `反馈 CSV 导出完成，共 ${rows.length} 条`);
+      const count = await withButtonBusy(button, "导出中…", () => downloadServerCsv("/api/admin/feedback/export", {
+        status: document.getElementById("feedbackStatusFilter").value,
+        keyword: document.getElementById("feedbackKeyword").value.trim()
+      }));
+      notify(feedbackMsg, "ok", `反馈 CSV 导出完成，共 ${count} 条`);
     } catch (error) {
-      notify(feedbackMsg, "error", error.message);
+      notify(feedbackMsg, "error", error.message || "CSV 导出失败");
     }
   });
 
@@ -1301,13 +1291,17 @@
     try { state.worktask.page += 1; await loadWorktask(); } catch (error) { notify(worktaskMsg, "error", error.message); }
   });
 
-  document.getElementById("worktaskExportBtn").addEventListener("click", async () => {
+  document.getElementById("worktaskExportBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
     try {
-      const rows = await fetchAllWorktaskForExport();
-      exportCsv(rows.map((it) => [it.id, it.type, it.title, it.content, it.contact, worktaskPriorityLabel(it.priority), worktaskStatusLabel(it.status), it.accountUserId || "", it.accountEmailSnapshot || "", it.accountDisplayNameSnapshot || "", it.expectedAt, it.scheduledAt, it.assignee, it.tags, it.createdAt, it.updatedAt]), ["id", "type", "title", "content", "contact", "priority", "status", "accountUserId", "accountEmailSnapshot", "accountDisplayNameSnapshot", "expectedAt", "scheduledAt", "assignee", "tags", "createdAt", "updatedAt"], "worktask_export");
-      notify(worktaskMsg, "ok", `WorkTask CSV 导出完成，共 ${rows.length} 条`);
+      const count = await withButtonBusy(button, "导出中…", () => downloadServerCsv("/api/admin/worktask/export", {
+        status: document.getElementById("worktaskStatusFilter").value,
+        priority: document.getElementById("worktaskPriorityFilter").value,
+        keyword: document.getElementById("worktaskKeyword").value.trim()
+      }));
+      notify(worktaskMsg, "ok", `WorkTask CSV 导出完成，共 ${count} 条`);
     } catch (error) {
-      notify(worktaskMsg, "error", error.message);
+      notify(worktaskMsg, "error", error.message || "CSV 导出失败");
     }
   });
 

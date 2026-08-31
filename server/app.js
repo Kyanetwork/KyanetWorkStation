@@ -25,6 +25,10 @@ const {
   getFeedbackById,
   getWorktaskById,
   listFeedback,
+  countExportRows,
+  listFeedbackExportBatch,
+  listWorktaskExportBatch,
+  listAdminAudits,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,
   updateFeedbackNoteReply,
@@ -79,6 +83,9 @@ const {
   validateAdminLoginPayload,
   validateListPayload,
   validateWorktaskListPayload,
+  validateFeedbackExportPayload,
+  validateWorktaskExportPayload,
+  validateAuditListPayload,
   validateStatusPayload,
   validateWorktaskStatusPayload,
   validateWorktaskArrangePayload,
@@ -97,6 +104,12 @@ const {
   validateAiSuggestionsQueryPayload,
   validateAiSuggestionDecisionPayload
 } = require("./validation");
+const {
+  FEEDBACK_EXPORT_COLUMNS,
+  WORKTASK_EXPORT_COLUMNS,
+  writeCsvExport
+} = require("./admin-export");
+const { recordAdminAuditSafely } = require("./admin-audit");
 const {
   createRequireSameOriginForAdminMutation,
   requireJsonForAdminMutation
@@ -265,6 +278,89 @@ async function queueNotifications(entityType, entityId) {
       }, "notification handoff persistence failed; manual compensation required");
     }
     return [];
+  }
+}
+
+async function recordAdminAction(req, action, entityType, entityId, result = "success", metadata = {}) {
+  return recordAdminAuditSafely({
+    req,
+    action,
+    entityType,
+    entityId,
+    result,
+    metadata
+  });
+}
+
+function auditResultForError(error) {
+  return error && error.code === "NOT_FOUND" ? "not_found" : "failed";
+}
+
+function exportAuditMetadata(filters, total, maxRows) {
+  const metadata = {
+    rowCount: total,
+    maxRows,
+    hasKeyword: Boolean(filters.keyword)
+  };
+  if (filters.status) metadata.status = filters.status;
+  if (filters.priority) metadata.priority = filters.priority;
+  return metadata;
+}
+
+async function handleAdminCsvExport(req, res, {
+  entityType,
+  filters,
+  filename,
+  columns,
+  fetchBatch
+}) {
+  const total = await countExportRows(entityType, filters);
+  const metadata = exportAuditMetadata(filters, total, config.adminExportMaxRows);
+  if (total > config.adminExportMaxRows) {
+    await recordAdminAction(req, `${entityType}.export`, entityType, null, "rejected", metadata);
+    return sendError(
+      res,
+      413,
+      "EXPORT_LIMIT_EXCEEDED",
+      `导出结果超过当前上限 ${config.adminExportMaxRows} 条，请缩小筛选范围后重试`
+    );
+  }
+
+  try {
+    return await writeCsvExport({
+      res,
+      total,
+      maxRows: config.adminExportMaxRows,
+      filename,
+      columns,
+      fetchBatch,
+      recordProgress: async (event) => {
+        if (event && (event.result === "success" || event.result === "failed")) {
+          await recordAdminAction(req, `${entityType}.export`, entityType, null, event.result, {
+            ...metadata,
+            rowCount: event.rowCount
+          });
+        }
+      }
+    });
+  } catch (error) {
+    if (error && error.code === "EXPORT_LIMIT_EXCEEDED") {
+      await recordAdminAction(req, `${entityType}.export`, entityType, null, "rejected", metadata);
+      if (!res.headersSent) {
+        return sendError(res, 413, error.code, `导出结果超过当前上限 ${config.adminExportMaxRows} 条，请缩小筛选范围后重试`);
+      }
+      return undefined;
+    }
+    if (res.headersSent) {
+      logger.warn({
+        event: "admin.export.stream.error",
+        requestId: req.requestId,
+        entityType,
+        errorCode: error && error.code ? String(error.code).slice(0, 64) : "EXPORT_STREAM_FAILED"
+      }, "admin CSV export stream failed");
+      return undefined;
+    }
+    throw error;
   }
 }
 
@@ -508,6 +604,45 @@ app.post("/api/admin/logout", requireAdminSession, asyncHandler(async (req, res)
   res.json({ ok: true });
 }));
 
+app.post("/api/admin/feedback/export", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateFeedbackExportPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  return handleAdminCsvExport(req, res, {
+    entityType: "feedback",
+    filters: validation.data,
+    filename: `feedback_export_${date}.csv`,
+    columns: FEEDBACK_EXPORT_COLUMNS,
+    fetchBatch: (limit, offset) => listFeedbackExportBatch(validation.data, limit, offset)
+  });
+}));
+
+app.post("/api/admin/worktask/export", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateWorktaskExportPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  return handleAdminCsvExport(req, res, {
+    entityType: "worktask",
+    filters: validation.data,
+    filename: `worktask_export_${date}.csv`,
+    columns: WORKTASK_EXPORT_COLUMNS,
+    fetchBatch: (limit, offset) => listWorktaskExportBatch(validation.data, limit, offset)
+  });
+}));
+
+app.post("/api/admin/audit/list", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAuditListPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const data = await listAdminAudits(validation.data);
+  return res.json({ ok: true, data });
+}));
+
 app.get("/api/admin/ai/status", requireAdminSession, asyncHandler(async (req, res) => {
   const data = await getAiProfileStatus();
   return res.json({ ok: true, data });
@@ -520,8 +655,20 @@ app.post("/api/admin/ai/profiles", requireAdminSession, asyncHandler(async (req,
   }
   try {
     const data = await saveProfile(validation.data);
+    await recordAdminAction(req, "ai.profile.save", "ai_profile", null, "success", {
+      profileId: data.id,
+      protocol: data.protocol,
+      model: data.model,
+      keyConfigured: data.keyConfigured
+    });
     return res.json({ ok: true, data });
   } catch (error) {
+    await recordAdminAction(req, "ai.profile.save", "ai_profile", null, auditResultForError(error), {
+      profileId: validation.data.id,
+      protocol: validation.data.protocol,
+      model: validation.data.model,
+      errorCode: error && error.code ? error.code : "AI_PROFILE_WRITE_FAILED"
+    });
     return sendAiProfileError(res, error);
   }
 }));
@@ -533,8 +680,16 @@ app.post("/api/admin/ai/profiles/active", requireAdminSession, asyncHandler(asyn
   }
   try {
     const data = await setActiveProfile(validation.data.profileId);
+    await recordAdminAction(req, "ai.profile.active", "ai_profile", null, "success", {
+      profileId: validation.data.profileId,
+      active: Boolean(validation.data.profileId)
+    });
     return res.json({ ok: true, data });
   } catch (error) {
+    await recordAdminAction(req, "ai.profile.active", "ai_profile", null, auditResultForError(error), {
+      profileId: validation.data.profileId,
+      errorCode: error && error.code ? error.code : "AI_PROFILE_WRITE_FAILED"
+    });
     return sendAiProfileError(res, error);
   }
 }));
@@ -546,8 +701,15 @@ app.post("/api/admin/ai/profiles/delete", requireAdminSession, asyncHandler(asyn
   }
   try {
     const data = await deleteProfile(validation.data.profileId);
+    await recordAdminAction(req, "ai.profile.delete", "ai_profile", null, "success", {
+      profileId: validation.data.profileId
+    });
     return res.json({ ok: true, data });
   } catch (error) {
+    await recordAdminAction(req, "ai.profile.delete", "ai_profile", null, auditResultForError(error), {
+      profileId: validation.data.profileId,
+      errorCode: error && error.code ? error.code : "AI_PROFILE_WRITE_FAILED"
+    });
     return sendAiProfileError(res, error);
   }
 }));
@@ -601,8 +763,19 @@ app.post("/api/admin/ai/suggestions/decision", requireAdminSession, asyncHandler
       ...validation.data,
       actor: req.adminUser.username
     });
+    await recordAdminAction(req, "ai.suggestion.decision", "ai_suggestion", validation.data.suggestionId, "success", {
+      suggestionId: validation.data.suggestionId,
+      decision: validation.data.decision,
+      fields: validation.data.fields
+    });
     return res.json({ ok: true, data });
   } catch (error) {
+    await recordAdminAction(req, "ai.suggestion.decision", "ai_suggestion", validation.data.suggestionId, auditResultForError(error), {
+      suggestionId: validation.data.suggestionId,
+      decision: validation.data.decision,
+      fields: validation.data.fields,
+      errorCode: error && error.code ? error.code : "AI_SUGGESTION_DECISION_FAILED"
+    });
     return sendAiError(res, error);
   }
 }));
@@ -619,6 +792,10 @@ app.post("/api/admin/status/profile", requireAdminSession, asyncHandler(async (r
   }
 
   const data = await updateStatusProfileSettings(validation.data);
+  await recordAdminAction(req, "status.profile.update", "status", null, "success", {
+    enabled: validation.data.enabled,
+    timeoutMs: validation.data.timeoutMs
+  });
   return res.json({ ok: true, data });
 }));
 
@@ -629,6 +806,9 @@ app.post("/api/admin/status/minecraft", requireAdminSession, asyncHandler(async 
   }
 
   const data = await updateMinecraftStatusSettings(validation.data);
+  await recordAdminAction(req, "status.minecraft.update", "status", null, "success", {
+    enabled: validation.data.enabled
+  });
   return res.json({ ok: true, data });
 }));
 
@@ -644,8 +824,16 @@ app.post("/api/admin/notify/smtp-test", requireAdminSession, asyncHandler(async 
       operator: req.adminUser.username
     });
     if (!result.sent) {
+      await recordAdminAction(req, "notify.smtp_test", "notification", null, "failed", {
+        provider: "smtp",
+        errorCode: "SMTP_NOT_READY"
+      });
       return sendError(res, 400, "SMTP_NOT_READY", "SMTP 未启用或配置不完整，请检查 .env 配置");
     }
+    await recordAdminAction(req, "notify.smtp_test", "notification", null, "success", {
+      provider: "smtp",
+      recipientCount: Array.isArray(result.to) ? result.to.length : 0
+    });
     return res.json({
       ok: true,
       data: {
@@ -653,6 +841,10 @@ app.post("/api/admin/notify/smtp-test", requireAdminSession, asyncHandler(async 
       }
     });
   } catch (error) {
+    await recordAdminAction(req, "notify.smtp_test", "notification", null, "failed", {
+      provider: "smtp",
+      errorCode: error && error.code ? error.code : "SMTP_SEND_FAILED"
+    });
     logger.error({
       route: "/api/admin/notify/smtp-test",
       error: error && error.message ? error.message : String(error)
@@ -674,13 +866,28 @@ app.post("/api/admin/notify/webhook-test", requireAdminSession, asyncHandler(asy
     });
 
     if (!result.sent) {
+      await recordAdminAction(req, "notify.webhook_test", "notification", null, "failed", {
+        provider: "webhook",
+        errorCode: "WEBHOOK_NOT_READY"
+      });
       return sendError(res, 400, "WEBHOOK_NOT_READY", "Webhook 未启用或配置不完整，请检查 .env 配置");
     }
     if (result.okCount === 0 && result.failCount > 0) {
+      await recordAdminAction(req, "notify.webhook_test", "notification", null, "failed", {
+        provider: "webhook",
+        okCount: result.okCount,
+        failCount: result.failCount,
+        errorCode: "WEBHOOK_SEND_FAILED"
+      });
       const firstError = result.failures[0] && result.failures[0].error ? result.failures[0].error : "Webhook 推送失败";
       return sendError(res, 502, "WEBHOOK_SEND_FAILED", firstError);
     }
 
+    await recordAdminAction(req, "notify.webhook_test", "notification", null, "success", {
+      provider: "webhook",
+      okCount: result.okCount,
+      failCount: result.failCount
+    });
     return res.json({
       ok: true,
       data: {
@@ -690,6 +897,10 @@ app.post("/api/admin/notify/webhook-test", requireAdminSession, asyncHandler(asy
       }
     });
   } catch (error) {
+    await recordAdminAction(req, "notify.webhook_test", "notification", null, "failed", {
+      provider: "webhook",
+      errorCode: error && error.code ? error.code : "WEBHOOK_SEND_FAILED"
+    });
     logger.error({
       route: "/api/admin/notify/webhook-test",
       error: error && error.message ? error.message : String(error)
@@ -711,8 +922,14 @@ app.post("/api/admin/notifications/retry", requireAdminSession, asyncHandler(asy
   }
   const changes = await retryNotificationDelivery(id);
   if (changes === 0) {
+    await recordAdminAction(req, "notification.retry", "notification", id, "not_found", {
+      deliveryId: id
+    });
     return sendError(res, 404, "NOT_FOUND", "通知记录不存在");
   }
+  await recordAdminAction(req, "notification.retry", "notification", id, "success", {
+    deliveryId: id
+  });
   // Manual retry only schedules the durable delivery attempt. Do not make the
   // admin request wait on every due provider target or its network timeout.
   processNotificationOutbox().catch((error) => {
@@ -744,8 +961,18 @@ app.post("/api/admin/notification-handoffs/retry", requireAdminSession, asyncHan
     enqueue: ({ entityType, entityId, providers }) => enqueueNotificationDeliveries({ entityType, entityId, providers })
   });
   if (result.status === "missing") {
+    await recordAdminAction(req, "notification_handoff.retry", "notification_handoff", null, "not_found", {
+      handoffId
+    });
     return sendError(res, 404, "NOT_FOUND", "补偿记录不存在");
   }
+  await recordAdminAction(req, "notification_handoff.retry", "notification_handoff", null, result.persisted === false ? "failed" : "success", {
+    handoffId,
+    attempts: Number.isSafeInteger(result.attempts) && result.attempts >= 0 ? result.attempts : 0,
+    persisted: result.persisted !== false,
+    replayed: Boolean(result.replayed),
+    errorCode: result.persisted === false ? "HANDOFF_PERSISTENCE_FAILED" : ""
+  });
   if (result.persisted === false) {
     logger.error({
       event: "notification.handoff.persistence.error",
@@ -790,8 +1017,10 @@ app.post("/api/admin/feedback/status", requireAdminSession, asyncHandler(async (
   const { id, status } = validation.data;
   const changes = await updateFeedbackStatus(id, status);
   if (changes === 0) {
+    await recordAdminAction(req, "feedback.status", "feedback", id, "not_found", { status });
     return sendError(res, 404, "NOT_FOUND", "反馈记录不存在");
   }
+  await recordAdminAction(req, "feedback.status", "feedback", id, "success", { status });
   return res.json({ ok: true });
 }));
 
@@ -803,8 +1032,10 @@ app.post("/api/admin/feedback/delete", requireAdminSession, asyncHandler(async (
 
   const changes = await deleteFeedback(validation.data.id);
   if (changes === 0) {
+    await recordAdminAction(req, "feedback.delete", "feedback", validation.data.id, "not_found");
     return sendError(res, 404, "NOT_FOUND", "反馈记录不存在");
   }
+  await recordAdminAction(req, "feedback.delete", "feedback", validation.data.id, "success");
   return res.json({ ok: true });
 }));
 
@@ -816,8 +1047,14 @@ app.post("/api/admin/feedback/home-display", requireAdminSession, asyncHandler(a
 
   const changes = await updateFeedbackHomeDisplay(validation.data.id, validation.data.showOnHome);
   if (changes === 0) {
+    await recordAdminAction(req, "feedback.home_display", "feedback", validation.data.id, "not_found", {
+      showOnHome: validation.data.showOnHome
+    });
     return sendError(res, 404, "NOT_FOUND", "反馈记录不存在");
   }
+  await recordAdminAction(req, "feedback.home_display", "feedback", validation.data.id, "success", {
+    showOnHome: validation.data.showOnHome
+  });
   return res.json({ ok: true });
 }));
 
@@ -833,8 +1070,18 @@ app.post("/api/admin/feedback/note-reply", requireAdminSession, asyncHandler(asy
     validation.data.publicReply
   );
   if (changes === 0) {
+    await recordAdminAction(req, "feedback.note_reply", "feedback", validation.data.id, "not_found", {
+      fields: ["adminNote", "publicReply"],
+      adminNoteLength: validation.data.adminNote.length,
+      publicReplyLength: validation.data.publicReply.length
+    });
     return sendError(res, 404, "NOT_FOUND", "反馈记录不存在");
   }
+  await recordAdminAction(req, "feedback.note_reply", "feedback", validation.data.id, "success", {
+    fields: ["adminNote", "publicReply"],
+    adminNoteLength: validation.data.adminNote.length,
+    publicReplyLength: validation.data.publicReply.length
+  });
   return res.json({ ok: true });
 }));
 
@@ -856,6 +1103,12 @@ app.post("/api/admin/worktask/create", requireAdminSession, asyncHandler(async (
 
   const id = await createWorktaskByAdmin(validation.data);
   await queueNotifications("worktask", id);
+  await recordAdminAction(req, "worktask.create", "worktask", id, "success", {
+    priority: validation.data.priority,
+    status: validation.data.status || "new",
+    showOnHome: validation.data.showOnHome,
+    fields: ["expectedAt", "scheduledAt", "assignee", "tags", "adminNote", "publicReply"]
+  });
   return res.status(201).json({
     ok: true,
     data: { id }
@@ -871,8 +1124,10 @@ app.post("/api/admin/worktask/status", requireAdminSession, asyncHandler(async (
   const { id, status } = validation.data;
   const changes = await updateWorktaskStatus(id, status);
   if (changes === 0) {
+    await recordAdminAction(req, "worktask.status", "worktask", id, "not_found", { status });
     return sendError(res, 404, "NOT_FOUND", "WorkTask 记录不存在");
   }
+  await recordAdminAction(req, "worktask.status", "worktask", id, "success", { status });
   return res.json({ ok: true });
 }));
 
@@ -884,8 +1139,19 @@ app.post("/api/admin/worktask/arrange", requireAdminSession, asyncHandler(async 
 
   const changes = await arrangeWorktask(validation.data);
   if (changes === 0) {
+    await recordAdminAction(req, "worktask.arrange", "worktask", validation.data.id, "not_found", {
+      assigneeProvided: validation.data.assigneeProvided,
+      scheduledAtProvided: validation.data.scheduledAtProvided,
+      statusProvided: validation.data.statusProvided
+    });
     return sendError(res, 404, "NOT_FOUND", "WorkTask 记录不存在");
   }
+  await recordAdminAction(req, "worktask.arrange", "worktask", validation.data.id, "success", {
+    assigneeProvided: validation.data.assigneeProvided,
+    scheduledAtProvided: validation.data.scheduledAtProvided,
+    statusProvided: validation.data.statusProvided,
+    cleared: Boolean((validation.data.assigneeProvided && !validation.data.assignee) || (validation.data.scheduledAtProvided && !validation.data.scheduledAt))
+  });
   return res.json({ ok: true });
 }));
 
@@ -897,8 +1163,10 @@ app.post("/api/admin/worktask/delete", requireAdminSession, asyncHandler(async (
 
   const changes = await deleteWorktask(validation.data.id);
   if (changes === 0) {
+    await recordAdminAction(req, "worktask.delete", "worktask", validation.data.id, "not_found");
     return sendError(res, 404, "NOT_FOUND", "WorkTask 记录不存在");
   }
+  await recordAdminAction(req, "worktask.delete", "worktask", validation.data.id, "success");
   return res.json({ ok: true });
 }));
 
@@ -910,8 +1178,14 @@ app.post("/api/admin/worktask/home-display", requireAdminSession, asyncHandler(a
 
   const changes = await updateWorktaskHomeDisplay(validation.data.id, validation.data.showOnHome);
   if (changes === 0) {
+    await recordAdminAction(req, "worktask.home_display", "worktask", validation.data.id, "not_found", {
+      showOnHome: validation.data.showOnHome
+    });
     return sendError(res, 404, "NOT_FOUND", "WorkTask 记录不存在");
   }
+  await recordAdminAction(req, "worktask.home_display", "worktask", validation.data.id, "success", {
+    showOnHome: validation.data.showOnHome
+  });
   return res.json({ ok: true });
 }));
 
@@ -927,8 +1201,18 @@ app.post("/api/admin/worktask/note-reply", requireAdminSession, asyncHandler(asy
     validation.data.publicReply
   );
   if (changes === 0) {
+    await recordAdminAction(req, "worktask.note_reply", "worktask", validation.data.id, "not_found", {
+      fields: ["adminNote", "publicReply"],
+      adminNoteLength: validation.data.adminNote.length,
+      publicReplyLength: validation.data.publicReply.length
+    });
     return sendError(res, 404, "NOT_FOUND", "WorkTask 记录不存在");
   }
+  await recordAdminAction(req, "worktask.note_reply", "worktask", validation.data.id, "success", {
+    fields: ["adminNote", "publicReply"],
+    adminNoteLength: validation.data.adminNote.length,
+    publicReplyLength: validation.data.publicReply.length
+  });
   return res.json({ ok: true });
 }));
 

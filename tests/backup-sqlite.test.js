@@ -135,6 +135,7 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
       .map((row) => row.name);
     assert.deepEqual(tables, [
       "account_session",
+      "admin_audit",
       "admin_session",
       "admin_user",
       "ai_copilot_suggestion",
@@ -167,6 +168,7 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
     assert.equal(evidence.tables.admin_user.count, 1);
     assert.equal(evidence.tables.notification_delivery.exists, true);
     assert.equal(evidence.tables.ai_copilot_suggestion.exists, true);
+    assert.equal(evidence.tables.admin_audit.exists, true);
     assert.equal(evidence.fullPath, undefined);
   } finally {
     if (restored) restored.close();

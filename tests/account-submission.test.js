@@ -266,6 +266,27 @@ test("匿名 API、Account 下线、公开 DTO 和 WorkTask 清空流程可重�
     assert.equal(arrangedItem.assignee, "");
     assert.equal(arrangedItem.scheduledAt, "");
     assert.equal(arrangedItem.status, "scheduled");
+
+    const audit = await requestJson(server.baseUrl, "/api/admin/audit/list", {
+      method: "POST",
+      headers,
+      body: { page: 1, pageSize: 100 }
+    });
+    assert.equal(audit.response.status, 200);
+    const actions = audit.data.data.items.map((item) => item.action);
+    for (const action of [
+      "feedback.home_display",
+      "feedback.note_reply",
+      "worktask.arrange",
+      "notification_handoff.retry"
+    ]) {
+      assert.ok(actions.includes(action), `missing audit action ${action}`);
+    }
+    const noteAudit = audit.data.data.items.find((item) => item.action === "feedback.note_reply");
+    assert.deepEqual(noteAudit.metadata.fields, ["adminNote", "publicReply"]);
+    assert.equal(noteAudit.metadata.adminNoteLength, "只限后台".length);
+    assert.equal(noteAudit.metadata.publicReplyLength, "公开回复".length);
+    assert.doesNotMatch(JSON.stringify(audit.data), /private@example\.com|内部详细内容|只限后台/u);
   } finally {
     await server.stop();
   }

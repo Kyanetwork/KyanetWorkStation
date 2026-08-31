@@ -181,3 +181,25 @@ test("invalid AI encryption key never appears in runtime validation errors", () 
   const result = config.validateRuntimeConfig(config);
   assert.equal(result.errors.some((message) => message.includes(secret)), false);
 });
+
+test("admin export row limit defaults to 10000 and accepts configured boundaries", () => {
+  const defaultConfig = loadConfigWithEnv({ ADMIN_EXPORT_MAX_ROWS: undefined });
+  assert.equal(defaultConfig.adminExportMaxRows, 10000);
+  assert.equal(defaultConfig.validateRuntimeConfig(defaultConfig).valid, true);
+
+  for (const value of [100, 100000]) {
+    const configured = loadConfigWithEnv({ ADMIN_EXPORT_MAX_ROWS: String(value) });
+    assert.equal(configured.adminExportMaxRows, value);
+    assert.equal(configured.validateRuntimeConfig(configured).valid, true);
+  }
+});
+
+test("admin export row limit rejects non-integer and out-of-range values without echoing them", () => {
+  for (const value of ["99", "100001", "1.5", "abc"]) {
+    const configured = loadConfigWithEnv({ ADMIN_EXPORT_MAX_ROWS: value });
+    const result = configured.validateRuntimeConfig(configured);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((message) => message.includes("ADMIN_EXPORT_MAX_ROWS")));
+    assert.equal(result.errors.some((message) => message.includes(value)), false);
+  }
+});

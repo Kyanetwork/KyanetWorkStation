@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const config = require("./config");
+const { sanitizeAuditMetadata } = require("./admin-audit-metadata");
 
 const SUPPORTED_CLIENTS = new Set(["sqlite", "mysql", "postgres"]);
 const client = (config.dbClient || "sqlite").toLowerCase();
@@ -277,7 +278,23 @@ function sqliteSchemaStatements() {
       expires_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)"
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)",
+    `CREATE TABLE IF NOT EXISTS admin_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      actor_user_id INTEGER,
+      actor_username TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL DEFAULT '',
+      entity_id INTEGER,
+      request_id TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_created_at ON admin_audit(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_action ON admin_audit(action)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_entity ON admin_audit(entity_type, entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_actor ON admin_audit(actor_user_id)"
   ];
 }
 
@@ -399,6 +416,22 @@ function mysqlSchemaStatements() {
       expires_at VARCHAR(40) NOT NULL,
       INDEX idx_ai_suggestion_entity_created (entity_type, entity_id, created_at),
       INDEX idx_ai_suggestion_expires_at (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS admin_audit (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      created_at VARCHAR(40) NOT NULL,
+      actor_user_id BIGINT NULL,
+      actor_username VARCHAR(64) NOT NULL DEFAULT '',
+      action VARCHAR(64) NOT NULL,
+      entity_type VARCHAR(32) NOT NULL DEFAULT '',
+      entity_id BIGINT NULL,
+      request_id VARCHAR(120) NOT NULL DEFAULT '',
+      result VARCHAR(32) NOT NULL,
+      metadata_json VARCHAR(2048) NOT NULL DEFAULT '{}',
+      INDEX idx_admin_audit_created_at (created_at),
+      INDEX idx_admin_audit_action (action),
+      INDEX idx_admin_audit_entity (entity_type, entity_id),
+      INDEX idx_admin_audit_actor (actor_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   ];
 }
@@ -518,7 +551,23 @@ function postgresSchemaStatements() {
       expires_at TEXT NOT NULL
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)"
+    "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)",
+    `CREATE TABLE IF NOT EXISTS admin_audit (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      actor_user_id BIGINT,
+      actor_username TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL DEFAULT '',
+      entity_id BIGINT,
+      request_id TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_created_at ON admin_audit(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_action ON admin_audit(action)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_entity ON admin_audit(entity_type, entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_actor ON admin_audit(actor_user_id)"
   ];
 }
 
@@ -1403,6 +1452,152 @@ function mapWorktaskRow(row) {
   };
 }
 
+function normalizeAuditMetadata(metadata) {
+  return sanitizeAuditMetadata(metadata);
+}
+
+function mapAdminAuditRow(row) {
+  let metadata = {};
+  try {
+    const parsed = JSON.parse(typeof row.metadata_json === "string" ? row.metadata_json : "{}");
+    metadata = normalizeAuditMetadata(parsed);
+  } catch (_) {
+    metadata = {};
+  }
+  return {
+    id: toNumber(row.id),
+    createdAt: row.created_at || "",
+    actorUserId: row.actor_user_id == null ? null : toNumber(row.actor_user_id),
+    actorUsername: row.actor_username || "",
+    action: row.action || "",
+    entityType: row.entity_type || "",
+    entityId: row.entity_id == null ? null : toNumber(row.entity_id),
+    requestId: row.request_id || "",
+    result: row.result || "",
+    metadata
+  };
+}
+
+async function createAdminAudit({
+  actorUserId = null,
+  actorUsername = "",
+  action = "",
+  entityType = "",
+  entityId = null,
+  requestId = "",
+  result = "failed",
+  metadata = {},
+  createdAt = nowIso()
+} = {}) {
+  const normalizedMetadata = normalizeAuditMetadata(metadata);
+  const params = [
+    typeof createdAt === "string" && createdAt ? createdAt.slice(0, 40) : nowIso(),
+    Number.isSafeInteger(Number(actorUserId)) && Number(actorUserId) > 0 ? Number(actorUserId) : null,
+    String(actorUsername || "").trim().slice(0, 64),
+    String(action || "").trim().slice(0, 64),
+    String(entityType || "").trim().slice(0, 32),
+    Number.isSafeInteger(Number(entityId)) && Number(entityId) > 0 ? Number(entityId) : null,
+    String(requestId || "").trim().slice(0, 120),
+    ["success", "not_found", "rejected", "failed"].includes(result) ? result : "failed",
+    JSON.stringify(normalizedMetadata)
+  ];
+  const marks = params.map((_, index) => placeholder(index + 1));
+  const sql = client === "postgres"
+    ? `INSERT INTO admin_audit (created_at, actor_user_id, actor_username, action, entity_type, entity_id, request_id, result, metadata_json)
+       VALUES (${marks.join(", ")}) RETURNING id`
+    : `INSERT INTO admin_audit (created_at, actor_user_id, actor_username, action, entity_type, entity_id, request_id, result, metadata_json)
+       VALUES (${marks.join(", ")})`;
+  const inserted = await execute(sql, params);
+  return inserted.lastInsertId;
+}
+
+async function countExportRows(entityType, filters = {}) {
+  if (entityType === "feedback") {
+    const { whereClause, params } = buildFeedbackFilter(filters.status || "", filters.keyword || "");
+    const row = await queryOne(`SELECT COUNT(*) AS count FROM feedback ${whereClause}`, params);
+    return toNumber(row && row.count);
+  }
+  if (entityType === "worktask") {
+    const { whereClause, params } = buildWorktaskFilter(filters.status || "", filters.keyword || "", filters.priority || "");
+    const row = await queryOne(`SELECT COUNT(*) AS count FROM worktask ${whereClause}`, params);
+    return toNumber(row && row.count);
+  }
+  throw new Error("Unsupported export entity type");
+}
+
+async function listFeedbackExportBatch(filters = {}, limit = 250, offset = 0) {
+  const { whereClause, params, nextIndex } = buildFeedbackFilter(filters.status || "", filters.keyword || "");
+  const safeLimit = Math.max(1, Math.min(250, toNumber(limit) || 250));
+  const safeOffset = Math.max(0, toNumber(offset));
+  const rows = await queryAll(
+    `SELECT id, type, title, content, contact, images, status, show_on_home, admin_note, public_reply, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM feedback ${whereClause}
+     ORDER BY created_at DESC, id DESC
+     LIMIT ${placeholder(nextIndex)} OFFSET ${placeholder(nextIndex + 1)}`,
+    [...params, safeLimit, safeOffset]
+  );
+  return rows.map(mapFeedbackRow);
+}
+
+async function listWorktaskExportBatch(filters = {}, limit = 250, offset = 0) {
+  const { whereClause, params, nextIndex } = buildWorktaskFilter(filters.status || "", filters.keyword || "", filters.priority || "");
+  const safeLimit = Math.max(1, Math.min(250, toNumber(limit) || 250));
+  const safeOffset = Math.max(0, toNumber(offset));
+  const rows = await queryAll(
+    `SELECT id, type, title, content, contact, priority, status, show_on_home, created_by_admin, admin_note, public_reply, expected_at, scheduled_at, assignee, tags, account_user_id, account_email_snapshot, account_display_name_snapshot, created_at, updated_at
+     FROM worktask ${whereClause}
+     ORDER BY created_at DESC, id DESC
+     LIMIT ${placeholder(nextIndex)} OFFSET ${placeholder(nextIndex + 1)}`,
+    [...params, safeLimit, safeOffset]
+  );
+  return rows.map(mapWorktaskRow);
+}
+
+async function listAdminAudits({
+  action = "",
+  entityType = "",
+  entityId = null,
+  actor = "",
+  from = "",
+  to = "",
+  page = 1,
+  pageSize = 20
+} = {}) {
+  const conditions = [];
+  const params = [];
+  let index = 1;
+  const add = (column, value, operator = "=") => {
+    conditions.push(`${column} ${operator} ${placeholder(index++)}`);
+    params.push(value);
+  };
+  if (action) add("action", String(action).slice(0, 64));
+  if (entityType) add("entity_type", String(entityType).slice(0, 32));
+  if (entityId !== null && entityId !== undefined && entityId !== "") add("entity_id", Number(entityId));
+  if (actor) add("actor_username", String(actor).slice(0, 64));
+  if (from) add("created_at", String(from).slice(0, 40), ">=");
+  if (to) add("created_at", String(to).slice(0, 40), "<=");
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM admin_audit ${whereClause}`, params);
+  const total = toNumber(totalRow && totalRow.count);
+  const safePage = Math.max(1, toNumber(page) || 1);
+  const safePageSize = Math.max(1, Math.min(100, toNumber(pageSize) || 20));
+  const offset = (safePage - 1) * safePageSize;
+  const rows = await queryAll(
+    `SELECT id, created_at, actor_user_id, actor_username, action, entity_type, entity_id, request_id, result, metadata_json
+     FROM admin_audit ${whereClause}
+     ORDER BY created_at DESC, id DESC
+     LIMIT ${placeholder(index)} OFFSET ${placeholder(index + 1)}`,
+    [...params, safePageSize, offset]
+  );
+  return {
+    items: rows.map(mapAdminAuditRow),
+    page: safePage,
+    pageSize: safePageSize,
+    total,
+    totalPages: total === 0 ? 1 : Math.ceil(total / safePageSize)
+  };
+}
+
 async function getFeedbackById(id) {
   const p1 = placeholder(1);
   const row = await queryOne(
@@ -1971,6 +2166,11 @@ module.exports = {
   deleteAccountSessionById,
   touchAccountSessionLastSeen,
   listFeedback,
+  countExportRows,
+  listFeedbackExportBatch,
+  listWorktaskExportBatch,
+  createAdminAudit,
+  listAdminAudits,
   listFeedbackByAccountUser,
   updateFeedbackStatus,
   updateFeedbackHomeDisplay,

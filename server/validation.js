@@ -6,6 +6,7 @@ const ALLOWED_WORKTASK_STATUS = new Set(["new", "scheduled", "in_progress", "com
 const ALLOWED_WORKTASK_PRIORITY = new Set(["low", "medium", "high", "urgent"]);
 const ALLOWED_AI_PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
 const ALLOWED_AI_SUGGESTION_FIELDS = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
+const ALLOWED_AUDIT_ENTITY_TYPES = new Set(["feedback", "worktask", "ai_profile", "ai_suggestion", "notification", "notification_handoff", "status"]);
 const AI_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SIMPLE_URL_PATTERN = /^https?:\/\/.+/i;
@@ -262,6 +263,132 @@ function validateWorktaskListPayload(payload) {
       priority,
       page: Number.isFinite(page) && page > 0 ? page : 1,
       pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20
+    }
+  };
+}
+
+function validateExportFilterString(payload, fieldName, maxLength) {
+  if (hasOwn(payload, fieldName) && payload[fieldName] !== undefined && payload[fieldName] !== null && typeof payload[fieldName] !== "string") {
+    return { valid: false, message: `${fieldName} 必须是字符串` };
+  }
+  const value = normalizeString(payload[fieldName]);
+  if (value.length > maxLength) {
+    return { valid: false, message: `${fieldName} 过长` };
+  }
+  return { valid: true, value };
+}
+
+function validateFeedbackExportPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const status = validateExportFilterString(body, "status", 32);
+  const keyword = validateExportFilterString(body, "keyword", 200);
+  if (!status.valid) return status;
+  if (!keyword.valid) return keyword;
+  if (status.value && !ALLOWED_STATUS.has(status.value)) {
+    return { valid: false, message: "status 不合法" };
+  }
+  return { valid: true, data: { status: status.value, keyword: keyword.value } };
+}
+
+function validateWorktaskExportPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const status = validateExportFilterString(body, "status", 32);
+  const priority = validateExportFilterString(body, "priority", 32);
+  const keyword = validateExportFilterString(body, "keyword", 200);
+  if (!status.valid) return status;
+  if (!priority.valid) return priority;
+  if (!keyword.valid) return keyword;
+  if (status.value && !ALLOWED_WORKTASK_STATUS.has(status.value)) {
+    return { valid: false, message: "worktask status 不合法" };
+  }
+  const normalizedPriority = priority.value.toLowerCase();
+  if (normalizedPriority && !ALLOWED_WORKTASK_PRIORITY.has(normalizedPriority)) {
+    return { valid: false, message: "worktask priority 不合法" };
+  }
+  return { valid: true, data: { status: status.value, priority: normalizedPriority, keyword: keyword.value } };
+}
+
+function normalizeAuditDate(value, fieldName) {
+  if (value === undefined || value === null || value === "") return { valid: true, value: "" };
+  if (typeof value !== "string" || value.trim().length > 64) {
+    return { valid: false, message: `${fieldName} 不合法` };
+  }
+  const parsed = new Date(value.trim());
+  if (Number.isNaN(parsed.getTime())) return { valid: false, message: `${fieldName} 不合法` };
+  return { valid: true, value: parsed.toISOString() };
+}
+
+function validateAuditListPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const stringFields = ["action", "entityType", "actor"];
+  const normalized = {};
+  for (const fieldName of stringFields) {
+    const result = validateExportFilterString(body, fieldName, fieldName === "action" ? 64 : fieldName === "entityType" ? 32 : 64);
+    if (!result.valid) return result;
+    normalized[fieldName] = result.value;
+  }
+
+  if (normalized.action && !/^[A-Za-z0-9_.-]+$/.test(normalized.action)) {
+    return { valid: false, message: "action 不合法" };
+  }
+  if (normalized.entityType && !ALLOWED_AUDIT_ENTITY_TYPES.has(normalized.entityType)) {
+    return { valid: false, message: "entityType 不合法" };
+  }
+
+  let entityId = null;
+  if (hasOwn(body, "entityId") && body.entityId !== undefined && body.entityId !== null && body.entityId !== "") {
+    const rawEntityId = body.entityId;
+    if ((typeof rawEntityId !== "number" && typeof rawEntityId !== "string") || (typeof rawEntityId === "string" && !/^\d+$/.test(rawEntityId.trim()))) {
+      return { valid: false, message: "entityId 不合法" };
+    }
+    entityId = Number(rawEntityId);
+    if (!Number.isSafeInteger(entityId) || entityId <= 0) {
+      return { valid: false, message: "entityId 不合法" };
+    }
+  }
+
+  const from = normalizeAuditDate(body.from, "from");
+  const to = normalizeAuditDate(body.to, "to");
+  if (!from.valid) return from;
+  if (!to.valid) return to;
+  if (from.value && to.value && from.value > to.value) {
+    return { valid: false, message: "from 不能晚于 to" };
+  }
+
+  const rawPage = body.page;
+  const rawPageSize = body.pageSize;
+  const validatePageValue = (value, fieldName) => {
+    if (value === undefined || value === null || value === "") return { valid: true, value: 1 };
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value) || value <= 0) return { valid: false, message: `${fieldName} 不合法` };
+      return { valid: true, value };
+    }
+    if (typeof value !== "string" || !/^\d+$/.test(value.trim())) {
+      return { valid: false, message: `${fieldName} 不合法` };
+    }
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) && parsed > 0
+      ? { valid: true, value: parsed }
+      : { valid: false, message: `${fieldName} 不合法` };
+  };
+  const pageResult = validatePageValue(rawPage, "page");
+  const pageSizeResult = validatePageValue(rawPageSize, "pageSize");
+  if (!pageResult.valid) return pageResult;
+  if (!pageSizeResult.valid) return pageSizeResult;
+  const page = pageResult.value;
+  const pageSize = rawPageSize === undefined || rawPageSize === null || rawPageSize === "" ? 20 : pageSizeResult.value;
+
+  return {
+    valid: true,
+    data: {
+      action: normalized.action,
+      entityType: normalized.entityType,
+      entityId,
+      actor: normalized.actor,
+      from: from.value,
+      to: to.value,
+      page,
+      pageSize: Math.min(pageSize, 100)
     }
   };
 }
@@ -652,6 +779,9 @@ module.exports = {
   validateAdminLoginPayload,
   validateListPayload,
   validateWorktaskListPayload,
+  validateFeedbackExportPayload,
+  validateWorktaskExportPayload,
+  validateAuditListPayload,
   validateStatusPayload,
   validateWorktaskStatusPayload,
   validateWorktaskArrangePayload,
