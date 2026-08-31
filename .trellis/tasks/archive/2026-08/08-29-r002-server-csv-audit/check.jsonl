@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and quality gate for review"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Review schema, SQL, mapping, and compatibility"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Review API envelope and stream error behavior"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Review audit/export redaction and bounded logs"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality gate for admin download behavior"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Review native fetch/event patterns"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Review browser, keyboard, theme, and narrow viewport checks"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review duplicated constants and helpers"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer payload/data flow"}

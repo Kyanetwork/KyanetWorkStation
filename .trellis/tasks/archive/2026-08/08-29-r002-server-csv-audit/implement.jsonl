@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and quality gate for API/database changes"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Three-database schema, parameterized SQL, mapping, and compatibility rules"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "API envelope, async route, and error semantics"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Bounded structured logging and redaction contract"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend checklist for admin download behavior"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Native fetch/event patterns for replacing browser export"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Browser and syntax verification requirements"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicated CSV/filter/config logic"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "API/database/frontend contract mapping"}
