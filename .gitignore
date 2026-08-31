@@ -18,4 +18,5 @@ docs/internal/
 .vscode/
 .idea/
 .playwright-cli/
+.superpowers/
 public/favicon.*
