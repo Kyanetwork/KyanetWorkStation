@@ -23,7 +23,7 @@ Browser
 1. Helmet/CSP、请求日志、JSON/urlencoded 解析和 Cookie 解析。
 2. 公共 health/config/highlights/MeowStatus 路由。
 3. 反馈与 WorkTask 提交路由。
-4. 管理员登录、列表、状态、安排、备注、导出和通知测试路由。
+4. 管理员登录、列表、状态、安排、备注、服务端导出、审计查询和通知测试路由。
 5. 统一错误响应和静态文件回退。
 
 `server/validation.js` 负责输入规范化和字段长度/枚举校验；`server/security.js` 负责管理写请求的来源和 JSON 类型边界；`server/errors.js` 负责统一错误形状。
@@ -44,6 +44,8 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 - 提供分页、关键词、状态/优先级筛选和主页摘要查询。
 - `workstation_setting` 保存非敏感运行设置及 AI profile 元数据/密文；
   `ai_copilot_suggestion` 保存短期建议、过期时间和人工决策审计。
+- `admin_audit` 保存管理员动作级审计；反馈/WorkTask 导出通过固定 250 行批次查询，
+  不构造全量结果数组。
 
 反馈和 WorkTask 保持独立业务表。未来工作台通过聚合读取层和安全 DTO 组合展示，不直接改变两张表的业务语义。
 
@@ -71,3 +73,16 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 公共 highlights 只能返回公开标题、状态、公开回复和时间等必要字段；不能返回 content、contact、管理员备注、Account 快照或其他内部字段。管理员接口和未来用户安全视图必须使用明确的 DTO，不把数据库整行直接作为响应。
 
 AI 出站和响应均使用 allow-list；建议不能直接写入业务表、公开回复或通知 outbox。
+
+管理员导出与审计数据流为：
+
+```text
+管理员筛选
+  -> POST /api/admin/{feedback,worktask}/export
+  -> count + ADMIN_EXPORT_MAX_ROWS 检查
+  -> 250 行批次查询 -> CSV 响应流（背压等待）
+  -> admin_audit（动作、结果、脱敏元数据）
+```
+
+导出在开始发送响应头前完成上限拒绝；开始输出后若查询或连接失败只关闭流并记录
+脱敏错误，不追加 JSON。审计写入是 best-effort，不回滚已成功的业务操作。

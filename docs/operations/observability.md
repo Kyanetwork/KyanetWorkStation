@@ -10,6 +10,19 @@
 
 日志级别由 `LOG_LEVEL` 控制，可通过 `LOG_TO_FILE=true` 写入 `LOG_DIR/app.log`。生产环境应由 PM2、Nginx 或系统日志服务负责轮转和权限隔离；不要让日志无限增长。
 
+### 管理员导出与审计
+
+反馈和 WorkTask 导出由服务端按固定 250 行批次读取并逐块写出，`X-Export-Count`
+记录开始导出时的匹配总量。单次上限由 `ADMIN_EXPORT_MAX_ROWS` 控制；超过上限时在
+发送 CSV 头之前返回 `413 EXPORT_LIMIT_EXCEEDED`。没有长事务快照时，并发删除可能使
+实际写出行数少于该响应头值，这是预期边界。
+
+高影响管理员动作写入数据库 `admin_audit`，可通过受保护的
+`POST /api/admin/audit/list` 查询。记录只包含动作、管理员快照、结果、request ID 和
+白名单元数据；不包含正文、联系方式、CSV 内容、Cookie 或密钥。审计写入失败只产生
+`admin.audit.write.error` 警告，不回滚已经成功的业务操作。审计表随现有数据库备份
+保留，本任务不新增自动清理作业。
+
 ### PM2 进程观测
 
 当生产选择 PM2 时，应用进程应保持单实例 fork 模式，并由
@@ -61,4 +74,5 @@ POST /api/admin/notification-handoffs/retry  {"handoffId":"<UUID>"}
 3. 查看 PM2/反向代理日志及磁盘空间。
 4. 对外部服务检查超时、响应大小、TLS 和凭据配置，不把密钥复制到工单。
 5. 若发现 outbox 入队 handoff，先查询其状态并确认 journal 权限/备份，再执行人工重试。
-6. 若涉及数据风险，先保留备份和脱敏证据，再进行重启或回滚。
+6. 若导出收到 `EXPORT_LIMIT_EXCEEDED`，缩小筛选范围或调低/调整 `ADMIN_EXPORT_MAX_ROWS` 后重启 PM2；不要期待静默截断。
+7. 若涉及数据风险，先保留备份和脱敏证据，再进行重启或回滚。

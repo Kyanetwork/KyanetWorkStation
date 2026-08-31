@@ -24,7 +24,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`。
 - 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
   干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
-  当前完整测试为 `102/102`。
+  当前完整测试为 `123/123`（以最近一次 Node 24 `npm test` 输出为准）。
 
 ## 必须覆盖的行为
 
@@ -40,13 +40,17 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - AI 建议只写入短期候选表；接受/拒绝和“填入”不直接改变业务状态、删除记录、发送回复或触发通知。
 - SMTP/Webhook 至少一条链路在测试环境可发送，失败目标能被记录和重试。
 - outbox 入队异常可在私有 `notification-handoff.jsonl` 查询、脱敏并人工重试；journal 不可写时应暂停发布并记录人工补偿。
+- 管理员反馈/WorkTask 导出通过服务端固定 250 行批次流式输出；需验证筛选、CSV BOM/转义、
+  `X-Export-Count`、`ADMIN_EXPORT_MAX_ROWS` 超限拒绝和流中断关闭。
+- 管理员状态、删除、主页展示、备注/回复、安排/创建、AI 决策、通知重试和状态设置等动作
+  写入 `admin_audit`；需验证管理员权限、分页筛选、白名单元数据和审计写入失败降级。
 
 ## 发布门禁
 
 | 门禁 | 证据 | 状态 |
 |---|---|---|
 | 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
-| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：102/102 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：123/123 |
 | 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | canonical registry 当前 0 项 |
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |

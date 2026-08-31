@@ -36,6 +36,10 @@
 | `RATE_LIMIT_ADMIN_WINDOW_MS` | `60000` | 管理接口限流窗口 |
 | `RATE_LIMIT_ADMIN_MAX` | `120` | 窗口内管理请求次数 |
 | `ADMIN_ALLOW_HEADERLESS_MUTATION` | `false` | 是否允许无来源头的管理写请求；仅受控调试使用 |
+| `ADMIN_EXPORT_MAX_ROWS` | `10000` | 单次反馈/WorkTask CSV 导出上限；仅接受 100–100000 的整数，修改后需重启服务 |
+
+导出批次大小固定为 250 行，不另设环境变量；上限不是静默截断阈值，超过时接口返回
+`413 EXPORT_LIMIT_EXCEEDED`。审计记录写入数据库并随现有备份保留。
 
 ## 日志与展示
 

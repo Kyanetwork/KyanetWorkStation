@@ -8,6 +8,19 @@
 - 提交、登录和管理员接口分别有限流。
 - 输入有长度和枚举校验，统一错误响应不应返回堆栈给客户端。
 - 请求日志带 request ID，并对 `ticket`、`token`、`secret`、`password` 等查询参数做脱敏。
+- 管理员 CSV 导出受会话、同源、JSON 和 `ADMIN_EXPORT_MAX_ROWS` 上限保护；服务端流不在浏览器
+  拼接全量数据，响应禁止缓存。
+
+## 管理员操作审计
+
+- SQLite、MySQL、PostgreSQL 均追加 `admin_audit` 表；初始化使用幂等的追加式 schema，旧业务
+  数据无需迁移或重写。
+- 记录动作级信息（管理员快照、动作、实体、request ID、结果和白名单元数据），不保存
+  before/after 全文、CSV 内容、联系方式、Cookie、Token、API Key 或 Provider URL。
+- 审计查询仅开放给管理员会话，`pageSize` 最大 100；元数据在写入和读取两侧都做长度/字段
+  限制。审计写入故障记录结构化警告但不改变业务响应。
+- 审计记录随现有数据库备份保留，不新增自动清理。若需回滚代码，保留审计表和备份，不执行
+  删除迁移。
 
 ## AI Copilot 边界
 

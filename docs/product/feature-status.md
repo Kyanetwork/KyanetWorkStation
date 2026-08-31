@@ -14,7 +14,8 @@
 | 反馈提交 | 已实现 | `server/app.js:340-353`、`public/feedback/` |
 | WorkTask 提交 | 已实现 | `server/app.js:355-367`、`public/worktask/` |
 | 管理员登录与会话 | 已实现 | `server/app.js:370-398`、`server/auth.js` |
-| 管理列表、筛选、分页、状态、备注、CSV | 已实现 | `server/app.js:527-681`、`public/admin/admin.js` |
+| 管理列表、筛选、分页、状态、备注、服务端 CSV | 已实现 | `server/app.js`、`server/admin-export.js`、`public/admin/admin.js`；固定 250 行批次、上限和筛选语义有回归 |
+| 管理员动作审计 | 已实现/P1 | `server/admin-audit.js`、`server/db.js`、`POST /api/admin/audit/list`；三数据库 schema、动作级脱敏和写入失败降级已覆盖 |
 | 主页处理进展 | 已实现/P0 加固 | `server/app.js:295-301`、`server/db.js:1640-1663`；公开查询已使用最小投影，仍需发布门禁验证 |
 | SMTP/Webhook 通知 | 已实现/P0 加固 | `server/notify.js`、`server/webhook.js`、`server/db.js:1194-1333`、`server/notification-handoff.js`；outbox 有限重试和入队失败 handoff 已覆盖，真实 provider 仍需验证 |
 | MeowStatus/Minecraft 状态 | 已实现/P0 加固 | `server/app.js:303-337`、`server/meowstatus.js`；`MEOWSTATUS_ENABLED=false` 默认关闭，响应/MIME/字段/favicon 有界，状态接口区分 disabled/unavailable/ok |

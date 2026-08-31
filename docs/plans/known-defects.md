@@ -27,7 +27,7 @@
 | ID | 严重性 | 风险 | 证据/原因 | 计划 |
 |---|---|---|---|---|
 | R-001 | 已修复 | 配置 URL、端口和外部服务组合在启动前校验 | `server/config.js:73-188`、`server/app.js:709-717` | preflight 失败不监听/不初始化数据库 |
-| R-002 | P1 | 管理端浏览器分页导出大数据会增加内存和等待时间，且缺少操作审计 | `public/admin/admin.js:385-410,674-700` | 服务端流式导出、上限和审计 |
+| R-002 | 已实现/待发布验证 | 管理端浏览器分页导出大数据会增加内存和等待时间，且缺少操作审计 | `server/admin-export.js`、`server/admin-audit.js`、`server/app.js`、`public/admin/admin.js` | 服务端固定 250 行分批流式导出、`ADMIN_EXPORT_MAX_ROWS` 上限、动作级脱敏审计和管理员查询已有回归；发布目标重演下载、超限和 PM2 重启 |
 | R-003 | P1 | 单管理员模型限制协作和追责 | `server/auth.js`、管理员路由 | 未来按规模评估 RBAC，不在当前 P0 扩张 |
 | R-004 | 已修复/待实链路验证 | outbox 入队异常写入私有 JSONL handoff，可由管理员查询并有限次人工重试；journal 不可写时仍需人工补偿 | `server/notification-handoff.js`、`server/app.js`、`tests/notification-handoff.test.js` | 入队异常、重启读取、脱敏和重试回归；发布环境验证文件权限与备份 |
 | R-005 | 已修复 | 人工重试接口只允许 `failed/retrying` 状态，避免重置已 `delivered` 记录造成重复通知 | `server/db.js:1325-1333`、`tests/notification-outbox.test.js` | 已有 delivered 重试返回 0 的回归断言 |

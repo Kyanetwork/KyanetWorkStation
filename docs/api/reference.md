@@ -9,6 +9,7 @@
 - 管理写接口要求 JSON，并默认要求同源 `Origin`/`Referer`；`ADMIN_ALLOW_HEADERLESS_MUTATION=true` 只用于受控调试。
 - 管理接口需要管理员会话 Cookie；公共提交接口受提交限流和输入校验约束。
 - 管理列表请求使用 `page`/`pageSize`，服务端将 `pageSize` 限制在 100 以内。
+- 管理员导出和审计查询使用 POST JSON；导出成功响应是 CSV 流，不使用 JSON 成功 envelope。
 
 ## 公共接口
 
@@ -69,6 +70,7 @@ Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
 | `POST /api/admin/feedback/delete` | 删除反馈 |
 | `POST /api/admin/feedback/home-display` | 更新主页展示开关 |
 | `POST /api/admin/feedback/note-reply` | 保存管理员备注和对外回复 |
+| `POST /api/admin/feedback/export` | 按状态/关键词筛选生成服务端 CSV |
 
 ## WorkTask 管理
 
@@ -81,6 +83,7 @@ Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
 | `POST /api/admin/worktask/delete` | 删除 WorkTask |
 | `POST /api/admin/worktask/home-display` | 更新主页展示开关 |
 | `POST /api/admin/worktask/note-reply` | 保存管理员备注和对外回复 |
+| `POST /api/admin/worktask/export` | 按状态/优先级/关键词筛选生成服务端 CSV |
 | `GET /api/admin/notifications` | 查询持久化通知投递记录 |
 | `POST /api/admin/notifications/retry` | 触发指定通知记录的人工重试 |
 | `GET /api/admin/notification-handoffs` | 查询 outbox 入队失败的脱敏人工补偿记录 |
@@ -89,6 +92,26 @@ Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
 handoff 列表只返回 `handoffId`、`eventId`、业务类型/ID、`providers`、状态、次数、
 时间和截断脱敏错误。retry 只接受 UUID；已解决记录不会重复入队，入队失败会保留
 `retrying`/`failed` 状态而不回滚业务记录。
+
+### 服务端 CSV 导出与操作审计
+
+两个导出接口沿用列表筛选字段：
+
+- `POST /api/admin/feedback/export`：`status`、`keyword`
+- `POST /api/admin/worktask/export`：`status`、`priority`、`keyword`
+
+服务端按固定 250 行批次查询并逐块写出，响应包含 UTF-8 BOM、稳定表头、
+`Content-Disposition` 下载文件名、`Cache-Control: no-store` 和 `X-Export-Count`。
+反馈表头为 `id,type,title,content,contact,status,accountUserId,accountEmailSnapshot,accountDisplayNameSnapshot,createdAt,updatedAt`；
+WorkTask 另外包含 `priority`、`expectedAt`、`scheduledAt`、`assignee`、`tags`。
+单次匹配总量超过 `ADMIN_EXPORT_MAX_ROWS` 时，在发送 CSV 头之前返回
+`413 EXPORT_LIMIT_EXCEEDED`，不会静默截断。
+
+`POST /api/admin/audit/list` 提供受管理员会话保护的分页审计查询。请求可按
+`action`、`entityType`、`entityId`、`actor`、`from`、`to`、`page`、`pageSize` 筛选，
+`pageSize` 最大 100。响应为 `{ ok: true, data: { items, page, pageSize, total, totalPages } }`。
+审计只保存动作、管理员快照、结果和白名单脱敏元数据；不保存 CSV 内容、完整正文、
+联系方式、Cookie、Token 或 Provider Key。
 
 ## 已移除的旧 Account 接口
 
@@ -107,4 +130,4 @@ handoff 列表只返回 `handoffId`、`eventId`、业务类型/ID、`providers`�
 
 ## 错误与分页
 
-常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE` 和 `RATE_LIMITED`。AI 路由另有 `AI_UNAVAILABLE`、`AI_KEY_UNAVAILABLE`、`AI_BUSY`、`AI_RATE_LIMITED`、`AI_TIMEOUT`、`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`、`AI_PROFILE_CONFLICT` 和 `AI_SUGGESTION_CONFLICT`；AI 不可用时普通提交、列表和通知流程继续工作。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。
+常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE`、`RATE_LIMITED`、`NOT_FOUND` 和 `EXPORT_LIMIT_EXCEEDED`。AI 路由另有 `AI_UNAVAILABLE`、`AI_KEY_UNAVAILABLE`、`AI_BUSY`、`AI_RATE_LIMITED`、`AI_TIMEOUT`、`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`、`AI_PROFILE_CONFLICT` 和 `AI_SUGGESTION_CONFLICT`；AI 不可用时普通提交、列表和通知流程继续工作。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。

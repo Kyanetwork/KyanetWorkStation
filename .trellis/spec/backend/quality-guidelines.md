@@ -23,6 +23,86 @@ focused tests, `npm test`, and `git diff --check` as applicable.
 - Add a focused test when introducing a validator, adapter contract, security
   rule, or cross-layer response shape.
 
+## Admin CSV export and audit contract
+
+### 1. Scope / Trigger
+
+适用于管理员反馈/WorkTask 导出、管理员高影响动作审计，以及它们跨越
+validation → app → db 的请求路径。该约束保证导出不会在浏览器或服务端构造
+无界结果，同时避免把正文、联系方式或凭据写入审计。
+
+### 2. Signatures
+
+- `POST /api/admin/feedback/export`：`{ status?, keyword? }` → CSV stream。
+- `POST /api/admin/worktask/export`：`{ status?, priority?, keyword? }` → CSV stream。
+- `POST /api/admin/audit/list`：分页筛选 → `{ ok: true, data: { items, page, pageSize, total, totalPages } }`。
+- `writeCsvExport({ res, total, maxRows, filename, columns, fetchBatch, recordProgress })`：固定 250 行批次。
+- `createAdminAudit(input)` / `listAdminAudits(filters)`：只经 `server/db.js` 访问数据库。
+
+### 3. Contracts
+
+- `ADMIN_EXPORT_MAX_ROWS` 缺省 10000，且只能是 100–100000 的安全整数；启动时
+  校验，修改后重启进程。
+- 导出先计数并在发送响应头前拒绝超限；成功响应设置 CSV MIME、下载文件名、
+  `Cache-Control: no-store` 和 `X-Export-Count`，正文首字节为 UTF-8 BOM。
+- 导出批次通过参数化 SQL 按 `created_at DESC, id DESC` 读取；写入返回背压时
+  等待 `drain`，不把全量结果放入数组。
+- 审计记录仅含动作、管理员快照、实体标识、request ID、结果和白名单元数据；
+  `metadata_json` 最多 2048 字节，解析失败的查询结果为 `{}`。AI profile 的
+  `model` 只允许保留模型标识摘要；若误传 `http(s)://` 或协议相对 URL，必须丢弃
+  该字段，不能把 Provider URL 写入审计。审计写入失败只
+  记录有限字段的结构化 warning，不改变业务响应。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| 未登录或同源/JSON 校验失败 | 沿用现有 401/403/415 envelope，不写数据库审计 |
+| 筛选字段类型、枚举、ID 或时间不合法 | 400 `INVALID_PAYLOAD` |
+| 匹配数超过 `ADMIN_EXPORT_MAX_ROWS` | 413 `EXPORT_LIMIT_EXCEEDED`，写入 `rejected` 审计，不发送 CSV 头 |
+| 已发送 CSV 后批次查询/客户端连接失败 | 关闭响应并写入 `failed` 审计；不追加 JSON |
+| 业务更新影响行数为 0 | 404 `NOT_FOUND`，写入 `not_found` 审计 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：筛选通过后按 250 行分批写出，审计 metadata 只有字段名/长度/计数等摘要。
+- Base：旧 SQLite 启动幂等创建 `admin_audit`；MySQL/PostgreSQL 使用同语义 schema
+  和绑定参数。
+- Bad：在路由中 `SELECT *`/拼接用户筛选、先收集所有行再生成 Blob，或记录 CSV、
+  正文、联系方式、Cookie、Token、API Key、URL。
+
+### 6. Tests Required
+
+- 配置/验证器：默认值、100/100000 边界、非法值、筛选和时间范围。
+- 导出模块/API：BOM、列顺序、CSV 转义、250 行批次、背压、超限 413、客户端中止、
+  未登录 401、响应头和审计结果。
+- 数据库：三数据库 schema 静态一致性、SQLite 幂等初始化、审计分页/筛选/脱敏、
+  写入失败不改变业务语义。
+- 管理动作回归：状态、删除、主页展示、备注/回复、安排/创建、AI decision、通知
+  retry 均产出稳定 action；所有变更 JavaScript 运行 `node --check`，再跑 `npm test`。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```js
+const rows = await listAllFeedback(filters);
+res.type("csv").send(rows.map(toCsv).join("\\n"));
+```
+
+#### Correct
+
+```js
+await writeCsvExport({
+  res,
+  total,
+  maxRows: config.adminExportMaxRows,
+  columns: FEEDBACK_EXPORT_COLUMNS,
+  fetchBatch: (limit, offset) => listFeedbackExportBatch(filters, limit, offset),
+  recordProgress: (event) => recordAdminAuditSafely({ req, action: "feedback.export", metadata: event })
+});
+```
+
 ## Forbidden patterns
 
 - Raw driver calls or SQL string interpolation in `app.js` or a new route.

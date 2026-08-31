@@ -15,6 +15,18 @@ states and keyboard submission, and check both light and dark themes. Record
 that browser evidence in the task or release notes; do not imply that a
 browser check ran if it did not.
 
+## Admin server-download contract
+
+- Export buttons send one authenticated `POST` with the current list filters to
+  `/api/admin/feedback/export` or `/api/admin/worktask/export`; they must not
+  paginate through list endpoints or store submission data in browser storage.
+- A successful response is treated as a Blob download and reports the bounded
+  `X-Export-Count`; a non-2xx response parses the shared error envelope and
+  surfaces `EXPORT_LIMIT_EXCEEDED` (or its actionable message) in the page status.
+- Manual verification must cover an under-limit success, an over-limit error,
+  button restoration after either result, light/dark `data-theme`, keyboard
+  focus/activation, and a 620px viewport with no horizontal overflow.
+
 ## Required patterns
 
 - Use semantic HTML labels, buttons, forms, and visible status messages.

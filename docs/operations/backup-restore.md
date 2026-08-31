@@ -27,8 +27,8 @@ npm run verify-backup:sqlite -- --backup <PRIVATE_BACKUP_PATH>
 ```
 
 工具会计算源文件 SHA-256，将备份解压/复制到操作系统临时目录，以只读
-`better-sqlite3` 打开，执行 `PRAGMA integrity_check`，并只输出关键表存在性和
-行数摘要。输出包含备份 basename、数据库类型、耗时和 checksum，不包含完整路径、
+`better-sqlite3` 打开，执行 `PRAGMA integrity_check`，并只输出关键表（包括
+`admin_audit`）存在性和行数摘要。输出包含备份 basename、数据库类型、耗时和 checksum，不包含完整路径、
 行内容、数据库 URL 或凭据；结束时关闭连接并清理临时目录。工具成功只能证明该
 副本可读，不能替代 MySQL/PostgreSQL 供应商的隔离恢复，也不能替代使用真实脱敏
 备份的发布演练。
@@ -68,13 +68,13 @@ pg_restore --host=<PRIVATE_ISOLATED_HOST> --username=<PRIVATE_USER> \
 1. 选择一份脱敏或测试备份，记录校验和、创建时间和来源。
 2. 恢复到隔离的临时数据库路径/实例，不覆盖生产库。
 3. 使用匹配的 Node 版本运行 `initializeDatabase()` 或启动临时应用。
-4. 检查反馈、WorkTask、管理员会话和设置表的数量及关键字段。
+4. 检查反馈、WorkTask、管理员会话、设置和 `admin_audit` 表的数量及关键字段。
 5. 访问 health、管理员列表和主页摘要，确认数据可读。
 6. 记录恢复耗时、失败点、回滚动作和证据路径。
 
 `backup-db:core` 只负责生成一致性快照；发布门禁还要求在独立临时路径解压并用匹配 Node 24 运行时读取关键表。应记录备份文件 SHA-256、数据库类型、schema/关键行读取结果、耗时和清理动作；不得用“脚本退出 0”替代恢复验证。
 
-仓库中的 `tests/backup-sqlite.test.js` 提供可重复的隔离演练：创建完整应用 schema 和测试行，运行备份脚本，校验压缩文件 SHA-256，解压到另一临时数据库并读取反馈、WorkTask、管理员、设置及历史会话/通知表。该测试证据不能替代发布前使用真实脱敏备份的演练。
+仓库中的 `tests/backup-sqlite.test.js` 提供可重复的隔离演练：创建完整应用 schema 和测试行，运行备份脚本，校验压缩文件 SHA-256，解压到另一临时数据库并读取反馈、WorkTask、管理员、设置、审计及历史会话/通知表。该测试证据不能替代发布前使用真实脱敏备份的演练。
 
 ## 保留与保护
 
