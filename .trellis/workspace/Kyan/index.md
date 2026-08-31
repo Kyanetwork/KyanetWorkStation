@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
-- **Last Active**: 2026-08-28
+- **Total Sessions**: 6
+- **Last Active**: 2026-08-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~132 | Active |
+| `journal-1.md` | ~154 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-08-31 | R-002 管理导出与审计收尾 | `b60851d`, `a06f218` | `main` |
 | 5 | 2026-08-28 | P1 管理员 AI Copilot 实现与收尾 | `2fb5405`, `015c51f` | `main` |
 | 4 | 2026-08-28 | P0 发布环境验收与任务归档 | `9406195` | `main` |
 | 3 | 2026-08-28 | P1 Workstation UI 与统一工作收件箱 | `63c5ef8`, `dcf635c` | `main` |
