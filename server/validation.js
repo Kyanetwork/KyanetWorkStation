@@ -5,9 +5,11 @@ const ALLOWED_WORKTASK_TYPES = new Set(["WorkTask提交", "工单提交", "任�
 const ALLOWED_WORKTASK_STATUS = new Set(["new", "scheduled", "in_progress", "completed", "cancelled"]);
 const ALLOWED_WORKTASK_PRIORITY = new Set(["low", "medium", "high", "urgent"]);
 const ALLOWED_AI_PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
+const ALLOWED_REASONING_EFFORTS = new Set(["", "low", "medium", "high", "xhigh", "max"]);
 const ALLOWED_AI_SUGGESTION_FIELDS = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
-const ALLOWED_AUDIT_ENTITY_TYPES = new Set(["feedback", "worktask", "ai_profile", "ai_suggestion", "notification", "notification_handoff", "status"]);
+const ALLOWED_AUDIT_ENTITY_TYPES = new Set(["feedback", "worktask", "ai_profile", "ai_suggestion", "ai_knowledge", "notification", "notification_handoff", "status"]);
 const AI_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const AI_KNOWLEDGE_ROOT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SIMPLE_URL_PATTERN = /^https?:\/\/.+/i;
 
@@ -21,6 +23,10 @@ function normalizeNullableString(value, maxLen) {
     return "";
   }
   return normalized.slice(0, maxLen);
+}
+
+function truncateUnicode(value, maxLength) {
+  return Array.from(value).slice(0, maxLength).join("");
 }
 
 function hasOwn(payload, key) {
@@ -649,6 +655,14 @@ function validateAiProfilePayload(payload) {
   const model = normalizeString(body.model);
   const keyProvided = hasOwn(body, "key");
   const key = keyProvided && typeof body.key === "string" ? body.key.trim() : "";
+  const reasoningEffortProvided = hasOwn(body, "reasoningEffort") || hasOwn(body, "reasoning_effort");
+  const rawReasoningEffort = hasOwn(body, "reasoningEffort") ? body.reasoningEffort : body.reasoning_effort;
+  const reasoningEffort = normalizeString(rawReasoningEffort);
+  const promptInstructionProvided = hasOwn(body, "promptInstruction");
+  const rawPromptInstruction = body.promptInstruction;
+  const promptInstruction = typeof rawPromptInstruction === "string"
+    ? truncateUnicode(rawPromptInstruction.trim(), 2000)
+    : "";
 
   if (id && !AI_PROFILE_ID_PATTERN.test(id)) {
     return { valid: false, message: "profile id 不合法" };
@@ -672,11 +686,20 @@ function validateAiProfilePayload(payload) {
   if (key.length > 512) {
     return { valid: false, message: "key 长度不能超过 512" };
   }
+  if (reasoningEffortProvided && rawReasoningEffort !== undefined && typeof rawReasoningEffort !== "string") {
+    return { valid: false, message: "reasoningEffort 必须是字符串" };
+  }
+  if (!ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) {
+    return { valid: false, message: "reasoningEffort 不合法" };
+  }
+  if (promptInstructionProvided && rawPromptInstruction !== undefined && typeof rawPromptInstruction !== "string") {
+    return { valid: false, message: "promptInstruction 必须是字符串" };
+  }
   if (!id && !key) {
     return { valid: false, message: "新 profile 必须提供 key" };
   }
 
-  return {
+  const data = {
     valid: true,
     data: {
       id,
@@ -684,9 +707,21 @@ function validateAiProfilePayload(payload) {
       protocol,
       baseUrl: baseUrl.value,
       model,
-      key
+      key,
+      reasoningEffort,
+      promptInstruction
     }
   };
+
+  // Keep the normalized fields in the public validation result while allowing
+  // an older client that omits them to update the rest of a profile without
+  // clearing newly configured values. These markers are internal and do not
+  // appear in API responses or serialized audit metadata.
+  Object.defineProperties(data.data, {
+    reasoningEffortProvided: { value: reasoningEffortProvided, enumerable: false },
+    promptInstructionProvided: { value: promptInstructionProvided, enumerable: false }
+  });
+  return data;
 }
 
 function normalizeAiProfileIdPayload(payload, fieldName, message) {
@@ -767,6 +802,83 @@ function validateAiSuggestionDecisionPayload(payload) {
   return { valid: true, data: { suggestionId, decision, fields: normalizedFields } };
 }
 
+function validateKnowledgeRootId(value) {
+  if (value === undefined || value === null || value === "") return { valid: true, value: "" };
+  if (typeof value !== "string") return { valid: false, message: "rootId 不合法" };
+  const normalized = value.trim();
+  if (!normalized || !AI_KNOWLEDGE_ROOT_ID_PATTERN.test(normalized)) {
+    return { valid: false, message: "rootId 不合法" };
+  }
+  return { valid: true, value: normalized };
+}
+
+function validateAiKnowledgeAskPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (typeof body.question !== "string") {
+    return { valid: false, message: "question 必须是字符串" };
+  }
+  const question = body.question.trim();
+  if (!question || Array.from(question).length > 4000) {
+    return { valid: false, message: "question 长度必须在 1-4000 之间" };
+  }
+  const rootId = validateKnowledgeRootId(body.rootId);
+  if (!rootId.valid) return rootId;
+  return { valid: true, data: { question, rootId: rootId.value } };
+}
+
+function parseStrictPositiveInteger(value, fieldName, maximum, fallback) {
+  if (value === undefined || value === null || value === "") return { valid: true, value: fallback };
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
+      return { valid: false, message: `${fieldName} 不合法` };
+    }
+    return { valid: true, value };
+  }
+  if (typeof value !== "string" || !/^\d+$/u.test(value.trim())) {
+    return { valid: false, message: `${fieldName} 不合法` };
+  }
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= maximum
+    ? { valid: true, value: parsed }
+    : { valid: false, message: `${fieldName} 不合法` };
+}
+
+function validateAiKnowledgeHistoryQueryPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const page = parseStrictPositiveInteger(body.page, "page", 100000, 1);
+  const pageSize = parseStrictPositiveInteger(body.pageSize, "pageSize", 100, 20);
+  if (!page.valid) return page;
+  if (!pageSize.valid) return pageSize;
+  if (body.keyword !== undefined && body.keyword !== null && typeof body.keyword !== "string") {
+    return { valid: false, message: "keyword 必须是字符串" };
+  }
+  const keyword = normalizeString(body.keyword);
+  if (Array.from(keyword).length > 200) {
+    return { valid: false, message: "keyword 过长" };
+  }
+  const rootId = validateKnowledgeRootId(body.rootId);
+  if (!rootId.valid) return rootId;
+  return { valid: true, data: { page: page.value, pageSize: pageSize.value, keyword, rootId: rootId.value } };
+}
+
+function validateAiKnowledgeAnswerDeletePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const rawId = body.id ?? body.answerId;
+  const id = typeof rawId === "number" ? rawId : Number(rawId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return { valid: false, message: "id 不合法" };
+  }
+  return { valid: true, data: { id } };
+}
+
+function validateAiKnowledgeSettingsPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (typeof body.autoCleanup !== "boolean") {
+    return { valid: false, message: "autoCleanup 必须是 boolean" };
+  }
+  return { valid: true, data: { autoCleanup: body.autoCleanup } };
+}
+
 module.exports = {
   ALLOWED_STATUS,
   ALLOWED_TYPES,
@@ -794,11 +906,16 @@ module.exports = {
   validateStatusProfileSettingsPayload,
   validateMinecraftStatusSettingsPayload,
   ALLOWED_AI_PROTOCOLS,
+  ALLOWED_REASONING_EFFORTS,
   ALLOWED_AI_SUGGESTION_FIELDS,
   validateAiProfilePayload,
   validateAiProfileActivePayload,
   validateAiProfileDeletePayload,
   validateAiSuggestPayload,
   validateAiSuggestionsQueryPayload,
-  validateAiSuggestionDecisionPayload
+  validateAiSuggestionDecisionPayload,
+  validateAiKnowledgeAskPayload,
+  validateAiKnowledgeHistoryQueryPayload,
+  validateAiKnowledgeAnswerDeletePayload,
+  validateAiKnowledgeSettingsPayload
 };

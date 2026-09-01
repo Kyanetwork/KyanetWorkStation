@@ -160,6 +160,26 @@ test("validateAiProfilePayload permits an empty key only for an update", () => {
   assert.equal(create.valid, false);
 });
 
+test("validateAiProfilePayload rejects explicit null optional fields", () => {
+  const base = {
+    name: "Provider",
+    protocol: "openai-chat",
+    baseUrl: "https://provider.example",
+    model: "model",
+    key: "key"
+  };
+
+  const nullReasoning = validateAiProfilePayload({ ...base, reasoningEffort: null });
+  const nullPrompt = validateAiProfilePayload({ ...base, promptInstruction: null });
+  const omitted = validateAiProfilePayload(base);
+
+  assert.equal(nullReasoning.valid, false);
+  assert.equal(nullPrompt.valid, false);
+  assert.equal(omitted.valid, true);
+  assert.equal(omitted.data.reasoningEffort, "");
+  assert.equal(omitted.data.promptInstruction, "");
+});
+
 test("validateAiProfileActivePayload and delete payload normalize profile ids", () => {
   const active = validateAiProfileActivePayload({ profileId: " profile-1 " });
   const activeAlias = validateAiProfileActivePayload({ id: " profile-2 " });
@@ -248,4 +268,14 @@ test("audit validator normalizes filters, caps page size, and rejects invalid id
   assert.equal(invalidId.valid, false);
   assert.equal(invalidRange.valid, false);
   assert.equal(invalidPageType.valid, false);
+});
+
+test("audit validator accepts knowledge assistant entity type", () => {
+  const result = validateAuditListPayload({
+    entityType: "ai_knowledge",
+    action: "ai.knowledge.reindex"
+  });
+
+  assert.equal(result.valid, true);
+  assert.equal(result.data.entityType, "ai_knowledge");
 });

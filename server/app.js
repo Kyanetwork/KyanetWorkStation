@@ -60,8 +60,20 @@ const {
 const {
   generateSuggestion,
   listSuggestions,
-  recordSuggestionDecision
+  recordSuggestionDecision,
+  getCopilotPromptInstructionMetadata
 } = require("./ai-copilot");
+const {
+  getKnowledgeStatus,
+  reindexKnowledge,
+  askKnowledge,
+  listKnowledgeHistory,
+  deleteKnowledgeAnswer,
+  cleanupKnowledgeHistory,
+  cleanupKnowledgeHistoryIfEnabled,
+  getKnowledgeSettings,
+  setKnowledgeSettings
+} = require("./ai-knowledge");
 const {
   createNotificationHandoff,
   listNotificationHandoffs,
@@ -102,7 +114,11 @@ const {
   validateAiProfileDeletePayload,
   validateAiSuggestPayload,
   validateAiSuggestionsQueryPayload,
-  validateAiSuggestionDecisionPayload
+  validateAiSuggestionDecisionPayload,
+  validateAiKnowledgeAskPayload,
+  validateAiKnowledgeHistoryQueryPayload,
+  validateAiKnowledgeAnswerDeletePayload,
+  validateAiKnowledgeSettingsPayload
 } = require("./validation");
 const {
   FEEDBACK_EXPORT_COLUMNS,
@@ -196,6 +212,20 @@ const aiLimiter = rateLimit({
   }
 });
 
+const aiKnowledgeLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: {
+      code: "AI_RATE_LIMITED",
+      message: "知识问答请求过于频繁，请稍后再试"
+    }
+  }
+});
+
 function asyncHandler(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
@@ -238,6 +268,10 @@ function sendAiError(res, error) {
   if (code === "AI_PROVIDER_FAILED" || code === "AI_INVALID_RESPONSE") {
     return sendError(res, 502, code, "AI provider 暂时无法提供有效建议");
   }
+  if (code === "KNOWLEDGE_CONFIG_INVALID" || code === "KNOWLEDGE_REINDEX_FAILED" || code === "AI_KNOWLEDGE_PERSIST_FAILED") {
+    return sendError(res, 503, code, "知识助手当前不可用，请检查知识库配置或数据库状态");
+  }
+  if (code === "KNOWLEDGE_BUSY") return sendError(res, 429, code, "知识库正在重建，请稍后再试");
   if (code === "AI_SUGGESTION_CONFLICT") return sendError(res, 409, code, "AI 建议已过期或已经处理");
   throw error;
 }
@@ -659,7 +693,9 @@ app.post("/api/admin/ai/profiles", requireAdminSession, asyncHandler(async (req,
       profileId: data.id,
       protocol: data.protocol,
       model: data.model,
-      keyConfigured: data.keyConfigured
+      keyConfigured: data.keyConfigured,
+      reasoningEffort: data.reasoningEffort,
+      ...getCopilotPromptInstructionMetadata(validation.data.promptInstruction)
     });
     return res.json({ ok: true, data });
   } catch (error) {
@@ -667,6 +703,8 @@ app.post("/api/admin/ai/profiles", requireAdminSession, asyncHandler(async (req,
       profileId: validation.data.id,
       protocol: validation.data.protocol,
       model: validation.data.model,
+      reasoningEffort: validation.data.reasoningEffort,
+      ...getCopilotPromptInstructionMetadata(validation.data.promptInstruction),
       errorCode: error && error.code ? error.code : "AI_PROFILE_WRITE_FAILED"
     });
     return sendAiProfileError(res, error);
@@ -775,6 +813,145 @@ app.post("/api/admin/ai/suggestions/decision", requireAdminSession, asyncHandler
       decision: validation.data.decision,
       fields: validation.data.fields,
       errorCode: error && error.code ? error.code : "AI_SUGGESTION_DECISION_FAILED"
+    });
+    return sendAiError(res, error);
+  }
+}));
+
+app.get("/api/admin/ai/knowledge/status", requireAdminSession, asyncHandler(async (req, res) => {
+  try {
+    const data = await getKnowledgeStatus();
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/knowledge/reindex", requireAdminSession, asyncHandler(async (req, res) => {
+  try {
+    const data = await reindexKnowledge();
+    await recordAdminAction(req, "ai.knowledge.reindex", "ai_knowledge", null, "success", {
+      indexedFiles: data.summary && data.summary.indexedFiles,
+      chunkCount: data.summary && data.summary.chunkCount,
+      warningCount: Array.isArray(data.warnings) ? data.warnings.length : 0
+    });
+    return res.json({
+      ok: true,
+      data: {
+        version: data.version,
+        builtAt: data.builtAt,
+        summary: data.summary,
+        warnings: data.warnings
+      }
+    });
+  } catch (error) {
+    await recordAdminAction(req, "ai.knowledge.reindex", "ai_knowledge", null, auditResultForError(error), {
+      errorCode: error && error.code ? error.code : "KNOWLEDGE_REINDEX_FAILED"
+    });
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/knowledge/ask", requireAdminSession, aiKnowledgeLimiter, asyncHandler(async (req, res) => {
+  const validation = validateAiKnowledgeAskPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const requestAbortController = new AbortController();
+  const abortOnClose = () => requestAbortController.abort();
+  req.once("close", abortOnClose);
+  try {
+    const data = await askKnowledge({
+      ...validation.data,
+      requestId: req.requestId,
+      actor: req.adminUser.username,
+      signal: requestAbortController.signal
+    });
+    await recordAdminAction(req, "ai.knowledge.ask", "ai_knowledge", data.id, "success", {
+      answerId: data.id,
+      rootId: validation.data.rootId,
+      basis: data.basis,
+      sourceCount: Array.isArray(data.sources) ? data.sources.length : 0
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "ai.knowledge.ask", "ai_knowledge", null, auditResultForError(error), {
+      rootId: validation.data.rootId,
+      errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_FAILED"
+    });
+    return sendAiError(res, error);
+  } finally {
+    req.removeListener("close", abortOnClose);
+  }
+}));
+
+app.get("/api/admin/ai/knowledge/history", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiKnowledgeHistoryQueryPayload(req.query || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await listKnowledgeHistory(validation.data);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/knowledge/history/delete", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiKnowledgeAnswerDeletePayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const deleted = await deleteKnowledgeAnswer(validation.data.id);
+    if (!deleted) {
+      await recordAdminAction(req, "ai.knowledge.history.delete", "ai_knowledge", validation.data.id, "not_found", {
+        answerId: validation.data.id
+      });
+      return sendError(res, 404, "NOT_FOUND", "知识问答记录不存在");
+    }
+    await recordAdminAction(req, "ai.knowledge.history.delete", "ai_knowledge", validation.data.id, "success", {
+      answerId: validation.data.id
+    });
+    return res.json({ ok: true, data: { deleted: 1 } });
+  } catch (error) {
+    await recordAdminAction(req, "ai.knowledge.history.delete", "ai_knowledge", validation.data.id, auditResultForError(error), {
+      answerId: validation.data.id,
+      errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_DELETE_FAILED"
+    });
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/knowledge/history/cleanup", requireAdminSession, asyncHandler(async (req, res) => {
+  try {
+    const deleted = await cleanupKnowledgeHistory(undefined, nowIso());
+    await recordAdminAction(req, "ai.knowledge.history.cleanup", "ai_knowledge", null, "success", { deleted });
+    return res.json({ ok: true, data: { deleted } });
+  } catch (error) {
+    await recordAdminAction(req, "ai.knowledge.history.cleanup", "ai_knowledge", null, "failed", {
+      errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_CLEANUP_FAILED"
+    });
+    return sendAiError(res, error);
+  }
+}));
+
+app.post("/api/admin/ai/knowledge/settings", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiKnowledgeSettingsPayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  try {
+    const data = await setKnowledgeSettings(validation.data);
+    await recordAdminAction(req, "ai.knowledge.settings", "ai_knowledge", null, "success", {
+      autoCleanup: data.autoCleanup
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "ai.knowledge.settings", "ai_knowledge", null, auditResultForError(error), {
+      autoCleanup: validation.data.autoCleanup,
+      errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_SETTINGS_FAILED"
     });
     return sendAiError(res, error);
   }
@@ -1255,6 +1432,12 @@ async function startServer() {
   }
 
   await cleanupExpiredSessions();
+  cleanupKnowledgeHistoryIfEnabled(undefined, nowIso()).catch((error) => {
+    logger.warn({
+      event: "ai.knowledge.history.cleanup.error",
+      errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_CLEANUP_FAILED"
+    }, "knowledge history startup cleanup failed");
+  });
   // Start the worker after bootstrap without delaying the HTTP listener on a
   // slow or unavailable external notification provider.
   processNotificationOutbox().catch((error) => {
@@ -1277,6 +1460,14 @@ async function startServer() {
         event: "session.cleanup.error",
         error: error && error.message ? error.message : String(error)
       }, "session cleanup failed");
+    });
+  }, 60 * 60 * 1000).unref();
+  setInterval(() => {
+    cleanupKnowledgeHistoryIfEnabled(undefined, nowIso()).catch((error) => {
+      logger.warn({
+        event: "ai.knowledge.history.cleanup.error",
+        errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_CLEANUP_FAILED"
+      }, "knowledge history cleanup failed");
     });
   }, 60 * 60 * 1000).unref();
 

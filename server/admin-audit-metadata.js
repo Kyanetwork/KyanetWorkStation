@@ -19,6 +19,10 @@ const METADATA_RULES = Object.freeze({
   statusProvided: "boolean",
   cleared: "boolean",
   profileId: "string",
+  reasoningEffort: "string",
+  promptInstructionConfigured: "boolean",
+  promptInstructionLength: "number",
+  promptInstructionHash: "string",
   protocol: "string",
   model: "string",
   suggestionId: "number",
@@ -36,7 +40,16 @@ const METADATA_RULES = Object.freeze({
   persisted: "boolean",
   attempts: "number",
   keyConfigured: "boolean",
-  active: "boolean"
+  active: "boolean",
+  autoCleanup: "boolean",
+  rootId: "rootId",
+  answerId: "number",
+  basis: "basis",
+  sourceCount: "number",
+  indexedFiles: "number",
+  chunkCount: "number",
+  warningCount: "number",
+  deleted: "number"
 });
 
 function boundedString(value, maxLength) {
@@ -65,6 +78,10 @@ function sanitizeAuditMetadata(metadata) {
         normalized[key] = bounded;
       }
     } else if (rule === "errorCode" && typeof value === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(value)) {
+      normalized[key] = value;
+    } else if (rule === "rootId" && typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u.test(value.trim())) {
+      normalized[key] = value.trim();
+    } else if (rule === "basis" && (value === "document" || value === "mixed" || value === "general")) {
       normalized[key] = value;
     } else if (rule === "decision" && (value === "accepted" || value === "rejected")) {
       normalized[key] = value;

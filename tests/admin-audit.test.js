@@ -137,6 +137,39 @@ test("audit metadata never persists URL-shaped model values", () => {
   }), { model: "gpt-4o-mini" });
 });
 
+test("audit metadata preserves bounded knowledge action summaries without paths or content", () => {
+  const { sanitizeAuditMetadata } = require("../server/admin-audit");
+  const metadata = sanitizeAuditMetadata({
+    rootId: "tyutland",
+    answerId: 42,
+    basis: "mixed",
+    sourceCount: 3,
+    indexedFiles: 12,
+    chunkCount: 48,
+    warningCount: 1,
+    deleted: 2,
+    autoCleanup: false,
+    relativePath: "E:\\private\\notes.md",
+    answer: "private answer text",
+    absolutePath: "E:\\private\\notes.md",
+    errorCode: "KNOWLEDGE_REINDEX_FAILED"
+  });
+
+  assert.deepEqual(metadata, {
+    rootId: "tyutland",
+    answerId: 42,
+    basis: "mixed",
+    sourceCount: 3,
+    indexedFiles: 12,
+    chunkCount: 48,
+    warningCount: 1,
+    deleted: 2,
+    autoCleanup: false,
+    errorCode: "KNOWLEDGE_REINDEX_FAILED"
+  });
+  assert.equal(JSON.stringify(metadata).includes("private"), false);
+});
+
 test("safe audit recorder never changes business flow when persistence fails", async () => {
   const { recordAdminAuditSafely } = require("../server/admin-audit");
   const calls = [];
