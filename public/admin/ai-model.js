@@ -10,6 +10,7 @@
   const PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
   const CATEGORIES = new Set(["Bug", "功能建议", "体验问题", "其他"]);
   const PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
+  const REASONING_EFFORTS = new Set(["", "low", "medium", "high", "xhigh", "max"]);
   const DECISION_FIELDS = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
 
   function text(value) {
@@ -20,6 +21,12 @@
     return text(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").slice(0, maxLength);
   }
 
+  function boundedUnicodeText(value, maxLength) {
+    return Array.from(text(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ""))
+      .slice(0, maxLength)
+      .join("");
+  }
+
   function numberOr(value, fallback) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -27,12 +34,20 @@
 
   function normalizeProfile(input) {
     const source = input && typeof input === "object" ? input : {};
+    const rawReasoningEffort = source.reasoningEffort ?? source.reasoning_effort;
+    const reasoningEffort = typeof rawReasoningEffort === "string" && REASONING_EFFORTS.has(rawReasoningEffort.trim())
+      ? rawReasoningEffort.trim()
+      : "";
     return {
       id: boundedText(source.id, 80),
       name: boundedText(source.name, 64),
       protocol: PROTOCOLS.has(source.protocol) ? source.protocol : "",
       baseUrl: boundedText(source.baseUrl, 300),
       model: boundedText(source.model, 120),
+      reasoningEffort,
+      promptInstruction: typeof source.promptInstruction === "string"
+        ? boundedUnicodeText(source.promptInstruction.trim(), 2000)
+        : "",
       keyConfigured: source.keyConfigured === true,
       keyMask: source.keyConfigured === true ? "••••••••" : "",
       createdAt: boundedText(source.createdAt, 40),

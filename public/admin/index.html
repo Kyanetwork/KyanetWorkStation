@@ -66,43 +66,45 @@
   </style>
   <link rel="stylesheet" href="/workstation.css">
 </head>
-<body>
+<body class="admin-page">
   <main class="wrap">
     <section class="card hero">
-      <div class="toolbar" style="justify-content:space-between;margin-bottom:8px;">
-        <h1 style="margin:0;">KyanetWorkStation 综合管理面板</h1>
-        <button id="themeToggle" class="theme-btn">切换深色</button>
+      <div class="toolbar hero-toolbar">
+        <h1 class="hero-title">KyanetWorkStation 综合管理面板</h1>
+        <button id="themeToggle" class="theme-btn" type="button">切换深色</button>
       </div>
       <p>统一管理反馈系统与 WorkTask 系统，可在同一面板切换不同板块进行筛选、状态更新、任务安排与导出。</p>
     </section>
 
     <section id="loginCard" class="card login">
       <h2>管理员登录</h2>
-      <label class="visually-hidden" for="username">用户名</label>
-      <input id="username" placeholder="用户名" autocomplete="username">
-      <label class="visually-hidden" for="password">密码</label>
-      <input id="password" type="password" placeholder="密码" autocomplete="current-password">
-      <button id="loginBtn">登录</button>
-      <div id="loginMsg" class="msg" role="alert" aria-live="assertive"></div>
+      <form id="loginForm">
+        <label class="visually-hidden" for="username">用户名</label>
+        <input id="username" placeholder="用户名" autocomplete="username">
+        <label class="visually-hidden" for="password">密码</label>
+        <input id="password" type="password" placeholder="密码" autocomplete="current-password">
+        <button id="loginBtn" type="submit">登录</button>
+        <div id="loginMsg" class="msg" role="alert" aria-live="assertive"></div>
+      </form>
     </section>
 
     <section id="adminPanel" class="hidden">
       <div class="card">
         <div class="toolbar">
           <strong id="loginState">未登录</strong>
-          <button id="refreshBtn">刷新当前板块</button>
-          <button id="logoutBtn" class="danger">退出登录</button>
+          <button id="refreshBtn" type="button">刷新当前板块</button>
+          <button id="logoutBtn" class="danger" type="button">退出登录</button>
           <span id="globalLoadTime">最近加载：-</span>
         </div>
         <div id="globalMsg" class="msg" role="status" aria-live="polite"></div>
-        <div class="toolbar" style="margin-top:8px;">
+        <div class="toolbar toolbar-spaced">
           <input id="smtpTestTo" placeholder="SMTP 测试收件人（可选，支持中英文逗号/分号/换行/姓名<邮箱>，留空使用 SMTP_TO）" maxlength="1000">
-          <button id="smtpTestBtn">发送 SMTP 测试邮件</button>
+          <button id="smtpTestBtn" type="button">发送 SMTP 测试邮件</button>
         </div>
         <div id="smtpTestMsg" class="msg" role="status" aria-live="polite"></div>
-        <div class="toolbar" style="margin-top:8px;">
+        <div class="toolbar toolbar-spaced">
           <input id="webhookTestContent" placeholder="Webhook 测试附加内容（可选）" maxlength="300">
-          <button id="webhookTestBtn">发送 Webhook 测试消息</button>
+          <button id="webhookTestBtn" type="button">发送 Webhook 测试消息</button>
         </div>
         <div id="webhookTestMsg" class="msg" role="status" aria-live="polite"></div>
         <div class="settings-grid">
@@ -115,7 +117,7 @@
               </select>
               <input id="meowStatusApiBaseUrl" placeholder="MeowStatus API 地址，如 http://127.0.0.1:8080" maxlength="300">
               <input id="meowStatusTimeoutMs" type="number" min="1000" max="15000" step="500" placeholder="超时 ms">
-              <button id="statusProfileSaveBtn">保存状态展示</button>
+              <button id="statusProfileSaveBtn" type="button">保存状态展示</button>
             </div>
           </section>
           <section class="setting-block">
@@ -125,16 +127,16 @@
                 <option value="1">MC 展示：启用</option>
                 <option value="0">MC 展示：关闭</option>
               </select>
-              <button id="statusMinecraftSaveBtn">保存 MC 展示</button>
+              <button id="statusMinecraftSaveBtn" type="button">保存 MC 展示</button>
             </div>
           </section>
         </div>
         <div id="statusSettingsMsg" class="msg" role="status" aria-live="polite"></div>
-        <section class="setting-block" style="margin-top:10px;">
+        <section class="setting-block setting-block-spaced">
           <h3>管理员 AI Copilot</h3>
           <p id="aiStatusText" class="meta">状态：未加载</p>
           <p class="ai-suggestion-note">AI 仅生成建议。点击生成前，请确认该条目的标题、正文和必要工作字段会发送到当前 Provider；联系方式、管理员备注和账号快照不会发送。</p>
-          <div class="toolbar" style="margin-top:8px;">
+          <div class="toolbar toolbar-spaced">
             <input id="aiProfileId" type="hidden">
             <label for="aiProfileName">名称</label>
             <input id="aiProfileName" placeholder="Provider profile 名称" maxlength="64">
@@ -148,8 +150,20 @@
             <input id="aiProfileBaseUrl" placeholder="https://api.example.com/v1" maxlength="300">
             <label for="aiProfileModel">模型</label>
             <input id="aiProfileModel" placeholder="模型名称" maxlength="120">
+            <label for="aiProfileReasoningEffort">推理强度</label>
+            <select id="aiProfileReasoningEffort">
+              <option value="">未设置</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="xhigh">xhigh</option>
+              <option value="max">max</option>
+            </select>
             <label for="aiProfileApiKey">API Key</label>
             <input id="aiProfileApiKey" type="password" autocomplete="new-password" placeholder="新建必填；更新留空表示保留" maxlength="512">
+            <label class="field-wide" for="aiProfilePromptInstruction">附加工作指令</label>
+            <textarea class="field-wide" id="aiProfilePromptInstruction" rows="3" maxlength="2000" placeholder="可选：只用于调整回答风格，系统安全约束不可覆盖"></textarea>
+            <p id="aiProfileProtocolHint" class="ai-suggestion-note field-wide">Responses 协议会应用推理强度；Chat 与 Anthropic 协议会安全忽略该字段。</p>
             <button class="primary" id="aiProfileSaveBtn" type="button">保存 profile</button>
             <button id="aiProfileResetBtn" type="button">清空表单</button>
           </div>
@@ -164,6 +178,7 @@
           <button class="tab" id="tabFeedback" type="button" aria-controls="moduleFeedback" aria-selected="false">反馈管理</button>
           <button class="tab" id="tabWorktask" type="button" aria-controls="moduleWorktask" aria-selected="false">WorkTask 管理</button>
           <button class="tab" id="tabWorktaskCreate" type="button" aria-controls="moduleWorktaskCreate" aria-selected="false">本人任务录入</button>
+          <button class="tab" id="tabKnowledge" type="button" aria-controls="moduleKnowledge" aria-selected="false">知识助手</button>
         </div>
 
         <section id="moduleInbox" class="inbox-shell" aria-labelledby="inboxTitle">
@@ -230,13 +245,13 @@
               <option value="">全部状态</option><option value="new">新反馈</option><option value="reviewed">已查看</option><option value="resolved">已解决</option><option value="notplanned">暂不处理</option>
             </select>
             <input id="feedbackKeyword" placeholder="搜索标题/内容/联系方式" maxlength="200">
-            <button class="primary" id="feedbackSearchBtn">查询反馈</button>
-            <button id="feedbackExportBtn">导出反馈 CSV</button>
+            <button class="primary" id="feedbackSearchBtn" type="button">查询反馈</button>
+            <button id="feedbackExportBtn" type="button">导出反馈 CSV</button>
           </div>
           <div class="pagebar"><span id="feedbackPageText">第 1 页</span><span id="feedbackPageSummary">总计 0 条</span></div>
           <div id="feedbackStats" class="grid"></div>
           <div id="feedbackList" class="list"></div>
-          <div class="pagebar"><button id="feedbackPrevBtn">上一页</button><button id="feedbackNextBtn">下一页</button></div>
+          <div class="pagebar"><button id="feedbackPrevBtn" type="button">上一页</button><button id="feedbackNextBtn" type="button">下一页</button></div>
           <div id="feedbackMsg" class="msg" role="status" aria-live="polite"></div>
         </section>
 
@@ -250,13 +265,13 @@
               <option value="">全部优先级</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="urgent">紧急</option>
             </select>
             <input id="worktaskKeyword" placeholder="搜索标题/内容/联系方式/负责人/标签" maxlength="200">
-            <button class="primary" id="worktaskSearchBtn">查询 WorkTask</button>
-            <button id="worktaskExportBtn">导出 WorkTask CSV</button>
+            <button class="primary" id="worktaskSearchBtn" type="button">查询 WorkTask</button>
+            <button id="worktaskExportBtn" type="button">导出 WorkTask CSV</button>
           </div>
           <div class="pagebar"><span id="worktaskPageText">第 1 页</span><span id="worktaskPageSummary">总计 0 条</span></div>
           <div id="worktaskStats" class="grid"></div>
           <div id="worktaskList" class="list"></div>
-          <div class="pagebar"><button id="worktaskPrevBtn">上一页</button><button id="worktaskNextBtn">下一页</button></div>
+          <div class="pagebar"><button id="worktaskPrevBtn" type="button">上一页</button><button id="worktaskNextBtn" type="button">下一页</button></div>
           <div id="worktaskMsg" class="msg" role="status" aria-live="polite"></div>
         </section>
 
@@ -305,10 +320,93 @@
             <textarea id="createAdminNote" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000"></textarea>
           </div>
           <div class="toolbar">
-            <button class="primary" id="createWorktaskBtn">创建本人任务</button>
+            <button class="primary" id="createWorktaskBtn" type="button">创建本人任务</button>
             <button id="createWorktaskResetBtn" type="button">重置表单</button>
           </div>
           <div id="worktaskCreateMsg" class="msg" role="status" aria-live="polite"></div>
+        </section>
+
+        <section id="moduleKnowledge" class="hidden knowledge-shell" aria-labelledby="knowledgeTitle">
+          <div class="knowledge-header">
+            <div>
+              <h2 id="knowledgeTitle">个人知识助手</h2>
+              <p>从已配置的 Markdown/TXT 知识库检索资料并生成带引用的回答。知识库目录由服务器环境配置，页面不会接受任意路径。</p>
+            </div>
+            <span id="knowledgeStatusBadge" class="badge">未加载</span>
+          </div>
+          <div class="knowledge-status-grid">
+            <div class="knowledge-status-card">
+              <span class="knowledge-label">索引状态</span>
+              <strong id="knowledgeStatusText">未加载</strong>
+              <span id="knowledgeIndexSummary" class="meta">尚未读取索引状态。</span>
+            </div>
+            <div class="knowledge-status-card">
+              <span class="knowledge-label">知识库范围</span>
+              <div id="knowledgeRoots" class="knowledge-roots"><span class="meta">未加载</span></div>
+            </div>
+            <div class="knowledge-status-card knowledge-status-actions">
+              <span class="knowledge-label">索引操作</span>
+              <button id="knowledgeReindexBtn" class="primary" type="button">重建索引</button>
+              <span class="meta">重建只读扫描配置目录，完成后原子替换缓存。</span>
+            </div>
+          </div>
+          <div id="knowledgeStatusMsg" class="msg" role="status" aria-live="polite"></div>
+
+          <form id="knowledgeAskForm" class="knowledge-ask-form">
+            <div class="knowledge-form-field knowledge-question-field">
+              <label for="knowledgeQuestion">问题</label>
+              <textarea id="knowledgeQuestion" rows="4" maxlength="4000" required placeholder="例如：TYUTland 的登录流程是什么？"></textarea>
+            </div>
+            <div class="knowledge-form-field">
+              <label for="knowledgeRootFilter">资料范围</label>
+              <select id="knowledgeRootFilter">
+                <option value="">全部知识库</option>
+              </select>
+              <span class="meta">没有足够命中时会标注“非文档依据/需核验”。</span>
+            </div>
+            <div class="knowledge-form-actions">
+              <button id="knowledgeAskBtn" class="primary" type="submit">提交问题</button>
+              <button id="knowledgeClearBtn" type="button">清空问题</button>
+            </div>
+          </form>
+          <div id="knowledgeAskMsg" class="msg" role="status" aria-live="polite"></div>
+
+          <article id="knowledgeAnswerCard" class="knowledge-answer-card hidden" aria-labelledby="knowledgeAnswerTitle">
+            <div class="knowledge-answer-head">
+              <div>
+                <span class="knowledge-label">最近回答</span>
+                <h3 id="knowledgeAnswerTitle">回答</h3>
+              </div>
+              <span id="knowledgeBasis" class="state-pill">-</span>
+            </div>
+            <div id="knowledgeAnswer" class="knowledge-answer-text"></div>
+            <p id="knowledgeCaveats" class="knowledge-caveats"></p>
+            <div class="knowledge-sources-block">
+              <h4>引用来源</h4>
+              <div id="knowledgeSources" class="knowledge-sources"><span class="meta">暂无引用</span></div>
+            </div>
+          </article>
+
+          <section class="knowledge-history-section" aria-labelledby="knowledgeHistoryTitle">
+            <div class="knowledge-history-head">
+              <div>
+                <h3 id="knowledgeHistoryTitle">问答历史</h3>
+                <p class="meta">仅管理员可见，按保留期自动清理；过期记录不会再参与问答。</p>
+              </div>
+              <div class="knowledge-history-actions">
+                <button id="knowledgeCleanupBtn" type="button">手动清理过期记录</button>
+                <label class="knowledge-toggle"><input id="knowledgeAutoCleanup" type="checkbox"> <span>启用自动清理</span></label>
+                <button id="knowledgeSettingsSaveBtn" type="button">保存清理设置</button>
+              </div>
+            </div>
+            <div id="knowledgeHistoryMsg" class="msg" role="status" aria-live="polite"></div>
+            <div id="knowledgeHistoryList" class="knowledge-history-list" aria-live="polite"></div>
+            <div class="pagebar knowledge-history-pagebar">
+              <button id="knowledgeHistoryPrevBtn" type="button">上一页</button>
+              <span id="knowledgeHistoryPageText">第 1 页 · 总计 0 条</span>
+              <button id="knowledgeHistoryNextBtn" type="button">下一页</button>
+            </div>
+          </section>
         </section>
       </div>
     </section>

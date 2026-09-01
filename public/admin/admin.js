@@ -12,6 +12,20 @@
   const aiStatusText = document.getElementById("aiStatusText");
   const aiProfilesList = document.getElementById("aiProfilesList");
   const aiStatusMsg = document.getElementById("aiStatusMsg");
+  const knowledgeStatusText = document.getElementById("knowledgeStatusText");
+  const knowledgeStatusBadge = document.getElementById("knowledgeStatusBadge");
+  const knowledgeIndexSummary = document.getElementById("knowledgeIndexSummary");
+  const knowledgeRoots = document.getElementById("knowledgeRoots");
+  const knowledgeRootFilter = document.getElementById("knowledgeRootFilter");
+  const knowledgeStatusMsg = document.getElementById("knowledgeStatusMsg");
+  const knowledgeAskMsg = document.getElementById("knowledgeAskMsg");
+  const knowledgeAnswerCard = document.getElementById("knowledgeAnswerCard");
+  const knowledgeAnswer = document.getElementById("knowledgeAnswer");
+  const knowledgeBasis = document.getElementById("knowledgeBasis");
+  const knowledgeCaveats = document.getElementById("knowledgeCaveats");
+  const knowledgeSources = document.getElementById("knowledgeSources");
+  const knowledgeHistoryList = document.getElementById("knowledgeHistoryList");
+  const knowledgeHistoryMsg = document.getElementById("knowledgeHistoryMsg");
   const inboxMsg = document.getElementById("inboxMsg");
   const inboxList = document.getElementById("inboxList");
   const toastWrap = document.getElementById("toastWrap");
@@ -20,10 +34,12 @@
   const tabFeedback = document.getElementById("tabFeedback");
   const tabWorktask = document.getElementById("tabWorktask");
   const tabWorktaskCreate = document.getElementById("tabWorktaskCreate");
+  const tabKnowledge = document.getElementById("tabKnowledge");
   const moduleInbox = document.getElementById("moduleInbox");
   const moduleFeedback = document.getElementById("moduleFeedback");
   const moduleWorktask = document.getElementById("moduleWorktask");
   const moduleWorktaskCreate = document.getElementById("moduleWorktaskCreate");
+  const moduleKnowledge = document.getElementById("moduleKnowledge");
   const inboxModel = window.KwsInboxModel;
   const aiModel = window.KwsAiModel;
 
@@ -50,6 +66,17 @@
       activeProfile: null,
       profiles: [],
       suggestions: {}
+    },
+    knowledge: {
+      loaded: false,
+      loading: false,
+      available: false,
+      reason: "",
+      roots: [],
+      autoCleanup: true,
+      retentionDays: 30,
+      history: { page: 1, pageSize: 10, totalPages: 0, total: 0, items: [] },
+      answer: null
     },
     ui: {
       displayTimezone: "Asia/Shanghai",
@@ -261,6 +288,7 @@
         <div>
           <strong>${escapeHtml(profile.name || "未命名 profile")}${active ? " · active" : ""}</strong>
           <div class="ai-profile-meta">${escapeHtml(protocolLabel)} · ${escapeHtml(profile.model || "未设置模型")} · ${escapeHtml(profile.baseUrl || "未设置地址")}</div>
+          <div class="ai-profile-meta">推理强度：${escapeHtml(profile.reasoningEffort || "未设置")} · 附加指令：${profile.promptInstruction ? "已配置" : "未配置"}</div>
           <div class="ai-profile-meta">API Key：${profile.keyConfigured ? escapeHtml(profile.keyMask || "••••••••") : "未配置"}</div>
         </div>
         <div class="ai-profile-actions">
@@ -293,13 +321,196 @@
     renderAiStatus(data);
   }
 
+  function knowledgeReasonLabel(reason, available) {
+    if (available) return "就绪";
+    return ({
+      "config-invalid": "配置无效",
+      "not-indexed": "尚未建立索引",
+      "cache-invalid": "索引缓存不可用"
+    }[reason]) || "暂不可用";
+  }
+
+  function knowledgeSummaryText(summary) {
+    const value = summary && typeof summary === "object" ? summary : {};
+    const files = Number(value.indexedFiles || value.fileCount || 0);
+    const chunks = Number(value.chunkCount || value.chunks || 0);
+    const bytes = Number(value.totalBytes || 0);
+    const parts = [];
+    if (Number.isFinite(files) && files >= 0) parts.push(`${files} 个文件`);
+    if (Number.isFinite(chunks) && chunks >= 0) parts.push(`${chunks} 个片段`);
+    if (Number.isFinite(bytes) && bytes > 0) parts.push(`${Math.round(bytes / 1024)} KiB`);
+    return parts.length ? parts.join(" · ") : "暂无索引统计";
+  }
+
+  function renderKnowledgeRoots(roots) {
+    const items = Array.isArray(roots) ? roots : [];
+    knowledgeRoots.innerHTML = items.length
+      ? items.map((root) => `<span class="knowledge-root-tag">${escapeHtml(root.name || root.id || "未命名知识库")}${root.indexed ? " · 已索引" : " · 待索引"}</span>`).join("")
+      : '<span class="meta">未配置知识库目录</span>';
+    const selected = knowledgeRootFilter.value;
+    knowledgeRootFilter.innerHTML = '<option value="">全部知识库</option>' + items
+      .map((root) => `<option value="${escapeHtml(root.id || "")}">${escapeHtml(root.name || root.id || "未命名知识库")}</option>`)
+      .join("");
+    if (items.some((root) => root.id === selected)) knowledgeRootFilter.value = selected;
+  }
+
+  function renderKnowledgeStatus(data) {
+    const value = data && typeof data === "object" ? data : {};
+    const available = value.available === true;
+    state.knowledge.loaded = true;
+    state.knowledge.available = available;
+    state.knowledge.reason = typeof value.reason === "string" ? value.reason : "";
+    state.knowledge.roots = Array.isArray(value.roots) ? value.roots : [];
+    state.knowledge.autoCleanup = value.autoCleanup !== false;
+    state.knowledge.retentionDays = Number.isSafeInteger(Number(value.retentionDays)) ? Number(value.retentionDays) : 30;
+    knowledgeStatusText.textContent = knowledgeReasonLabel(state.knowledge.reason, available);
+    knowledgeStatusBadge.textContent = available ? "INDEX ONLINE" : "INDEX OFFLINE";
+    knowledgeStatusBadge.className = `badge ${available ? "is-online" : "is-offline"}`;
+    knowledgeIndexSummary.textContent = `${knowledgeSummaryText(value.summary)} · 保留 ${state.knowledge.retentionDays} 天${value.builtAt ? ` · 构建于 ${formatDateTimeDisplay(value.builtAt)}` : ""}`;
+    renderKnowledgeRoots(state.knowledge.roots);
+    document.getElementById("knowledgeAutoCleanup").checked = state.knowledge.autoCleanup;
+  }
+
+  async function loadKnowledgeStatus() {
+    const data = await api("/api/admin/ai/knowledge/status", null, { method: "GET" });
+    renderKnowledgeStatus(data);
+  }
+
+  function knowledgeBasisLabel(basis) {
+    return ({ document: "文档依据", mixed: "文档 + 基础知识", general: "非文档依据/未验证" }[basis]) || "未标注依据";
+  }
+
+  function renderKnowledgeSources(sources) {
+    const items = Array.isArray(sources) ? sources : [];
+    knowledgeSources.innerHTML = items.length
+      ? items.map((source) => `<article class="knowledge-source"><strong>[${escapeHtml(source.sourceId || "-")}] ${escapeHtml(source.title || "未命名片段")}</strong><span class="meta">${escapeHtml(source.libraryName || "知识库")} / ${escapeHtml(source.relativePath || "-")}</span><p>${escapeHtml(source.excerpt || "暂无片段")}</p></article>`).join("")
+      : '<span class="meta">暂无引用来源</span>';
+  }
+
+  function renderKnowledgeAnswer(data) {
+    const value = data && typeof data === "object" ? data : {};
+    state.knowledge.answer = value;
+    knowledgeAnswerCard.classList.remove("hidden");
+    knowledgeAnswer.textContent = value.answer || "暂无回答";
+    knowledgeBasis.textContent = knowledgeBasisLabel(value.basis);
+    knowledgeCaveats.textContent = value.caveats || "";
+    knowledgeCaveats.classList.toggle("hidden", !value.caveats);
+    renderKnowledgeSources(value.sources);
+  }
+
+  function renderKnowledgeHistory(data) {
+    const value = data && typeof data === "object" ? data : {};
+    const items = Array.isArray(value.items) ? value.items : [];
+    state.knowledge.history = {
+      page: Number(value.page) || 1,
+      pageSize: Number(value.pageSize) || 10,
+      totalPages: Number(value.totalPages) || 0,
+      total: Number(value.total) || 0,
+      items
+    };
+    if (!items.length) {
+      knowledgeHistoryList.innerHTML = '<p class="empty-state">暂无问答历史。</p>';
+    } else {
+      knowledgeHistoryList.innerHTML = items.map((item) => `<article class="knowledge-history-item">
+        <div class="knowledge-history-item-head"><strong>${escapeHtml(item.question || "未记录问题")}</strong><button type="button" class="danger" data-action="knowledge-history-delete" data-id="${escapeHtml(item.id)}">删除</button></div>
+        <div class="meta">${escapeHtml(formatDateTimeDisplay(item.createdAt))} · ${escapeHtml(knowledgeBasisLabel(item.basis))}${item.expired ? " · 已过期" : ""}</div>
+        <p>${escapeHtml(item.answer || "暂无回答")}</p>
+        ${item.caveats ? `<div class="knowledge-history-caveat">${escapeHtml(item.caveats)}</div>` : ""}
+      </article>`).join("");
+    }
+    document.getElementById("knowledgeHistoryPageText").textContent = `第 ${state.knowledge.history.page} / ${state.knowledge.history.totalPages || 1} 页 · 总计 ${state.knowledge.history.total} 条`;
+    document.getElementById("knowledgeHistoryPrevBtn").disabled = state.knowledge.history.page <= 1;
+    document.getElementById("knowledgeHistoryNextBtn").disabled = !state.knowledge.history.totalPages || state.knowledge.history.page >= state.knowledge.history.totalPages;
+  }
+
+  async function loadKnowledgeHistory() {
+    clearMessage(knowledgeHistoryMsg);
+    const history = state.knowledge.history;
+    const query = new URLSearchParams({ page: String(history.page || 1), pageSize: String(history.pageSize || 10) });
+    const data = await api(`/api/admin/ai/knowledge/history?${query.toString()}`, null, { method: "GET" });
+    renderKnowledgeHistory(data);
+  }
+
+  async function reindexKnowledge() {
+    const btn = document.getElementById("knowledgeReindexBtn");
+    await withButtonBusy(btn, "重建中...", async () => {
+      clearMessage(knowledgeStatusMsg);
+      const data = await api("/api/admin/ai/knowledge/reindex", {});
+      await loadKnowledgeStatus();
+      notify(knowledgeStatusMsg, "ok", `索引已重建：${knowledgeSummaryText(data.summary)}`);
+    });
+  }
+
+  async function askKnowledgeQuestion() {
+    clearMessage(knowledgeAskMsg);
+    const questionInput = document.getElementById("knowledgeQuestion");
+    const question = questionInput.value.trim();
+    if (!question) {
+      showMessage(knowledgeAskMsg, "error", "请输入问题");
+      questionInput.focus();
+      return;
+    }
+    const btn = document.getElementById("knowledgeAskBtn");
+    await withButtonBusy(btn, "回答中...", async () => {
+      const data = await api("/api/admin/ai/knowledge/ask", {
+        question,
+        rootId: knowledgeRootFilter.value
+      });
+      renderKnowledgeAnswer(data);
+      state.knowledge.history.page = 1;
+      await loadKnowledgeHistory();
+      notify(knowledgeAskMsg, "ok", "回答已生成，请结合引用来源核验");
+    });
+  }
+
+  async function deleteKnowledgeHistory(id, button) {
+    if (!confirm("确认删除这条知识问答历史吗？")) return;
+    await withButtonBusy(button, "删除中...", async () => {
+      await api("/api/admin/ai/knowledge/history/delete", { id: Number(id) });
+      await loadKnowledgeHistory();
+      notify(knowledgeHistoryMsg, "ok", "问答历史已删除");
+    });
+  }
+
+  async function cleanupKnowledgeHistory() {
+    const btn = document.getElementById("knowledgeCleanupBtn");
+    await withButtonBusy(btn, "清理中...", async () => {
+      const data = await api("/api/admin/ai/knowledge/history/cleanup", {});
+      await loadKnowledgeHistory();
+      notify(knowledgeHistoryMsg, "ok", `已清理 ${Number(data.deleted) || 0} 条过期记录`);
+    });
+  }
+
+  async function saveKnowledgeSettings() {
+    const btn = document.getElementById("knowledgeSettingsSaveBtn");
+    await withButtonBusy(btn, "保存中...", async () => {
+      const data = await api("/api/admin/ai/knowledge/settings", {
+        autoCleanup: document.getElementById("knowledgeAutoCleanup").checked
+      });
+      state.knowledge.autoCleanup = data.autoCleanup === true;
+      notify(knowledgeHistoryMsg, "ok", `自动清理已${state.knowledge.autoCleanup ? "启用" : "关闭"}`);
+    });
+  }
+
   function resetAiProfileForm() {
     document.getElementById("aiProfileId").value = "";
     document.getElementById("aiProfileName").value = "";
     document.getElementById("aiProfileProtocol").value = "openai-chat";
     document.getElementById("aiProfileBaseUrl").value = "";
     document.getElementById("aiProfileModel").value = "";
+    document.getElementById("aiProfileReasoningEffort").value = "";
     document.getElementById("aiProfileApiKey").value = "";
+    document.getElementById("aiProfilePromptInstruction").value = "";
+    updateAiProtocolHint();
+  }
+
+  function updateAiProtocolHint() {
+    const protocol = document.getElementById("aiProfileProtocol").value;
+    const hint = document.getElementById("aiProfileProtocolHint");
+    if (!hint) return;
+    hint.textContent = protocol === "openai-responses"
+      ? "Responses 协议会应用推理强度；附加工作指令只调整回答风格。"
+      : "当前协议不会发送 reasoning_effort；附加工作指令只调整回答风格。";
   }
 
   function editAiProfile(id) {
@@ -310,7 +521,10 @@
     document.getElementById("aiProfileProtocol").value = profile.protocol;
     document.getElementById("aiProfileBaseUrl").value = profile.baseUrl;
     document.getElementById("aiProfileModel").value = profile.model;
+    document.getElementById("aiProfileReasoningEffort").value = profile.reasoningEffort || "";
     document.getElementById("aiProfileApiKey").value = "";
+    document.getElementById("aiProfilePromptInstruction").value = profile.promptInstruction || "";
+    updateAiProtocolHint();
     document.getElementById("aiProfileName").focus();
   }
 
@@ -322,6 +536,8 @@
       protocol: document.getElementById("aiProfileProtocol").value,
       baseUrl: document.getElementById("aiProfileBaseUrl").value.trim(),
       model: document.getElementById("aiProfileModel").value.trim(),
+      reasoningEffort: document.getElementById("aiProfileReasoningEffort").value,
+      promptInstruction: document.getElementById("aiProfilePromptInstruction").value,
       key: document.getElementById("aiProfileApiKey").value
     };
     const btn = document.getElementById("aiProfileSaveBtn");
@@ -650,17 +866,17 @@
         <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
         <div class="ops">
-          <button data-action="feedback-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新反馈</button>
-          <button data-action="feedback-status" data-id="${item.id}" data-status="reviewed" ${item.status === "reviewed" ? "disabled" : ""}>已查看</button>
-          <button data-action="feedback-status" data-id="${item.id}" data-status="resolved" ${item.status === "resolved" ? "disabled" : ""}>已解决</button>
-          <button data-action="feedback-status" data-id="${item.id}" data-status="notplanned" ${item.status === "notplanned" ? "disabled" : ""}>暂不处理</button>
-          <button data-action="feedback-home-display" data-id="${item.id}" data-show="${item.showOnHome ? "0" : "1"}">${item.showOnHome ? "取消主页展示" : "设为主页展示"}</button>
-          <button class="del" data-action="feedback-delete" data-id="${item.id}">删除</button>
+          <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新反馈</button>
+          <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="reviewed" ${item.status === "reviewed" ? "disabled" : ""}>已查看</button>
+          <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="resolved" ${item.status === "resolved" ? "disabled" : ""}>已解决</button>
+          <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="notplanned" ${item.status === "notplanned" ? "disabled" : ""}>暂不处理</button>
+          <button type="button" data-action="feedback-home-display" data-id="${item.id}" data-show="${item.showOnHome ? "0" : "1"}">${item.showOnHome ? "取消主页展示" : "设为主页展示"}</button>
+          <button type="button" class="del" data-action="feedback-delete" data-id="${item.id}">删除</button>
         </div>
-        <div class="ops" style="margin-top:6px;">
+        <div class="ops ops-spaced">
           <textarea id="feedback-note-${item.id}" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000">${escapeHtml(item.adminNote || "")}</textarea>
           <textarea id="feedback-reply-${item.id}" rows="2" placeholder="对外回复（可在主页展示）" maxlength="2000">${escapeHtml(item.publicReply || "")}</textarea>
-          <button data-action="feedback-note-reply" data-id="${item.id}">保存备注/回复</button>
+          <button type="button" data-action="feedback-note-reply" data-id="${item.id}">保存备注/回复</button>
         </div>
       </article>
     `).join("");
@@ -699,25 +915,25 @@
         <div class="meta">期望时间：${escapeHtml(formatDateTimeDisplay(item.expectedAt))} | 计划时间：${escapeHtml(formatDateTimeDisplay(item.scheduledAt))} | 负责人：${escapeHtml(item.assignee || "未分配")} | 标签：${escapeHtml(item.tags || "-")}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
         <div class="ops">
-          <button data-action="worktask-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新工单</button>
-          <button data-action="worktask-status" data-id="${item.id}" data-status="scheduled" ${item.status === "scheduled" ? "disabled" : ""}>已安排</button>
-          <button data-action="worktask-status" data-id="${item.id}" data-status="in_progress" ${item.status === "in_progress" ? "disabled" : ""}>进行中</button>
-          <button data-action="worktask-status" data-id="${item.id}" data-status="completed" ${item.status === "completed" ? "disabled" : ""}>已完成</button>
-          <button data-action="worktask-status" data-id="${item.id}" data-status="cancelled" ${item.status === "cancelled" ? "disabled" : ""}>已取消</button>
-          <button data-action="worktask-home-display" data-id="${item.id}" data-show="${item.showOnHome ? "0" : "1"}">${item.showOnHome ? "取消主页展示" : "设为主页展示"}</button>
-          <button class="del" data-action="worktask-delete" data-id="${item.id}">删除</button>
+          <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新工单</button>
+          <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="scheduled" ${item.status === "scheduled" ? "disabled" : ""}>已安排</button>
+          <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="in_progress" ${item.status === "in_progress" ? "disabled" : ""}>进行中</button>
+          <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="completed" ${item.status === "completed" ? "disabled" : ""}>已完成</button>
+          <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="cancelled" ${item.status === "cancelled" ? "disabled" : ""}>已取消</button>
+          <button type="button" data-action="worktask-home-display" data-id="${item.id}" data-show="${item.showOnHome ? "0" : "1"}">${item.showOnHome ? "取消主页展示" : "设为主页展示"}</button>
+          <button type="button" class="del" data-action="worktask-delete" data-id="${item.id}">删除</button>
         </div>
-        <div class="ops" style="margin-top:6px;">
+        <div class="ops ops-spaced">
           <input id="assignee-${item.id}" placeholder="负责人（可选）" value="${escapeHtml(item.assignee || "")}">
           <input id="scheduled-${item.id}" type="datetime-local" value="${toDateTimeLocalValue(item.scheduledAt)}">
-          <button data-action="worktask-arrange" data-id="${item.id}">保存安排</button>
-          <button data-action="worktask-clear-assignee" data-id="${item.id}">清空负责人</button>
-          <button data-action="worktask-clear-scheduled" data-id="${item.id}">清空计划时间</button>
+          <button type="button" data-action="worktask-arrange" data-id="${item.id}">保存安排</button>
+          <button type="button" data-action="worktask-clear-assignee" data-id="${item.id}">清空负责人</button>
+          <button type="button" data-action="worktask-clear-scheduled" data-id="${item.id}">清空计划时间</button>
         </div>
-        <div class="ops" style="margin-top:6px;">
+        <div class="ops ops-spaced">
           <textarea id="worktask-note-${item.id}" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000">${escapeHtml(item.adminNote || "")}</textarea>
           <textarea id="worktask-reply-${item.id}" rows="2" placeholder="对外回复（可在主页展示）" maxlength="2000">${escapeHtml(item.publicReply || "")}</textarea>
-          <button data-action="worktask-note-reply" data-id="${item.id}">保存备注/回复</button>
+          <button type="button" data-action="worktask-note-reply" data-id="${item.id}">保存备注/回复</button>
         </div>
       </article>
     `).join("");
@@ -1055,18 +1271,22 @@
     const isFeedback = module === "feedback";
     const isWorktask = module === "worktask";
     const isWorktaskCreate = module === "worktaskCreate";
+    const isKnowledge = module === "knowledge";
     tabInbox.classList.toggle("active", isInbox);
     tabFeedback.classList.toggle("active", isFeedback);
     tabWorktask.classList.toggle("active", isWorktask);
     tabWorktaskCreate.classList.toggle("active", isWorktaskCreate);
+    tabKnowledge.classList.toggle("active", isKnowledge);
     tabInbox.setAttribute("aria-selected", String(isInbox));
     tabFeedback.setAttribute("aria-selected", String(isFeedback));
     tabWorktask.setAttribute("aria-selected", String(isWorktask));
     tabWorktaskCreate.setAttribute("aria-selected", String(isWorktaskCreate));
+    tabKnowledge.setAttribute("aria-selected", String(isKnowledge));
     moduleInbox.classList.toggle("hidden", !isInbox);
     moduleFeedback.classList.toggle("hidden", !isFeedback);
     moduleWorktask.classList.toggle("hidden", !isWorktask);
     moduleWorktaskCreate.classList.toggle("hidden", !isWorktaskCreate);
+    moduleKnowledge.classList.toggle("hidden", !isKnowledge);
 
     if (isInbox && !state.inbox.loaded && !state.inbox.loading) {
       loadInbox().catch((err) => showMessage(inboxMsg, "error", err.message));
@@ -1076,6 +1296,12 @@
     }
     if (isWorktask && !state.worktask.loaded) {
       loadWorktask().catch((err) => showMessage(globalMsg, "error", err.message));
+    }
+    if (isKnowledge && !state.knowledge.loaded && !state.knowledge.loading) {
+      state.knowledge.loading = true;
+      Promise.all([loadKnowledgeStatus(), loadKnowledgeHistory()])
+        .catch((err) => showMessage(knowledgeStatusMsg, "error", err.message))
+        .finally(() => { state.knowledge.loading = false; });
     }
   }
 
@@ -1090,6 +1316,7 @@
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
+      await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (error) {
       showMessage(loginMsg, "error", error.message);
@@ -1104,6 +1331,7 @@
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
+      await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (_) {
       loginCard.classList.remove("hidden");
@@ -1111,11 +1339,10 @@
     }
   }
 
-  document.getElementById("loginBtn").addEventListener("click", login);
-  document.getElementById("password").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") login();
+  document.getElementById("loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    login();
   });
-
   document.getElementById("logoutBtn").addEventListener("click", async () => {
     try {
       await api("/api/admin/logout", {});
@@ -1141,6 +1368,15 @@
       state.ai.profiles = [];
       state.ai.suggestions = {};
       resetAiProfileForm();
+      state.knowledge.loaded = false;
+      state.knowledge.loading = false;
+      state.knowledge.available = false;
+      state.knowledge.reason = "";
+      state.knowledge.roots = [];
+      state.knowledge.answer = null;
+      state.knowledge.history = { page: 1, pageSize: 10, totalPages: 0, total: 0, items: [] };
+      knowledgeAnswerCard.classList.add("hidden");
+      knowledgeHistoryList.innerHTML = "";
       document.getElementById("smtpTestTo").value = "";
       document.getElementById("webhookTestContent").value = "";
       loginCard.classList.remove("hidden");
@@ -1207,6 +1443,8 @@
     clearMessage(aiStatusMsg);
   });
 
+  document.getElementById("aiProfileProtocol").addEventListener("change", updateAiProtocolHint);
+
   aiProfilesList.addEventListener("click", async (event) => {
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
@@ -1227,6 +1465,69 @@
   tabFeedback.addEventListener("click", () => switchModule("feedback"));
   tabWorktask.addEventListener("click", () => switchModule("worktask"));
   tabWorktaskCreate.addEventListener("click", () => switchModule("worktaskCreate"));
+  tabKnowledge.addEventListener("click", () => switchModule("knowledge"));
+
+  document.getElementById("knowledgeReindexBtn").addEventListener("click", async () => {
+    try {
+      await reindexKnowledge();
+    } catch (error) {
+      notify(knowledgeStatusMsg, "error", error.message);
+    }
+  });
+  document.getElementById("knowledgeAskForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await askKnowledgeQuestion();
+    } catch (error) {
+      notify(knowledgeAskMsg, "error", error.message);
+    }
+  });
+  document.getElementById("knowledgeClearBtn").addEventListener("click", () => {
+    document.getElementById("knowledgeQuestion").value = "";
+    clearMessage(knowledgeAskMsg);
+    document.getElementById("knowledgeQuestion").focus();
+  });
+  document.getElementById("knowledgeCleanupBtn").addEventListener("click", async () => {
+    try {
+      await cleanupKnowledgeHistory();
+    } catch (error) {
+      notify(knowledgeHistoryMsg, "error", error.message);
+    }
+  });
+  document.getElementById("knowledgeSettingsSaveBtn").addEventListener("click", async () => {
+    try {
+      await saveKnowledgeSettings();
+    } catch (error) {
+      notify(knowledgeHistoryMsg, "error", error.message);
+    }
+  });
+  knowledgeHistoryList.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action=\"knowledge-history-delete\"]");
+    if (!button) return;
+    try {
+      await deleteKnowledgeHistory(button.dataset.id, button);
+    } catch (error) {
+      notify(knowledgeHistoryMsg, "error", error.message);
+    }
+  });
+  document.getElementById("knowledgeHistoryPrevBtn").addEventListener("click", async () => {
+    if (state.knowledge.history.page <= 1) return;
+    state.knowledge.history.page -= 1;
+    try {
+      await loadKnowledgeHistory();
+    } catch (error) {
+      notify(knowledgeHistoryMsg, "error", error.message);
+    }
+  });
+  document.getElementById("knowledgeHistoryNextBtn").addEventListener("click", async () => {
+    if (!state.knowledge.history.totalPages || state.knowledge.history.page >= state.knowledge.history.totalPages) return;
+    state.knowledge.history.page += 1;
+    try {
+      await loadKnowledgeHistory();
+    } catch (error) {
+      notify(knowledgeHistoryMsg, "error", error.message);
+    }
+  });
 
   document.getElementById("inboxFilterForm").addEventListener("submit", async (event) => {
     event.preventDefault();

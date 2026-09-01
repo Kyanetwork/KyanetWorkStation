@@ -30,6 +30,26 @@ test("AI profile projection never exposes key material", () => {
   assert.doesNotMatch(JSON.stringify(profile), /sk-super-secret|secret-ciphertext/);
 });
 
+test("AI profile projection normalizes bounded reasoning and prompt instruction fields", () => {
+  const profile = normalizeProfile({
+    id: "profile-1",
+    name: "OpenAI",
+    protocol: "openai-responses",
+    baseUrl: "https://api.example.test/v1",
+    model: "model-a",
+    reasoningEffort: "xhigh",
+    promptInstruction: `  ${"😀".repeat(2500)}  `
+  });
+
+  assert.equal(profile.reasoningEffort, "xhigh");
+  assert.equal([...profile.promptInstruction].length, 2000);
+  assert.equal(profile.promptInstruction.startsWith("😀"), true);
+
+  const unsupported = normalizeProfile({ reasoningEffort: "unsupported", promptInstruction: 42 });
+  assert.equal(unsupported.reasoningEffort, "");
+  assert.equal(unsupported.promptInstruction, "");
+});
+
 test("AI suggestion projection bounds untrusted fields and maps form values", () => {
   const suggestion = normalizeSuggestion({
     id: 4,
