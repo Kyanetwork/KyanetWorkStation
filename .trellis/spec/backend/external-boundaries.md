@@ -18,6 +18,11 @@
 - `requestProviderSuggestion({ profile, prompt, requestId, signal, fetchImpl }) -> Promise<{ text, usage, providerRequestId }>`
 - `parseSuggestionText(text) -> SuggestionPayload`
 - `buildCopilotInput(entityType, record) -> { entityType, id, type, title, content, status, priority?, expectedAt?, tags? }`
+- `reindexKnowledge({ roots, cachePath, limits }) -> Promise<{ version, builtAt, summary, warnings }>`
+- `searchIndex(index, query, { rootId?, maxResults? }) -> KnowledgeChunk[]`
+- `askKnowledge({ question, rootId?, dependencies }) -> Promise<{ answer, basis, caveats, sources, provider, usage, promptVersion }>`
+- `POST /api/admin/ai/knowledge/{reindex,ask,history/delete,history/cleanup,settings}` and
+  `GET /api/admin/ai/knowledge/{status,history}`
 
 ## 3. Contracts
 
@@ -73,6 +78,33 @@
 - 建议只写入 `ai_copilot_suggestion` 短期候选表；接受/拒绝只更新审计字段，“填入”只
   修改浏览器表单，状态、删除、公开回复和通知必须继续走现有人工确认接口。
 
+### AI knowledge index 与问答
+
+- `AI_KNOWLEDGE_BASE_DIRS` 是服务端唯一根目录来源；每项为 `{ id, name, path }`，最多
+  8 项。只读扫描 `.md`/`.txt`，跳过隐藏、运行和秘密目录；每个候选文件先做
+  `realpath`，相对路径必须留在对应根内，禁止越界软链接。
+- 扫描默认上限为每根 5000 文件、单文件 1 MiB、总读取 32 MiB、索引 48 MiB、单片段
+  4000 Unicode 字符；检索最多 6 个片段和约 24 KiB 上下文。索引内容只保留 root ID、
+  POSIX 相对路径、标题、文本、hash、mtime 和 chunk 序号，不保留机器绝对路径。
+- `data/ai-knowledge-index.json` 必须绑定当前根目录配置指纹；配置变化、版本不兼容、
+  缺失或读取失败时 fail closed。重建写入同目录临时文件后原子 rename，失败不得覆盖
+  上一份有效缓存；启动只加载缓存，不扫描或监听原目录。
+- `config.aiKnowledge.parseError` 必须在状态、重建和问答入口先行检查；配置解析失败时
+  不得调用 `loadIndex`，状态返回不可用，写/问答接口返回 `KNOWLEDGE_CONFIG_INVALID`。
+  这样即使磁盘上仍有上一版本缓存，也不会在配置损坏时继续把旧目录内容送往 Provider。
+- `askKnowledge` 只使用检索片段和 active profile，固定 `knowledge-v1` prompt 将片段
+  标记为不可信资料；答案只接受 `answer`、`basis`、`citedSourceIds`、`caveats`，引用
+  ID 必须由服务端映射到当前请求的来源。无命中时强制 `basis=general` 并追加
+  “非文档依据/需核验”，不执行文档 URL/命令或读取未索引文件。
+- 问答历史写入 `ai_knowledge_answer`，设置 JSON 使用 `autoCleanup`（默认 true）。
+  `AI_KNOWLEDGE_HISTORY_RETENTION_DAYS` 仅接受 1–3650；自动清理在启动及每小时执行，
+  关闭时手动清理/单条删除仍可用。知识路由仅管理员可访问，并沿用 CSRF、同源、JSON、
+  限流和脱敏审计边界。
+- 知识相关审计 metadata 只允许 `rootId`、`answerId`、`basis`、`sourceCount`、
+  `indexedFiles`、`chunkCount`、`warningCount`、`deleted`、`autoCleanup` 和稳定错误码等
+  有界摘要；`relativePath`、回答正文、完整 Prompt 和任意未知字段必须丢弃。审计查询的
+  `entityType` 白名单包含 `ai_knowledge`，以便管理员按知识助手动作核对记录。
+
 ## 4. Validation & Error Matrix
 
 | 条件 | 结果 |
@@ -89,6 +121,12 @@
 | AI profile Base URL 含 query/fragment/userinfo 或协议未知 | 验证返回 `INVALID_PAYLOAD`，不发起外部请求 |
 | AI 开关关闭、无 active profile 或主密钥无法解密 | 返回 `AI_UNAVAILABLE`/`AI_KEY_UNAVAILABLE`，普通 API 继续工作 |
 | Provider 超时、非 2xx、超大响应或无效 JSON | 映射到有界 AI 错误码，不保存建议，不记录原始正文 |
+| 知识根目录 JSON 无效 | 状态 `available=false`；问答/重建返回 `KNOWLEDGE_CONFIG_INVALID`，不使用旧库内容 |
+| 知识缓存缺失、指纹不匹配或版本不兼容 | 状态 `available=false`，检索返回空来源并按 `general` 规则提示核验；重建后恢复，不使用旧库内容 |
+| 文件 realpath 越界、扩展名不支持或超过文件/总量上限 | 跳过并记录脱敏 warning，不写入原始目录；其他文件继续扫描 |
+| 索引原子替换失败 | 保留上一份有效缓存，返回 `KNOWLEDGE_REINDEX_FAILED`，错误不含绝对缓存路径 |
+| 模型引用未知 source ID、答案 JSON/枚举/长度无效 | 丢弃未知引用或返回 `AI_INVALID_RESPONSE`；不创建历史记录 |
+| `autoCleanup=false` | 启动/每小时任务不删除；手动清理和单条删除仍可执行，过期记录不参与问答 |
 
 ## 5. Good / Base / Bad Cases
 
@@ -102,6 +140,10 @@
 - Good AI：只使用固定协议认证和无 query 的 Base URL，最小化投影后调用 Provider，
   无效输出被丢弃并保留可审计的短期候选状态。
 - Bad AI：把自定义 Header、联系方式、管理员备注或完整 Provider 响应直接转发给浏览器。
+- Good knowledge：根目录配置固定且只读，缓存带配置指纹并原子替换，问答只映射本次请求
+  的来源 ID，历史记录和审计只保存有界字段。
+- Bad knowledge：从浏览器接收任意路径、按文件名拼接读取、沿用配置变化后的旧缓存，或把
+  机器绝对路径/整份文档发送给 Provider。
 
 ## 6. Tests Required
 
@@ -116,6 +158,10 @@
 - `tests/validation.test.js`、`tests/ai-profiles.test.js`、`tests/ai-provider.test.js`、
   `tests/ai-copilot.test.js`、`tests/admin-ai.test.js`：Base URL query 拒绝、协议认证、
   脱敏投影、大小/超时/并发、输出 schema、未知 usage、短期候选和人工决策边界。
+- `tests/knowledge-base.test.js`、`tests/ai-knowledge.test.js`、`tests/knowledge-api.test.js`、
+  `tests/ai-db.test.js`：根目录/realpath/扩展名/大小限制、配置指纹与原子缓存、确定性
+  检索、prompt/引用映射、无命中 `general`、历史分页/删除/清理、管理员/CSRF/限流和三
+  数据库 schema 断言。
 - 发布前人工记录 D-004/V-002/V-003 的真实代理、脱敏备份和 SMTP/Webhook 证据；自动
   测试不得被描述为真实环境证据。
 
@@ -167,4 +213,18 @@ catch (error) {
   logger.error({ event: "notification.outbox.enqueue.error", error: sanitizeError(error) });
   return [];
 }
+```
+
+### Wrong knowledge path
+
+```js
+const requestedPath = req.body.path;
+return fs.readFileSync(requestedPath, "utf8");
+```
+
+### Correct knowledge path
+
+```js
+// 路径只来自已解析配置；扫描前 realpath 校验，API 只返回相对路径和安全统计。
+const index = await reindex({ roots: config.aiKnowledge.roots, cachePath: config.aiKnowledge.cachePath });
 ```

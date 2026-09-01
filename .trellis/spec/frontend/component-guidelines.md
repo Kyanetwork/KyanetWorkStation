@@ -53,6 +53,13 @@ page-specific layout rules in each page's style block, and load the shared
 stylesheet after those blocks so the square-control contract cannot be
 reintroduced accidentally. Preserve the existing CSS variables, responsive
 breakpoints, light/dark `data-theme` selector, and reduced visual complexity.
+Every `<button>` must declare an explicit `type`: `submit` only for the form's
+primary submission, `button` for tabs, pagination, reset, cleanup, and other
+actions. Dynamic buttons rendered through `innerHTML` must include the same
+attribute and a semantic class (`primary`, `secondary`, or `danger`) when the
+action needs a hierarchy. Under `.admin-page`, the shared stylesheet enforces
+`border-radius: 0`, hover/active/disabled/busy states, and a visible
+`focus-visible` outline; do not add page-local rounded overrides.
 Every form control should retain its associated label, visible validation/status
 text should use `textContent`, and notifications should keep
 `aria-live="polite"` as in the admin toast region. Images need meaningful `alt`
@@ -65,6 +72,10 @@ text or an intentionally empty alt for decorative icons.
 - Reading a DOM node before the page script is loaded.
 - Mutating a list item without reloading the server projection after a write.
 - Replacing the established theme variables with a page-specific palette.
+- Leaving a button without `type`, which makes it an accidental form submit and
+  causes browser default styling to leak into the HUD contract.
+- Rendering knowledge citations or history with unescaped API values; use
+  `escapeHtml` for templates and `textContent` for answer/status text.
 - Adding React props/hooks or a component package to a static page.
 
 Reference files: public/index/main.js:101-185,

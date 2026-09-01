@@ -75,7 +75,54 @@ MeowStatus 由 `MEOWSTATUS_ENABLED=false` 全局关闭时不会发起外部请�
 Provider profile（名称、协议、Base URL、模型和 API Key）在管理员面板保存。API Key 使用
 AES-256-GCM 加密写入 `workstation_setting`，列表只显示掩码；OpenAI-compatible 使用
 Bearer，Anthropic 使用 `x-api-key` 和固定版本头。最多保存 8 个 profile，但只有一个
-active profile。完整启停、备份和轮换流程见 [AI Copilot 运维手册](ai-copilot.md)。
+active profile。profile 可选配置 `reasoningEffort`（空值或 `low`/`medium`/`high`/`xhigh`/
+`max`）和最多 2000 个 Unicode 字符的 `promptInstruction`；只有 OpenAI Responses 发送
+推理强度，Chat/Anthropic 会省略。完整启停、备份和轮换流程见 [AI Copilot 运维手册](ai-copilot.md)。
+
+### 管理员知识助手
+
+知识库是可选的、由部署环境提供的只读目录。根目录配置为 JSON 数组，每项包含稳定的
+`id`、展示用 `name` 和服务器上的绝对 `path`：
+
+```dotenv
+AI_KNOWLEDGE_BASE_DIRS=[{"id":"tyutland","name":"TYUTland","path":"/srv/knowledge/tyutland"}]
+AI_KNOWLEDGE_HISTORY_RETENTION_DAYS=30
+```
+
+Windows 配置建议使用正斜杠（例如
+`"E:/Workplace/Projects/@Knowledge-Base/Minecraft/TYUTland"`）；若使用反斜杠则必须按 JSON 规则转义。生产 Linux 路径应使用实际挂载点。不要把原始文档、绝对路径或生成的索引提交 Git。
+目录配置由服务端读取，管理员页面只显示库名和相对路径，浏览器不能传入任意目录。
+
+索引器只收录 `.md` 和 `.txt`，跳过隐藏目录以及 `.git`、`node_modules`、`data`、
+`logs`、`backups`、`tmp`、`temp`、`secret(s)` 等运行/秘密目录；真实路径和软链接必须
+留在对应根目录内。默认安全上限为最多 8 个根目录、每根 5000 个文件、单文件 1 MiB、
+总读取 32 MiB、索引 48 MiB、单片段 4000 字符、单次回答最多 6 个片段/约 24 KiB 上下文。
+扫描不会写入原始目录。
+
+应用启动只加载现有缓存，不扫描目录。目录同步或内容更新后，在部署目录执行：
+
+```bash
+npm run reindex-knowledge
+```
+
+该命令和管理页面的“重建索引”都会生成版本化 JSON 缓存
+`data/ai-knowledge-index.json`，写入临时同目录文件后原子替换；失败会保留上一份有效
+缓存。缓存已加入 Git 忽略。若根目录配置无效、缓存缺失或版本不兼容，状态接口会报告
+不可用，需要修正配置后重新扫描。
+
+问答默认检索所有库，也可在管理员页面按库筛选。回答会返回服务端映射的引用；没有足够
+命中时使用 `basis=general` 并标注“非文档依据/需核验”。知识片段被视为不可信资料，
+不会执行其中的 URL、命令或指令，也不会读取未索引文件。
+
+问答历史默认保留 30 天，`AI_KNOWLEDGE_HISTORY_RETENTION_DAYS` 仅接受 1–3650 的整数。
+管理员可在页面关闭自动清理；开启时应用启动清理一次，之后每小时清理过期记录。关闭
+只跳过自动任务，手动清理和单条删除仍可用，过期记录也不会参与新的问答。历史和索引
+不保存 API Key、完整 prompt、机器绝对路径或未选中文档。
+
+推荐生产发布顺序：备份数据库 → 同步/挂载只读知识目录 → 更新 `.env` 并重启 → 执行
+`npm run reindex-knowledge` → 在管理员页面核对索引统计和一次非敏感问答 → 保留发布与
+回滚证据。若 Provider 或索引异常，可先关闭 `AI_COPILOT_ENABLED`；普通反馈、WorkTask、
+通知和导出不依赖知识助手。
 
 ## 备份
 

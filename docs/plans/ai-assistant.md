@@ -21,6 +21,26 @@ AI 先帮助管理员减少阅读、分类和回复工作，再在边界稳定�
 每项建议都能被管理员接受或拒绝；“填入”只写入当前页面表单，仍需管理员编辑并点击
 原有保存/状态按钮。建议记录生成时间、Provider/模型标识和短期过期时间，不显示密钥。
 
+### P1-A 个人知识助手（当前实现）
+
+管理员页面的“知识助手”标签提供一条独立的、只读的文档问答路径：
+
+- 通过 `AI_KNOWLEDGE_BASE_DIRS` 配置最多 8 个外部根目录，只索引 Markdown/TXT；扫描需由
+  管理员按钮或 `npm run reindex-knowledge` 显式触发，应用启动不扫描、不监听文件变化。
+- 索引器跳过隐藏/运行/秘密目录，使用 realpath 检查软链接边界、文件/总量/上下文上限，
+  以版本化 JSON 原子替换缓存；失败保留上一份有效索引。
+- 检索默认跨所有库，也可按库筛选；回答必须返回 `document`、`mixed` 或 `general` 依据、
+  服务端映射的引用和 caveat。无充分命中时强制标注“非文档依据/需核验”。
+- 问题、回答、引用、profile/模型、用量和 prompt 版本保存到管理员私有历史表；默认保留 30
+  天，保留期可在环境变量中按 1–3650 调整。自动清理默认开启并在启动/每小时执行，管理员
+  也可关闭自动任务、手动清理或删除单条记录。
+- 知识问答复用 active profile 与 AES-256-GCM 密钥，不新增第二套凭据；文档片段作为不可信
+  资料发送，不执行其中指令，不读取未索引文件，也不修改反馈/WorkTask、发送通知或执行命令。
+
+Copilot profile 现在还支持可选 `reasoningEffort`（`low`/`medium`/`high`/`xhigh`/`max`）
+和最多 2000 个 Unicode 字符的 `promptInstruction`。只有 OpenAI Responses 请求映射
+`reasoning.effort`；Chat/Anthropic 安全省略，附加指令始终位于固定安全 Prompt 的独立边界。
+
 ## 安全与隐私约束
 
 - 默认关闭，管理员显式启用；未配置 Provider 时核心功能仍可用。
@@ -38,16 +58,16 @@ AI 先帮助管理员减少阅读、分类和回复工作，再在边界稳定�
 
 ## 分阶段演进
 
-### P1（下一步）
+### P1-B（下一步）
 
-增强建议质量、人工编辑体验、指标与 Provider 可用性诊断；继续保持单 active profile，
-不引入自动 fallback、智能路由或并行调用。
+增强建议/知识回答质量、人工编辑体验、Provider 能力诊断、耗时/token/失败指标和 prompt
+版本对比；继续保持单 active profile，不引入自动 fallback、智能路由或并行调用。
 
 ### P2
 
 用户侧提交澄清和结构化建议；必须支持用户取消、预览和人工确认，不能静默代提交。
 
-运维/知识助手读取公开项目文档、运行手册和服务状态；默认不读取秘密、生产日志或内部联系人，不直接执行 shell、部署或外部写操作。
+更广泛的用户侧/运维侧 AI 读取公开项目文档、运行手册和服务状态；默认不读取秘密、生产日志或内部联系人，不直接执行 shell、部署或外部写操作。当前管理员知识助手已先行落地，后续扩展另建任务。
 
 ## 不纳入首版
 
@@ -60,7 +80,10 @@ AI 先帮助管理员减少阅读、分类和回复工作，再在边界稳定�
 只需在部署环境中设置：
 
 - `AI_COPILOT_ENABLED=false`（默认关闭）；
-- `AI_PROFILE_ENCRYPTION_KEY`：随机 32 字节主密钥的 64 位十六进制值。
+- `AI_PROFILE_ENCRYPTION_KEY`：随机 32 字节主密钥的 64 位十六进制值；
+- `AI_KNOWLEDGE_BASE_DIRS=[]`：可选的只读 Markdown/TXT 根目录 JSON 数组；
+- `AI_KNOWLEDGE_HISTORY_RETENTION_DAYS=30`：问答历史保留期（1–3650 天）。
 
 profile 的名称、协议、Base URL 和模型由管理员面板维护；更新时 API Key 留空表示保留
-原密文。启用、备份、轮换和回滚步骤见 [AI Copilot 运维手册](../operations/ai-copilot.md)。
+原密文。知识目录同步、索引、自动清理、备份、轮换和回滚步骤见
+[AI Copilot 运维手册](../operations/ai-copilot.md)。

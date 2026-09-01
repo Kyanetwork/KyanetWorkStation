@@ -9,7 +9,7 @@ P0 可靠性/隐私/安全/运行时基线
   ↓ 发布门禁通过
 P1 统一首页 + 工作收件箱 + 我的工作区 + 服务卡片
   ↓ 工作台数据契约稳定
-P1 管理员 AI Copilot
+P1 管理员 AI Copilot + 个人知识助手
   ↓ AI 安全和审计稳定
 P2 Kanban/项目管理 + 用户侧/运维侧 AI + 新 Account 联动
 ```
@@ -62,14 +62,26 @@ P2 Kanban/项目管理 + 用户侧/运维侧 AI + 新 Account 联动
 
 ## P1：管理员 AI Copilot
 
-### P1-4 `p1-admin-ai-copilot`（当前阶段已实现）
+### P1-4 `p1-admin-ai-copilot`（已实现，当前阶段完成 P1-A 增强）
 
 采用轻量 Provider Adapter，默认关闭；已实现摘要、分类、优先级/标签建议、相似条目提示
 和回复草稿。支持多个命名 profile 与单 active 热切换，输入脱敏，输出仅为短期建议，状态
-修改、删除和通知发送必须人工确认。详见 [AI 计划](ai-assistant.md)。后续 P1 聚焦建议质量、
-可用性诊断和人工编辑体验，不扩展自动路由或并行调用。
+修改、删除和通知发送必须人工确认。profile 还支持 Responses `reasoning_effort`（low/
+medium/high/xhigh/max）和最多 2000 个 Unicode 字符的受控工作指令。详见 [AI 计划](ai-assistant.md)。
 
-### P1-5 `r002-server-export-audit`（已实现/待发布验证）
+### P1-5 `p1-admin-knowledge-assistant`（已实现）
+
+管理员知识助手读取部署环境配置的外部 Markdown/TXT 目录，显式建立版本化索引并进行
+确定性检索。回答返回服务端映射的引用和 `document/mixed/general` 依据；无充分命中时
+标注“非文档依据/需核验”。问答历史进入三数据库兼容表，默认保留 30 天，自动清理可在
+管理员页面开关（启动一次 + 每小时执行），手动清理和单条删除始终可用。
+
+知识助手不接受浏览器路径、不监听原始目录、不执行文档指令、不读取未索引文件，也不修改
+反馈/WorkTask 或发送通知。生产发布顺序是：备份 → 同步/挂载只读目录 → 配置 `.env` →
+重启 → `npm run reindex-knowledge` → 管理员页面验证。后续 Provider 诊断、指标、prompt
+对比、批量摘要等归入 P1-B，不提前建设自动 fallback 或智能路由。
+
+### P1-6 `r002-server-export-audit`（已实现/待发布验证）
 
 将管理员反馈和 WorkTask 导出改为服务端固定 250 行分批 CSV 流，使用
 `ADMIN_EXPORT_MAX_ROWS`（默认 10000，范围 100–100000）保护资源，不在浏览器收集全量结果。
@@ -86,7 +98,8 @@ P2 Kanban/项目管理 + 用户侧/运维侧 AI + 新 Account 联动
 
 ### P2-2 `p2-account-and-ai-expansion`
 
-独立设计新的 Account 联动、用户侧提交助手、运维/知识助手和公众账号模式。历史匿名记录不自动归属新账号。
+独立设计新的 Account 联动、用户侧提交助手、面向更广泛运维场景的 AI 和公众账号模式。
+当前管理员知识助手不自动扩展为用户侧或运维写操作。历史匿名记录不自动归属新账号。
 
 ## 暂缓清单
 

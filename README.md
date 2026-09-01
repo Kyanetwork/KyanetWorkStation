@@ -2,7 +2,7 @@
 
 KyanetWorkStation 是面向个人和小团队的轻量自托管工作中枢：把反馈、WorkTask、处理进展和服务状态放在一个低维护成本的入口中，并逐步增加可控的 AI 辅助。
 
-当前实现已包含公开 Workstation 入口、管理员工作收件箱、MeowStatus 服务状态卡片和默认关闭的管理员 AI Copilot；更深的个人工作区、项目管理和账号联动仍按路线图推进。
+当前实现已包含公开 Workstation 入口、管理员工作收件箱、MeowStatus 服务状态卡片、默认关闭的管理员 AI Copilot，以及可引用的个人知识助手；更深的个人工作区、项目管理和账号联动仍按路线图推进。
 
 ## 当前能力
 
@@ -11,6 +11,7 @@ KyanetWorkStation 是面向个人和小团队的轻量自托管工作中枢：�
 - 管理员动作级脱敏审计及受保护的分页查询 API
 - 统一 Workstation 公开入口、管理员工作收件箱和 MeowStatus 服务状态卡片
 - 管理员 AI Copilot：多 Provider profile 单 active 热切换、脱敏建议和人工确认（默认关闭）
+- 管理员知识助手：受控 Markdown/TXT 外部目录、显式索引、确定性检索、引用式回答和问答历史（默认不配置目录）
 - SMTP/Webhook 通知及管理端测试入口；outbox 入队异常可通过私有 handoff 查询和人工补偿
 - MeowStatus/Minecraft 状态展示（外部响应、字段和 favicon 有界）
 - SQLite、MySQL、PostgreSQL 数据库驱动
@@ -27,6 +28,7 @@ Copy-Item .env.example .env
 npm ci --foreground-scripts
 # 编辑 .env，至少设置 ADMIN_USERNAME、ADMIN_PASSWORD、APP_BASE_URL
 npm run init-admin
+npm run reindex-knowledge  # 配置 AI_KNOWLEDGE_BASE_DIRS 后按需执行
 npm run start
 ```
 
@@ -56,6 +58,7 @@ MeowStatus 是可选外部服务，默认由 `MEOWSTATUS_ENABLED=false` 关闭�
 - [备份与恢复](docs/operations/backup-restore.md)
 - [发布验证证据模板](docs/operations/release-evidence-template.md)
 - [安全基线](docs/operations/security.md)
+- [AI Copilot 与知识助手运维](docs/operations/ai-copilot.md)
 - [日志与观测](docs/operations/observability.md)
 - [测试与发布门禁](docs/testing/release-checklist.md)
 
@@ -74,6 +77,8 @@ MeowStatus 是可选外部服务，默认由 `MEOWSTATUS_ENABLED=false` 关闭�
 - 当前没有原生图片上传，反馈中的图片以文本链接为主。
 - 当前管理模型仍以单管理员为主，暂不承诺复杂 RBAC、多租户或组织架构。
 - 管理员 CSV 导出默认最多 10000 行（可通过 `ADMIN_EXPORT_MAX_ROWS` 调整到 100–100000，修改后需重启服务）。
+- 知识库只读取部署环境配置的 `.md`/`.txt` 目录；不会接受页面传入路径，也不会在启动时自动扫描。目录同步后需显式运行 `npm run reindex-knowledge`，问答只在管理员页面可用。
+- 知识问答默认保留 30 天，可用 `AI_KNOWLEDGE_HISTORY_RETENTION_DAYS` 调整（1–3650）；自动清理可在管理员页面关闭，但过期记录仍不会参与问答。
 - 个人提交/任务历史视图、Kanban、更多服务聚合和用户侧/运维侧 AI 仍按路线图分阶段推进。
 - KyanetAccount 旧 schema/会话遗留仅用于迁移保留，不应成为新功能依赖。
 
@@ -86,6 +91,7 @@ npm run backup-db:core
 npm run backup-db:rdbms
 npm run backup-db:win
 npm run verify-backup:sqlite -- --backup <PRIVATE_BACKUP_PATH>
+npm run reindex-knowledge
 ```
 
 `npm test`、备份恢复和真实部署的证据要求见[发布门禁](docs/testing/release-checklist.md)。

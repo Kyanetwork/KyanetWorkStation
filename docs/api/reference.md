@@ -54,12 +54,44 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
 `anthropic-messages`。前者覆盖 OpenAI 官方、兼容中转站、DeepSeek 与 GLM/Z.ai；
 认证头由协议固定生成，不接受任意自定义 Header。API Key 永不出现在响应、日志或浏览器
-存储中。
+存储中。可选 `reasoningEffort`（接口也接受输入别名 `reasoning_effort`）只能是空值、
+`low`、`medium`、`high`、`xhigh` 或 `max`；只有 `openai-responses` 会将它映射为
+`reasoning.effort`，Chat/Anthropic 会省略。可选 `promptInstruction` 最多 2000 个
+Unicode 字符，只作为独立的风格补充，不能覆盖系统安全约束。
 
 建议请求字段为 `{ entityType, entityId }`；返回值包含 `suggestion`、`similarItems`、
 `provider`、`generatedAt`、`expiresAt` 和有界 `usage`。出站输入只包含标题、正文和必要
 工作字段，不包含联系方式、管理员备注、账号快照或通知载荷。接受/拒绝只更新
 `ai_copilot_suggestion`，管理员仍须使用原有接口保存业务字段。
+
+### 管理员知识助手
+
+知识库相关接口均要求管理员会话；写接口还遵守现有 JSON、CSRF、同源来源检查和审计
+约定。知识根目录只来自服务端 `AI_KNOWLEDGE_BASE_DIRS`，请求不能传入路径。状态和引用
+只返回配置库名称、POSIX 相对路径及有界统计，不返回绝对路径、索引正文或未选中文档。
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /api/admin/ai/knowledge/status` | 返回索引是否可用、版本/构建时间、库名称、文件/片段统计、警告、保留期和自动清理开关 |
+| `POST /api/admin/ai/knowledge/reindex` | 按环境配置只读扫描 `.md`/`.txt` 根目录并原子替换索引；不接受请求体路径 |
+| `POST /api/admin/ai/knowledge/ask` | 提交 `{ question, rootId? }`，检索最多 6 个片段并调用当前 active profile |
+| `GET /api/admin/ai/knowledge/history` | 分页读取问答历史；支持 `page`、`pageSize`、`keyword`、`rootId` 筛选 |
+| `POST /api/admin/ai/knowledge/history/delete` | 提交 `{ id }` 或 `{ answerId }` 删除一条历史 |
+| `POST /api/admin/ai/knowledge/history/cleanup` | 删除已过期历史；不受自动清理开关限制 |
+| `POST /api/admin/ai/knowledge/settings` | 提交 `{ autoCleanup: boolean }` 更新自动清理开关 |
+
+`ask` 成功数据包含 `answer`、`basis`、`caveats`、`sources`、`provider`、`usage`、
+`promptVersion`、创建/过期时间和服务端生成的记录 ID。`basis` 取 `document`、`mixed` 或
+`general`；无命中时强制为 `general`，并在 `caveats` 标注“非文档依据/需核验”。`sources`
+中的 `sourceId` 仅对当前回答有效，服务端会将模型返回的 ID 映射回库名、相对路径、标题和
+有界摘录，模型不能自行指定文件路径。
+
+问题长度限制为 1–4000 个 Unicode 字符，历史 `pageSize` 最大 100。问答接口使用独立的
+单管理员 5 分钟 10 次限流；索引重建使用单进程互斥。错误码包括
+`KNOWLEDGE_CONFIG_INVALID`、`KNOWLEDGE_REINDEX_FAILED`、`KNOWLEDGE_BUSY`、
+`AI_KNOWLEDGE_PERSIST_FAILED` 以及通用 `AI_UNAVAILABLE`、`AI_TIMEOUT`、
+`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`。AI 或索引失败不会阻塞反馈、WorkTask、
+通知和导出。
 
 ## 反馈管理
 
@@ -130,4 +162,4 @@ WorkTask 另外包含 `priority`、`expectedAt`、`scheduledAt`、`assignee`、`
 
 ## 错误与分页
 
-常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE`、`RATE_LIMITED`、`NOT_FOUND` 和 `EXPORT_LIMIT_EXCEEDED`。AI 路由另有 `AI_UNAVAILABLE`、`AI_KEY_UNAVAILABLE`、`AI_BUSY`、`AI_RATE_LIMITED`、`AI_TIMEOUT`、`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`、`AI_PROFILE_CONFLICT` 和 `AI_SUGGESTION_CONFLICT`；AI 不可用时普通提交、列表和通知流程继续工作。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。
+常见错误码包括 `INVALID_PAYLOAD`、`UNAUTHORIZED`、`AUTH_FAILED`、`CSRF_BLOCKED`、`UNSUPPORTED_MEDIA_TYPE`、`RATE_LIMITED`、`NOT_FOUND` 和 `EXPORT_LIMIT_EXCEEDED`。AI 路由另有 `AI_UNAVAILABLE`、`AI_KEY_UNAVAILABLE`、`AI_BUSY`、`AI_RATE_LIMITED`、`AI_TIMEOUT`、`AI_PROVIDER_FAILED`、`AI_INVALID_RESPONSE`、`AI_PROFILE_CONFLICT` 和 `AI_SUGGESTION_CONFLICT`；知识助手还可能返回 `KNOWLEDGE_CONFIG_INVALID`、`KNOWLEDGE_REINDEX_FAILED`、`KNOWLEDGE_BUSY` 和 `AI_KNOWLEDGE_PERSIST_FAILED`。AI 不可用时普通提交、列表和通知流程继续工作。列表响应包含 `items`、`page`、`pageSize`、`total`、`summary`、`totalPages` 等字段；客户端不得假定数据库原始列全部公开。
