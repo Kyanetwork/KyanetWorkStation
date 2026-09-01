@@ -152,3 +152,30 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: P1 AI 知识助手与 WorkStation UI 收尾
+
+**Date**: 2026-08-31
+**Task**: P1 AI 知识助手与 WorkStation UI 收尾
+**Branch**: `main`
+
+### Summary
+
+完成受控 AI reasoning/prompt、多 Provider 知识助手、外部 Markdown/TXT 索引、引用问答历史与自动清理、管理员直角 HUD UI；补齐配置失败 fail-closed、缓存指纹、审计白名单和 null 校验。通过 npm test 160/160、Node 24 语法检查、官方 registry audit 0 漏洞、Trellis 校验与浏览器 smoke；归档任务，未 push。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9427f1d` | (see git log) |
+| `2a81c30` | (see git log) |
+| `6a25e3b` | (see git log) |
+| `cc620bf` | (see git log) |
+| `34f5745` | (see git log) |
+| `9d42a64` | (see git log) |
+| `fc572f4` | (see git log) |
+
+### Status
+
+[OK] **Completed**
