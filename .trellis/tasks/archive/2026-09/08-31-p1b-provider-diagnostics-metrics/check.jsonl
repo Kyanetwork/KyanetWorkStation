@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality gate and relevant layer discovery"}
+{"file": ".trellis/spec/backend/external-boundaries.md", "reason": "Verify Provider diagnostics and privacy boundaries"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify schema and cross-driver SQL"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify redaction and structured logs"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run tests and scope review"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality gate"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify safe rendering and square controls"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify refresh/state lifecycle"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify browser smoke and accessibility"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer review checklist"}
+{"file": ".trellis/tasks/08-31-p1b-provider-diagnostics-metrics/research/provider-diagnostics-metrics.md", "reason": "Research findings to verify implementation boundaries"}

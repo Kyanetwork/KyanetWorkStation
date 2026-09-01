@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend layer map, pre-development and quality gates"}
+{"file": ".trellis/spec/backend/external-boundaries.md", "reason": "AI Provider, bounded external payload and error contracts"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Three-driver schema, parameterized SQL and compatibility rules"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Structured redacted logging for diagnostics and metrics"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend tests, security and API envelope checks"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend layer map and quality gates"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Admin DOM, controls and escaping contracts"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Page-local state and refresh lifecycle"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Browser smoke, theme, accessibility and button checks"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Trace provider/DB/API/UI data flow"}
+{"file": ".trellis/tasks/08-31-p1b-provider-diagnostics-metrics/research/provider-diagnostics-metrics.md", "reason": "Repository-grounded Provider diagnostic, sentinel and metrics design research"}
