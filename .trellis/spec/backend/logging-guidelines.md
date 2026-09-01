@@ -45,6 +45,14 @@ For partial or multi-target delivery, log counts and a bounded error message,
 not the complete request body. Keep provider-specific diagnostics in the
 provider child logger.
 
+Provider diagnostics and AI metrics follow the same redaction boundary. Logs may
+include a fixed event name, operation, protocol/model summary, stable outcome or
+error code, request ID, and bounded duration. They must not include Provider
+URLs (including query strings), API keys, probe/prompt text, upstream response
+body, usage payloads, knowledge paths, or business content. Metric persistence
+and cleanup are best-effort: on failure emit a warning with only the operation
+and stable error code, then leave the AI/HTTP result unchanged.
+
 ## Sensitive data and redaction
 
 Never log passwords, bcrypt hashes, integration secrets, session cookies, login

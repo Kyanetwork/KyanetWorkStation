@@ -21,6 +21,9 @@
 - `reindexKnowledge({ roots, cachePath, limits }) -> Promise<{ version, builtAt, summary, warnings }>`
 - `searchIndex(index, query, { rootId?, maxResults? }) -> KnowledgeChunk[]`
 - `askKnowledge({ question, rootId?, dependencies }) -> Promise<{ answer, basis, caveats, sources, provider, usage, promptVersion }>`
+- `diagnoseProfile({ profileId, requestId, signal, dependencies }) -> Promise<DiagnosticProjection>`
+- `recordAiRequestMetricSafely(input, dependencies) -> Promise<boolean>`
+- `summarizeAiRequestMetrics({ from, to, dependencies }) -> Promise<MetricSummary>`
 - `POST /api/admin/ai/knowledge/{reindex,ask,history/delete,history/cleanup,settings}` and
   `GET /api/admin/ai/knowledge/{status,history}`
 
@@ -78,6 +81,23 @@
 - 建议只写入 `ai_copilot_suggestion` 短期候选表；接受/拒绝只更新审计字段，“填入”只
   修改浏览器表单，状态、删除、公开回复和通知必须继续走现有人工确认接口。
 
+### Provider 真实诊断与 AI 请求指标
+
+- `POST /api/admin/ai/profiles/diagnose` 只接受已保存的 `profileId`，管理员点击后发送一次
+  固定探针：`KyanetWorkStation provider diagnostic. Reply with exactly KWS_DIAGNOSTIC_OK and nothing else.`。
+  诊断复用 `requestProviderSuggestion` 的协议端点、认证、15 秒超时和 32 KiB 响应上限，不
+  改变 active profile，不创建建议/知识历史；页面和运维文档必须提示可能产生少量 token 消耗。
+- 诊断结果只返回协议、模型摘要、固定端点后缀、HTTP 状态、可达/JSON/文本/响应大小/sentinel/
+  usage 阶段检查、耗时、受控 Provider request id、reasoning 是否发送和稳定错误码。只有 HTTP、
+  JSON、文本提取和精确 sentinel 全部通过才是 `status=passed`；不得返回 Provider URL、Key、
+  请求/响应正文或完整上游错误。Responses 的 `reasoning_effort` 仅报告发送状态，不证明完整能力。
+- `ai_request_metric` 只记录 `copilot_suggest`、`knowledge_ask`、`provider_diagnostic`、profileId、
+  protocol、model 摘要、`success/failed/timeout`、有界耗时、可选 token、稳定 errorCode 和时间。
+  usage 非法/未知统一为 `null`；指标写入失败只记录脱敏 warning，不改变主请求语义。
+- 指标汇总不返回逐请求数据，查询时间窗限制为 1–720 小时，最多返回 100 个 operation/protocol
+  分组；`AI_METRICS_RETENTION_DAYS` 默认 30 天（1–3650），`AI_METRICS_AUTO_CLEANUP` 默认开启，
+  在启动和每小时清理，关闭/失败不得阻塞应用。
+
 ### AI knowledge index 与问答
 
 - `AI_KNOWLEDGE_BASE_DIRS` 是服务端唯一根目录来源；每项为 `{ id, name, path }`，最多
@@ -120,6 +140,7 @@
 | SQLite 备份扩展名未知、损坏、缺关键表或 integrity 失败 | CLI 非 0，错误不含路径/秘密 |
 | AI profile Base URL 含 query/fragment/userinfo 或协议未知 | 验证返回 `INVALID_PAYLOAD`，不发起外部请求 |
 | AI 开关关闭、无 active profile 或主密钥无法解密 | 返回 `AI_UNAVAILABLE`/`AI_KEY_UNAVAILABLE`，普通 API 继续工作 |
+| Provider 诊断 profileId 未保存 | 返回 404 `NOT_FOUND`（AI profile 不存在），不发起外部请求 |
 | Provider 超时、非 2xx、超大响应或无效 JSON | 映射到有界 AI 错误码，不保存建议，不记录原始正文 |
 | 知识根目录 JSON 无效 | 状态 `available=false`；问答/重建返回 `KNOWLEDGE_CONFIG_INVALID`，不使用旧库内容 |
 | 知识缓存缺失、指纹不匹配或版本不兼容 | 状态 `available=false`，检索返回空来源并按 `general` 规则提示核验；重建后恢复，不使用旧库内容 |

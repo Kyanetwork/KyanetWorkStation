@@ -71,6 +71,8 @@ MeowStatus 由 `MEOWSTATUS_ENABLED=false` 全局关闭时不会发起外部请�
 |---|---|---|
 | `AI_COPILOT_ENABLED` | `false` | AI 建议总开关；关闭时不发起 Provider 请求，基础业务继续可用 |
 | `AI_PROFILE_ENCRYPTION_KEY` | 空 | 32 字节随机主密钥的 64 位十六进制值；启用 AI 时必填，独立于数据库备份保管 |
+| `AI_METRICS_RETENTION_DAYS` | `30` | AI 请求指标保留天数，仅接受 1–3650 的整数 |
+| `AI_METRICS_AUTO_CLEANUP` | `true` | 是否在启动及每小时自动删除过期 AI 指标；关闭不影响手动/汇总功能 |
 
 Provider profile（名称、协议、Base URL、模型和 API Key）在管理员面板保存。API Key 使用
 AES-256-GCM 加密写入 `workstation_setting`，列表只显示掩码；OpenAI-compatible 使用
@@ -123,6 +125,12 @@ npm run reindex-knowledge
 `npm run reindex-knowledge` → 在管理员页面核对索引统计和一次非敏感问答 → 保留发布与
 回滚证据。若 Provider 或索引异常，可先关闭 `AI_COPILOT_ENABLED`；普通反馈、WorkTask、
 通知和导出不依赖知识助手。
+
+管理员 AI 面板中的“Provider 真实诊断”只在点击后对指定 profile 发送一次固定探针，
+不会切换 active profile、创建建议或知识历史，但可能消耗少量 token。诊断结果只显示
+网络/HTTP、JSON、文本和 sentinel 检查的安全摘要，不转发上游响应正文。AI 请求指标只保存
+操作、协议、模型摘要、状态、耗时和 token 汇总字段，不保存 prompt、响应、密钥、完整 URL
+或业务内容；指标默认保留 30 天，可由上述两个环境变量调整。
 
 ## 备份
 

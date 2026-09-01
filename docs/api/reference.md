@@ -47,6 +47,8 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/ai/profiles` | 新建或更新 Provider profile；更新时 `key` 为空表示保留原密文 |
 | `POST /api/admin/ai/profiles/active` | 设置或清空唯一 active profile |
 | `POST /api/admin/ai/profiles/delete` | 删除 profile；删除 active 后不会自动切换 |
+| `POST /api/admin/ai/profiles/diagnose` | 对指定已保存 profile 发起一次真实固定探针诊断；不切换 active profile，可能消耗少量 token |
+| `GET /api/admin/ai/metrics?hours=24` | 读取有界时间窗内的 AI 请求聚合指标，不返回逐请求内容 |
 | `POST /api/admin/ai/suggest` | 针对一条 `feedback` 或 `worktask` 生成短期建议 |
 | `GET /api/admin/ai/suggestions` | 按 `entityType`、`entityId` 查询未过期建议 |
 | `POST /api/admin/ai/suggestions/decision` | 接受/拒绝候选字段并记录管理员审计，不改业务表 |
@@ -58,6 +60,15 @@ Profile 的 `protocol` 只能是 `openai-chat`、`openai-responses` 或
 `low`、`medium`、`high`、`xhigh` 或 `max`；只有 `openai-responses` 会将它映射为
 `reasoning.effort`，Chat/Anthropic 会省略。可选 `promptInstruction` 最多 2000 个
 Unicode 字符，只作为独立的风格补充，不能覆盖系统安全约束。
+
+`diagnose` 请求体只接受 `{ profileId }`，使用保存的 profile 发出固定 sentinel 探针
+`KWS_DIAGNOSTIC_OK`，成功响应只会在 HTTP、JSON、文本提取和 sentinel 全部通过时标记
+`status=passed`；响应不会包含 Base URL、API Key 或 Provider 原文。Responses profile
+的推理强度会随请求发送，但一次诊断不代表模型具备完整推理能力。
+
+`metrics` 的 `hours` 只接受 1–720，返回总请求数、成功/失败/超时、平均耗时、已知 token
+合计、未知用量计数以及最多 100 个 operation/protocol 分组。指标 operation 固定为
+`copilot_suggest`、`knowledge_ask`、`provider_diagnostic`，写入失败不影响 AI 主请求。
 
 建议请求字段为 `{ entityType, entityId }`；返回值包含 `suggestion`、`similarItems`、
 `provider`、`generatedAt`、`expiresAt` 和有界 `usage`。出站输入只包含标题、正文和必要

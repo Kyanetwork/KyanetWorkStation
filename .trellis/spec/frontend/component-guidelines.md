@@ -82,6 +82,18 @@ Reference files: public/index/main.js:101-185,
 public/admin/admin.js:281-364, public/admin/index.html:118-217, and
 public/theme.js.
 
+## AI diagnostics and metrics panels
+
+The admin AI diagnostics and metrics areas are page-local server state. Render
+only the normalized projections from `public/admin/ai-model.js`: profile name,
+protocol/model summary, fixed endpoint suffix, bounded check/status fields,
+aggregate counts, and safe error codes. Never render a Provider URL, key,
+prompt, response body, or unbounded usage/request identifier. Diagnostic buttons
+must remain explicit `type="button"`, show a busy state, and restore their
+label/disabled state in `finally`; a failed diagnostic must not replace the
+profile list or active-profile state. Metric refresh uses the bounded 24 h/7 d/
+30 d selectors and renders no individual request rows.
+
 ## External icon boundary
 
 The MeowStatus adapter is the authoritative validator for Minecraft favicon

@@ -136,6 +136,26 @@ helper. Do not claim atomicity for a multi-write operation. If a future feature
 needs a transaction, design an explicit per-driver transaction boundary and
 tests before adding it.
 
+## AI request metrics
+
+`ai_request_metric` is an aggregate-only table declared equivalently in the
+SQLite, MySQL, and PostgreSQL schema statement sets. It stores only the fixed
+operation (`copilot_suggest`, `knowledge_ask`, `provider_diagnostic`), profile
+and protocol/model summaries, outcome (`success`, `failed`, `timeout`), bounded
+duration, nullable input/output token counts, `usage_present`, a stable error
+code, and an ISO `created_at`; it must never contain prompts, responses, keys,
+Base URLs, or business content. The `created_at` and operation/time indexes are
+created with the table and must remain idempotent for existing databases.
+
+`createAiRequestMetric` normalizes all values before binding them. Unknown or
+invalid token values are SQL `NULL`, duration is clamped to 0–600000 ms, and
+model/profile/protocol/error fields are length-limited. `listAiRequestMetricSummary`
+must validate parseable time bounds, require `from < to`, and reject windows
+longer than 720 hours before executing SQL; it returns fixed aggregates and at
+most 100 operation/protocol groups, never individual rows. `deleteExpiredAiRequestMetrics`
+uses a bound cutoff. Metric writes are best-effort at the service layer, so a
+database write failure cannot change the outcome of the primary AI request.
+
 JSON-like settings are stored as JSON text in `workstation_setting` and read
 through `getSettingJson`/`setSettingJson`. The `images` feedback field
 follows the same JSON-text storage and is parsed only in `mapFeedbackRow`.

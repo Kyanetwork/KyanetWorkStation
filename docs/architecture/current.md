@@ -26,7 +26,8 @@ Browser
 3. 反馈与 WorkTask 提交路由。
 4. 管理员登录、列表、状态、安排、备注、服务端导出、审计查询和通知测试路由。
 5. 管理员 AI profile/Copilot 与知识助手状态、重建、问答、历史和清理路由。
-6. 统一错误响应和静态文件回退。
+6. 管理员 Provider 真实诊断和 AI 请求指标聚合路由。
+7. 统一错误响应和静态文件回退。
 
 `server/validation.js` 负责输入规范化和字段长度/枚举校验；`server/security.js` 负责管理写请求的来源和 JSON 类型边界；`server/errors.js` 负责统一错误形状。
 
@@ -54,6 +55,9 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
   `ai_copilot_suggestion` 保存短期建议、过期时间和人工决策审计。
 - `ai_knowledge_answer` 保存有界问题、回答、引用、依据、profile/模型、用量、prompt
   版本和过期时间；`ai_knowledge_settings` 通过设置 JSON 保存自动清理开关。
+- `ai_request_metric` 只保存 Copilot、知识问答和 Provider 诊断的操作、协议、模型摘要、
+  状态、耗时、token 和稳定错误码，按时间索引提供有界聚合；写入 best-effort，不提供逐请求
+  敏感内容查询。
 - `data/ai-knowledge-index.json` 是不进 Git 的版本化检索缓存，不作为数据库或 API 数据源。
 - `admin_audit` 保存管理员动作级审计；反馈/WorkTask 导出通过固定 250 行批次查询，
   不构造全量结果数组。
@@ -73,6 +77,9 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 - `server/meowstatus.js` 负责外部 Dashboard 请求、超时、响应体/MIME/字段边界和 favicon 规范化。
 - `server/ai-provider.js` 是唯一的 AI 外部 HTTP 出站边界；AI 失败只返回有界错误，不影响反馈、
   WorkTask、通知或状态卡片。
+- `server/ai-diagnostics.js` 复用 Provider 边界，以固定 sentinel 对任意已保存 profile 做显式
+  一次性真实诊断，不改变 active profile；`server/ai-metrics.js` 负责三类 AI 操作的有界指标、
+  汇总和保留期清理。
 - 知识库原始目录是只读输入，索引器不写入原目录、不监听变化；知识问答失败只影响管理员
   AI 区域，不影响普通业务。
 - 通知在业务写入成功后进入 `notification_delivery` outbox；启动及定时 worker 进行有界重试，管理员可查询失败并触发重试。极少数 outbox 入队异常写入同一私有数据目录的 `notification-handoff.jsonl`，由 `server/notification-handoff.js` 提供脱敏查询和人工重新入队，不改变业务写入语义。

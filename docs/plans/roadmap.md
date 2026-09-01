@@ -78,8 +78,8 @@ medium/high/xhigh/max）和最多 2000 个 Unicode 字符的受控工作指令�
 
 知识助手不接受浏览器路径、不监听原始目录、不执行文档指令、不读取未索引文件，也不修改
 反馈/WorkTask 或发送通知。生产发布顺序是：备份 → 同步/挂载只读目录 → 配置 `.env` →
-重启 → `npm run reindex-knowledge` → 管理员页面验证。后续 Provider 诊断、指标、prompt
-对比、批量摘要等归入 P1-B，不提前建设自动 fallback 或智能路由。
+重启 → `npm run reindex-knowledge` → 管理员页面验证。Provider 诊断、指标和 prompt 契约
+收敛已在 P1-B 完成；prompt 对比、批量摘要等仍不提前建设自动 fallback 或智能路由。
 
 ### P1-6 `r002-server-export-audit`（已实现/待发布验证）
 
@@ -89,6 +89,19 @@ medium/high/xhigh/max）和最多 2000 个 Unicode 字符的受控工作指令�
 写入三数据库兼容的 `admin_audit`，只保留白名单脱敏元数据，并提供管理员分页查询 API。
 审计随现有备份保留；真实生产下载、超限提示、代理链路和 MySQL/PostgreSQL 实链路仍按发布
 门禁验证，暂不建设审计前端页面。
+
+### P1-B `p1b-provider-diagnostics-metrics`（已实现/待真实 Provider 验证）
+
+为管理员提供按 profile 的显式真实诊断和 AI 请求聚合指标。诊断只发送固定 sentinel 探针，
+可验证 Chat、Responses、Anthropic 三种协议的 HTTP/JSON/文本/响应大小边界，不切换 active
+profile，也不创建建议或知识历史；Responses profile 的 `reasoning_effort` 仅记录是否随请求
+发送，不将一次探针解释为完整能力证明。指标记录 Copilot、知识问答和诊断的成功/失败/超时、
+耗时、已知 token 和稳定错误码，三数据库等价建表，默认保留 30 天并受环境开关控制；汇总
+接口限制为 1–720 小时和最多 100 个 operation/protocol 分组。
+
+本地 stub 回归、API/UI 脱敏和三数据库 schema 静态覆盖已完成；发布前仍需在受控环境使用真实
+Provider 点击一次诊断并记录脱敏结果。该任务不引入自动 fallback、智能路由、并行多 Provider、
+向量数据库或外部监控平台。
 
 ## P2：扩展能力
 

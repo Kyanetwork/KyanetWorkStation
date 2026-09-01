@@ -100,7 +100,21 @@
 若 outbox 入队或 handoff journal 仍不可写，必须暂停发布并记录人工补偿责任人，
 不得以“接口返回 201”作为投递成功证据。
 
-## 7. 观测与回滚
+## 7. AI Provider 诊断与请求指标（P1-B）
+
+- AI 开关/主密钥：`<enabled|disabled>` / 已设置或未设置（不记录值）
+- 诊断 profile：`<PROFILE_ID_OR_REDACTED_LABEL>`；是否为 active：`<YES|NO>`；诊断前后 active 是否一致：`<YES|NO>`
+- 诊断时间/协议/模型摘要/固定端点后缀：`<TIME>` / `<PROTOCOL>` / `<MODEL_SUMMARY>` / `<SUFFIX>`
+- 诊断结果：`<passed|failed|timeout>`；HTTP/JSON/文本/sentinel/响应大小/usage 检查：`<SAFE_SUMMARY>`
+- 耗时、usage 是否返回、Provider request id 是否存在：`<DURATION_MS>` / `<YES|NO>` / `<YES|NO>`
+- 稳定错误码/提示：`<ERROR_CODE_OR_NONE>`（不得记录上游原文）
+- 真实请求授权与 token 费用提示已确认：`<YES|NO>`；请求次数：`<COUNT>`（通常为 1）
+- 指标汇总窗口：`<24H|168H|720H>`；总数/成功/失败/超时/平均耗时/已知 token/未知用量：`<SAFE_SUMMARY>`
+- operation/protocol 分组数量：`<COUNT_LE_100>`；指标写入/读取/自动清理结果：`<SAFE_RESULT>`
+
+不得填写 Provider URL、API Key、完整 request/response、业务正文、知识库绝对路径或联系方式。
+
+## 8. 观测与回滚
 
 - Request ID、应用日志、代理日志关联样例（脱敏）：`<EVIDENCE_REF>`
 - 磁盘空间、日志轮转、备份保留：`<EVIDENCE>`
@@ -109,7 +123,7 @@
 - 回滚后 health/API/通知/数据检查：`<RESULTS>`
 - 数据是否发生写入及后续处理：`<YES_NO_AND_ACTION>`
 
-## 8. 阻塞项与批准
+## 9. 阻塞项与批准
 
 | 门禁 | 责任人 | 前置条件 | 阻塞原因 | 下一步/截止时间 |
 |---|---|---|---|---|

@@ -25,7 +25,7 @@
 | 统一 Workstation 首页 | 已实现/P1 | `public/index.html`、`public/index/main.js`；提供反馈、WorkTask、公开进展和服务状态入口 |
 | 我的提交/任务安全视图 | P1 计划 | 只返回安全 DTO，不能包含内部备注 |
 | 服务状态卡片与适配器边界 | 已实现/P1 | `server/meowstatus.js`、`public/index/main.js`；当前仅复用 MeowStatus，不建设通用插件平台 |
-| 管理员 AI Copilot | 已实现/P1 增强 | 默认关闭；多 profile 单 active 热切换；OpenAI Chat/Responses、Anthropic Messages；摘要、分类、优先级、标签、相似条目和回复草稿；支持 Responses `reasoning_effort`、受控附加指令；建议仅供人工确认 |
+| 管理员 AI Copilot | 已实现/P1 增强 | 默认关闭；多 profile 单 active 热切换；OpenAI Chat/Responses、Anthropic Messages；摘要、分类、优先级、标签、相似条目和回复草稿；支持 Responses `reasoning_effort`、受控附加指令、按 profile 真实 Provider 诊断与有界请求指标；建议仅供人工确认 |
 | 管理员个人知识助手 | 已实现/P1 | 外部 Markdown/TXT 只读目录、显式索引、确定性检索、服务端引用映射、`document/mixed/general` 依据、问答历史与可开关自动清理；不修改业务、不执行文档指令 |
 | Kanban、子任务、里程碑 | P2 计划 | 依赖 P1 工作收件箱稳定 |
 | 用户侧/运维侧 AI | P2 计划 | 依赖 Provider、脱敏和权限边界；当前不开放 |

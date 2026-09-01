@@ -55,3 +55,11 @@ and the mutation listeners in public/admin/admin.js:706-807.
 MeowStatus payloads are external server state. Treat a missing/non-boolean
 `online` value as `未知`, keep the `disabled/unavailable/ok` envelope, and do
 not let an invalid icon or widget field abort the refresh/render cycle.
+
+The AI diagnostics map and metrics summary are also server state kept in the
+admin page's local `state.ai` object. A diagnostic entry is keyed by profile ID
+and may temporarily be `{ loading: true }`; after completion replace it with the
+normalized result and leave `activeProfile` untouched. Metrics are refreshed on
+explicit page load or button action for a bounded time window; do not persist
+them in localStorage or start a duplicate timer. Clearing the session clears
+both projections.

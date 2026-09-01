@@ -94,6 +94,25 @@ profile/模型、用量和 prompt 版本，但不保存 API Key、完整 prompt�
 页面关闭自动清理；关闭只停止定时任务，手动清理和单条删除仍然有效，过期记录也不会参与
 后续问答。清理、删除、重建和问答均写入脱敏审计元数据。
 
+## Provider 真实诊断与指标
+
+在 AI profile 列表中点击“诊断”才会发起一次真实上游请求。探针内容固定为
+`KyanetWorkStation provider diagnostic. Reply with exactly KWS_DIAGNOSTIC_OK and nothing else.`，
+不会拼接业务数据，也不会切换 active profile、创建 Copilot 建议或知识问答历史。只有
+HTTP、JSON、文本提取和精确 `KWS_DIAGNOSTIC_OK` 全部通过时才显示“通过”；这只能证明
+当前网络、认证、端点和最小响应契约，不代表模型的完整能力。一次诊断可能产生少量 token
+消耗；Responses 的 `reasoningEffort` 会按 profile 发送，但不能由此宣称模型具备完整推理能力。
+
+诊断只显示协议、模型摘要、固定端点后缀、状态、阶段检查、耗时、受控 request ID 和
+token 是否可用，不转发 Provider URL、密钥、请求/响应正文。失败分类包括 `AI_TIMEOUT`、
+`AI_PROVIDER_FAILED` 和 `AI_INVALID_RESPONSE`，原始上游错误不会进入接口或日志。
+
+面板的“AI 请求指标”按最近 24 小时、7 天或 30 天读取聚合数据，包含 Copilot、知识问答
+和诊断的成功/失败/超时、平均耗时、已知 token 合计、未知用量计数以及 operation/protocol
+分组，不提供逐请求正文。指标写入是 best-effort，不会改变 AI 主流程。指标默认保留 30 天，
+由 `AI_METRICS_RETENTION_DAYS`（1–3650）控制；`AI_METRICS_AUTO_CLEANUP=true` 时启动和
+每小时清理过期记录，关闭时不执行自动清理但不影响汇总和手动数据库维护。
+
 ## 日常验证
 
 建议在每次修改开关、主密钥或 active profile 后执行以下检查：

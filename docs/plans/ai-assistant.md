@@ -56,12 +56,25 @@ Copilot profile 现在还支持可选 `reasoningEffort`（`low`/`medium`/`high`/
 - 记录请求 ID、Provider、耗时、成功/失败和脱敏错误；不记录完整 prompt/response，除非后续明确设计了安全审计存储。
 - 提供超时、大小限制、额度/速率限制和关闭开关；AI 故障不能阻塞普通提交和管理员基础操作。
 
+## P1-B Provider 诊断与请求指标（当前实现）
+
+P1-B 已将 Provider 能力确认和运行观测收敛到管理员边界：
+
+- profile 列表可显式选择任意已保存 profile 发起一次固定 sentinel 真实请求；不切换 active
+  profile、不创建建议或知识历史，页面提示可能产生少量 token 消耗。
+- 诊断复用现有 Provider Adapter，覆盖 Chat、Responses、Anthropic 的固定端点、认证、15 秒
+  超时和 32 KiB 响应上限；只有 HTTP、JSON、文本提取和精确 sentinel 全部通过才算成功。
+- 诊断结果只保留协议/模型摘要、阶段检查、耗时、受控 request id、usage 是否可用和稳定错误码。
+  Responses 的 `reasoning_effort` 只记录是否发送，不宣称完整推理能力。
+- Copilot、知识问答和诊断各写一条有界 `ai_request_metric`，汇总显示成功/失败/超时、平均耗时、
+  已知 token 合计、未知用量计数及 operation/protocol 分组；写入失败不改变主流程。
+- 指标默认保留 30 天，`AI_METRICS_RETENTION_DAYS` 接受 1–3650，`AI_METRICS_AUTO_CLEANUP`
+  控制启动及每小时清理；汇总时间窗限制为 1–720 小时，最多返回 100 个分组。
+
+继续保持单 active profile，不引入自动 fallback、智能路由、并行多 Provider、向量数据库或外部
+监控平台。真实 Provider 诊断仍需在发布目标按运维手册受控执行，不用 stub 结果冒充生产证据。
+
 ## 分阶段演进
-
-### P1-B（下一步）
-
-增强建议/知识回答质量、人工编辑体验、Provider 能力诊断、耗时/token/失败指标和 prompt
-版本对比；继续保持单 active profile，不引入自动 fallback、智能路由或并行调用。
 
 ### P2
 
@@ -82,7 +95,9 @@ Copilot profile 现在还支持可选 `reasoningEffort`（`low`/`medium`/`high`/
 - `AI_COPILOT_ENABLED=false`（默认关闭）；
 - `AI_PROFILE_ENCRYPTION_KEY`：随机 32 字节主密钥的 64 位十六进制值；
 - `AI_KNOWLEDGE_BASE_DIRS=[]`：可选的只读 Markdown/TXT 根目录 JSON 数组；
-- `AI_KNOWLEDGE_HISTORY_RETENTION_DAYS=30`：问答历史保留期（1–3650 天）。
+- `AI_KNOWLEDGE_HISTORY_RETENTION_DAYS=30`：问答历史保留期（1–3650 天）；
+- `AI_METRICS_RETENTION_DAYS=30`：AI 请求指标保留期（1–3650 天）；
+- `AI_METRICS_AUTO_CLEANUP=true`：是否启动及每小时自动清理过期指标。
 
 profile 的名称、协议、Base URL 和模型由管理员面板维护；更新时 API Key 留空表示保留
 原密文。知识目录同步、索引、自动清理、备份、轮换和回滚步骤见
