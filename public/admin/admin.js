@@ -12,6 +12,10 @@
   const aiStatusText = document.getElementById("aiStatusText");
   const aiProfilesList = document.getElementById("aiProfilesList");
   const aiStatusMsg = document.getElementById("aiStatusMsg");
+  const aiDiagnosticsList = document.getElementById("aiDiagnosticsList");
+  const aiDiagnosticMsg = document.getElementById("aiDiagnosticMsg");
+  const aiMetricsSummary = document.getElementById("aiMetricsSummary");
+  const aiMetricsMsg = document.getElementById("aiMetricsMsg");
   const knowledgeStatusText = document.getElementById("knowledgeStatusText");
   const knowledgeStatusBadge = document.getElementById("knowledgeStatusBadge");
   const knowledgeIndexSummary = document.getElementById("knowledgeIndexSummary");
@@ -65,7 +69,9 @@
       reason: "",
       activeProfile: null,
       profiles: [],
-      suggestions: {}
+      suggestions: {},
+      diagnostics: {},
+      metrics: null
     },
     knowledge: {
       loaded: false,
@@ -292,9 +298,10 @@
           <div class="ai-profile-meta">API Key：${profile.keyConfigured ? escapeHtml(profile.keyMask || "••••••••") : "未配置"}</div>
         </div>
         <div class="ai-profile-actions">
-          <button type="button" data-action="ai-edit-profile" data-id="${escapeHtml(profile.id)}">编辑</button>
-          ${active ? "" : `<button type="button" data-action="ai-activate-profile" data-id="${escapeHtml(profile.id)}">设为 active</button>`}
-          <button type="button" data-action="ai-delete-profile" data-id="${escapeHtml(profile.id)}">删除</button>
+          <button type="button" class="secondary" data-action="ai-edit-profile" data-id="${escapeHtml(profile.id)}">编辑</button>
+          <button type="button" class="secondary" data-action="ai-diagnose-profile" data-id="${escapeHtml(profile.id)}">诊断</button>
+          ${active ? "" : `<button type="button" class="primary" data-action="ai-activate-profile" data-id="${escapeHtml(profile.id)}">设为 active</button>`}
+          <button type="button" class="danger" data-action="ai-delete-profile" data-id="${escapeHtml(profile.id)}">删除</button>
         </div>
       </div>`;
     }).join("");
@@ -314,11 +321,130 @@
       aiStatusText.textContent = `状态：${aiReasonLabel(state.ai.reason, state.ai.enabled, state.ai.available)}${activeProfile ? ` · 当前：${activeProfile.name || activeProfile.id}` : ""}`;
     }
     renderAiProfiles(profiles);
+    renderAiDiagnostics();
   }
 
   async function loadAiStatus() {
     const data = await api("/api/admin/ai/status", null, { method: "GET" });
     renderAiStatus(data);
+  }
+
+  const diagnosticStatusLabels = {
+    passed: "通过",
+    failed: "失败",
+    timeout: "超时"
+  };
+
+  const diagnosticProtocolLabels = {
+    "openai-chat": "OpenAI Chat / 兼容",
+    "openai-responses": "OpenAI Responses",
+    "anthropic-messages": "Anthropic Messages"
+  };
+
+  function diagnosticCheckLabel(value) {
+    return value ? "通过" : "未通过";
+  }
+
+  function diagnosticUsageLabel(usage) {
+    const value = usage && typeof usage === "object" ? usage : {};
+    const input = Number.isSafeInteger(value.inputTokens) ? value.inputTokens : null;
+    const output = Number.isSafeInteger(value.outputTokens) ? value.outputTokens : null;
+    return `输入 ${input === null ? "未知" : input} · 输出 ${output === null ? "未知" : output}`;
+  }
+
+  function renderAiDiagnostics() {
+    if (!aiDiagnosticsList) return;
+    const entries = Object.entries(state.ai.diagnostics || {});
+    if (!entries.length) {
+      aiDiagnosticsList.innerHTML = '<span class="meta">选择 profile 后点击“诊断”</span>';
+      return;
+    }
+    aiDiagnosticsList.innerHTML = entries.map(([profileId, raw]) => {
+      if (raw && raw.loading) {
+        const profile = state.ai.profiles.find((item) => item.id === profileId);
+        return `<div class="ai-diagnostic-result"><strong>${escapeHtml(profile ? profile.name : profileId)}：诊断中…</strong></div>`;
+      }
+      const result = aiModel.normalizeDiagnostic(raw);
+      const profile = result.profile;
+      const statusLabel = diagnosticStatusLabels[result.status] || "失败";
+      const statusClass = result.status === "passed" ? "is-pass" : "is-fail";
+      const checks = result.checks;
+      const warningText = result.warnings.length ? `\n提示：${result.warnings.join("；")}` : "";
+      const errorText = result.errorCode ? `\n错误码：${result.errorCode}` : "";
+      const requestIdText = result.providerRequestId ? `\nProvider request id：${result.providerRequestId}` : "";
+      const reasoningText = profile.protocol === "openai-responses"
+        ? `\nreasoning_effort：${result.reasoningEffortApplied ? "已随请求发送（仅表示 Provider 接受/拒绝请求，不代表能力证明）" : "未发送"}`
+        : "";
+      return `<div class="ai-diagnostic-result ${statusClass}">
+        <strong>${escapeHtml(profile.name || profile.id || profileId)}：${escapeHtml(statusLabel)}</strong>
+        <div>协议：${escapeHtml(diagnosticProtocolLabels[profile.protocol] || profile.protocol || "未知")} · 模型：${escapeHtml(profile.model || "未设置")}</div>
+        <div>检查：可达 ${escapeHtml(diagnosticCheckLabel(checks.reachable))} · JSON ${escapeHtml(diagnosticCheckLabel(checks.responseJson))} · 文本 ${escapeHtml(diagnosticCheckLabel(checks.textExtracted))} · 探针 ${escapeHtml(diagnosticCheckLabel(checks.probeMatched))} · 响应大小 ${escapeHtml(diagnosticCheckLabel(checks.responseWithinLimit))} · usage ${escapeHtml(checks.usageReported ? "已返回" : "未知")}</div>
+        <div>HTTP：${escapeHtml(result.httpStatus === null ? "未知" : result.httpStatus)} · 耗时：${escapeHtml(result.durationMs === null ? "未知" : `${result.durationMs} ms`)} · 用量：${escapeHtml(diagnosticUsageLabel(result.usage))}</div>${reasoningText ? `<div>${escapeHtml(reasoningText.slice(1))}</div>` : ""}${requestIdText ? `<div>${escapeHtml(requestIdText.slice(1))}</div>` : ""}${warningText ? `<div>${escapeHtml(warningText.slice(1))}</div>` : ""}${errorText ? `<div>${escapeHtml(errorText.slice(1))}</div>` : ""}
+        <div class="meta">检查时间：${escapeHtml(formatDateTimeDisplay(result.checkedAt))}</div>
+      </div>`;
+    }).join("");
+  }
+
+  async function diagnoseAiProfile(id, button) {
+    const profile = state.ai.profiles.find((item) => item.id === id);
+    if (!profile) return;
+    clearMessage(aiDiagnosticMsg);
+    state.ai.diagnostics[id] = { loading: true };
+    renderAiDiagnostics();
+    try {
+      const data = await api("/api/admin/ai/profiles/diagnose", { profileId: id });
+      state.ai.diagnostics[id] = aiModel.normalizeDiagnostic(data);
+      renderAiDiagnostics();
+      const result = state.ai.diagnostics[id];
+      notify(aiDiagnosticMsg, result.status === "passed" ? "ok" : "error", result.status === "passed"
+        ? `Provider 诊断通过：${profile.name || id}`
+        : `Provider 诊断${diagnosticStatusLabels[result.status] || "失败"}：${result.errorCode || "请查看诊断结果"}`);
+    } catch (error) {
+      delete state.ai.diagnostics[id];
+      renderAiDiagnostics();
+      throw error;
+    } finally {
+      if (button && button.isConnected) {
+        button.disabled = false;
+      }
+    }
+  }
+
+  function metricOperationLabel(operation) {
+    return ({
+      copilot_suggest: "Copilot 建议",
+      knowledge_ask: "知识问答",
+      provider_diagnostic: "Provider 诊断"
+    }[operation]) || operation || "未知操作";
+  }
+
+  function renderAiMetrics(data) {
+    if (!aiMetricsSummary) return;
+    const metrics = aiModel.normalizeMetrics(data);
+    state.ai.metrics = metrics;
+    const average = metrics.averageDurationMs === null ? "未知" : `${Math.round(metrics.averageDurationMs)} ms`;
+    aiMetricsSummary.innerHTML = `<div class="ai-metrics-summary">
+      <div class="stat"><span class="k">总请求</span><span class="v">${escapeHtml(metrics.total)}</span></div>
+      <div class="stat"><span class="k">成功 / 失败</span><span class="v">${escapeHtml(metrics.success)} / ${escapeHtml(metrics.failed)}</span></div>
+      <div class="stat"><span class="k">超时</span><span class="v">${escapeHtml(metrics.timeout)}</span></div>
+      <div class="stat"><span class="k">平均耗时</span><span class="v">${escapeHtml(average)}</span></div>
+    </div>
+    <div class="meta">输入 token 合计：${escapeHtml(metrics.inputTokens === null ? "未知" : metrics.inputTokens)} · 输出 token 合计：${escapeHtml(metrics.outputTokens === null ? "未知" : metrics.outputTokens)} · 未知用量：${escapeHtml(metrics.unknownUsageCount)} 次</div>
+    <div class="ai-metrics-groups">${metrics.groups.length ? metrics.groups.map((group) => `<div class="ai-metrics-group"><strong>${escapeHtml(metricOperationLabel(group.operation))}</strong> · ${escapeHtml(diagnosticProtocolLabels[group.protocol] || group.protocol || "未知协议")}：${escapeHtml(group.total)} 次，成功 ${escapeHtml(group.success)}，失败 ${escapeHtml(group.failed)}，超时 ${escapeHtml(group.timeout)}，平均 ${escapeHtml(group.averageDurationMs === null ? "未知" : `${Math.round(group.averageDurationMs)} ms`)}</div>`).join("") : '<span class="meta">当前时间窗暂无请求指标。</span>'}</div>`;
+  }
+
+  async function loadAiMetrics() {
+    if (!aiMetricsSummary) return;
+    const button = document.getElementById("aiMetricsRefreshBtn");
+    const hoursInput = document.getElementById("aiMetricsHours");
+    const hours = [24, 168, 720].includes(Number(hoursInput && hoursInput.value)) ? Number(hoursInput.value) : 24;
+    if (hoursInput) hoursInput.value = String(hours);
+    await withButtonBusy(button, "加载中…", async () => {
+      clearMessage(aiMetricsMsg);
+      const data = await api(`/api/admin/ai/metrics?hours=${encodeURIComponent(hours)}`, null, { method: "GET" });
+      renderAiMetrics(data);
+      notify(aiMetricsMsg, "ok", `指标已刷新（最近 ${hours >= 168 ? `${Math.round(hours / 24)} 天` : `${hours} 小时`}）`);
+    });
   }
 
   function knowledgeReasonLabel(reason, available) {
@@ -1316,6 +1442,7 @@
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
+      await loadAiMetrics().catch((err) => notify(aiMetricsMsg, "error", err.message));
       await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (error) {
@@ -1331,6 +1458,7 @@
       adminPanel.classList.remove("hidden");
       await loadStatusSettings().catch((err) => notify(statusSettingsMsg, "error", err.message));
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
+      await loadAiMetrics().catch((err) => notify(aiMetricsMsg, "error", err.message));
       await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
       switchModule("inbox");
     } catch (_) {
@@ -1361,12 +1489,18 @@
       clearMessage(webhookTestMsg);
       clearMessage(statusSettingsMsg);
       clearMessage(aiStatusMsg);
+      clearMessage(aiDiagnosticMsg);
+      clearMessage(aiMetricsMsg);
       state.ai.enabled = false;
       state.ai.available = false;
       state.ai.reason = "";
       state.ai.activeProfile = null;
       state.ai.profiles = [];
       state.ai.suggestions = {};
+      state.ai.diagnostics = {};
+      state.ai.metrics = null;
+      if (aiDiagnosticsList) aiDiagnosticsList.innerHTML = '<span class="meta">选择 profile 后点击“诊断”</span>';
+      if (aiMetricsSummary) aiMetricsSummary.innerHTML = '<span class="meta">尚未加载指标</span>';
       resetAiProfileForm();
       state.knowledge.loaded = false;
       state.knowledge.loading = false;
@@ -1445,6 +1579,14 @@
 
   document.getElementById("aiProfileProtocol").addEventListener("change", updateAiProtocolHint);
 
+  document.getElementById("aiMetricsRefreshBtn").addEventListener("click", async () => {
+    try {
+      await loadAiMetrics();
+    } catch (error) {
+      notify(aiMetricsMsg, "error", error.message);
+    }
+  });
+
   aiProfilesList.addEventListener("click", async (event) => {
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
@@ -1453,6 +1595,8 @@
         editAiProfile(btn.dataset.id);
       } else if (btn.dataset.action === "ai-activate-profile") {
         await activateAiProfile(btn.dataset.id);
+      } else if (btn.dataset.action === "ai-diagnose-profile") {
+        await withButtonBusy(btn, "诊断中…", () => diagnoseAiProfile(btn.dataset.id, btn));
       } else if (btn.dataset.action === "ai-delete-profile") {
         await deleteAiProfile(btn.dataset.id);
       }

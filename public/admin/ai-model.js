@@ -106,9 +106,108 @@
         };
       }),
       usage: {
-        inputTokens: Number.isSafeInteger(Number(source.usage && source.usage.inputTokens)) ? Number(source.usage.inputTokens) : null,
-        outputTokens: Number.isSafeInteger(Number(source.usage && source.usage.outputTokens)) ? Number(source.usage.outputTokens) : null
+        inputTokens: normalizeToken(source.usage && source.usage.inputTokens),
+        outputTokens: normalizeToken(source.usage && source.usage.outputTokens)
       }
+    };
+  }
+
+  function normalizeToken(value) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+    if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    if (typeof value !== "string" || !/^\d+$/u.test(value.trim())) return null;
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  function safeNonNegativeInteger(value, fallback) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number >= 0 ? number : fallback;
+  }
+
+  function safeHttpStatus(value) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number >= 100 && number <= 599 ? number : null;
+  }
+
+  function safeDuration(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? Math.min(600000, number) : null;
+  }
+
+  function normalizeDiagnostic(input) {
+    const source = input && typeof input === "object" ? input : {};
+    const rawProfile = source.profile && typeof source.profile === "object" ? source.profile : source;
+    const rawChecks = source.checks && typeof source.checks === "object" ? source.checks : {};
+    const rawUsage = source.usage && typeof source.usage === "object" ? source.usage : {};
+    const status = ["passed", "failed", "timeout"].includes(source.status) ? source.status : "failed";
+    return {
+      status,
+      profile: {
+        id: boundedText(rawProfile.id, 128),
+        name: boundedText(rawProfile.name, 64),
+        protocol: PROTOCOLS.has(rawProfile.protocol) ? rawProfile.protocol : "",
+        model: boundedText(rawProfile.model, 120)
+      },
+      endpoint: ["/chat/completions", "/responses", "/messages"].includes(source.endpoint) ? source.endpoint : "",
+      checks: {
+        reachable: rawChecks.reachable === true,
+        responseJson: rawChecks.responseJson === true || rawChecks.jsonParsed === true,
+        textExtracted: rawChecks.textExtracted === true,
+        probeMatched: rawChecks.probeMatched === true,
+        usageReported: rawChecks.usageReported === true || rawChecks.usageReturned === true,
+        responseWithinLimit: rawChecks.responseWithinLimit !== false
+      },
+      httpStatus: safeHttpStatus(source.httpStatus),
+      durationMs: safeDuration(source.durationMs),
+      usage: {
+        inputTokens: normalizeToken(rawUsage.inputTokens),
+        outputTokens: normalizeToken(rawUsage.outputTokens)
+      },
+      providerRequestId: boundedText(source.providerRequestId, 128),
+      reasoningEffortApplied: source.reasoningEffortApplied === true || source.reasoningEffortSent === true,
+      errorCode: boundedText(source.errorCode, 64),
+      warnings: normalizeStringList(source.warnings, 5, 160),
+      checkedAt: boundedText(source.checkedAt, 40)
+    };
+  }
+
+  function normalizeMetrics(input) {
+    const source = input && typeof input === "object" ? input : {};
+    const integer = (value) => safeNonNegativeInteger(value, 0);
+    const aggregate = {
+      total: integer(source.total),
+      success: integer(source.success),
+      failed: integer(source.failed),
+      timeout: integer(source.timeout),
+      averageDurationMs: source.averageDurationMs === null || source.averageDurationMs === undefined
+        ? null
+        : safeDuration(source.averageDurationMs),
+      inputTokens: source.inputTokens === null || source.inputTokens === undefined ? null : normalizeToken(source.inputTokens),
+      outputTokens: source.outputTokens === null || source.outputTokens === undefined ? null : normalizeToken(source.outputTokens),
+      unknownUsageCount: integer(source.unknownUsageCount)
+    };
+    return {
+      from: boundedText(source.from, 40),
+      to: boundedText(source.to, 40),
+      ...aggregate,
+      groups: Array.isArray(source.groups) ? source.groups.slice(0, 100).map((group) => ({
+        operation: ["copilot_suggest", "knowledge_ask", "provider_diagnostic"].includes(group && group.operation) ? group.operation : "",
+        protocol: boundedText(group && group.protocol, 64),
+        ...((() => {
+          const value = group && typeof group === "object" ? group : {};
+          return {
+            total: integer(value.total),
+            success: integer(value.success),
+            failed: integer(value.failed),
+            timeout: integer(value.timeout),
+            averageDurationMs: value.averageDurationMs === null || value.averageDurationMs === undefined ? null : safeDuration(value.averageDurationMs),
+            inputTokens: value.inputTokens === null || value.inputTokens === undefined ? null : integer(value.inputTokens),
+            outputTokens: value.outputTokens === null || value.outputTokens === undefined ? null : integer(value.outputTokens),
+            unknownUsageCount: integer(value.unknownUsageCount)
+          };
+        })())
+      })).filter((group) => group.operation) : []
     };
   }
 
@@ -133,6 +232,8 @@
   return {
     normalizeProfile,
     normalizeSuggestion,
+    normalizeDiagnostic,
+    normalizeMetrics,
     suggestionFormValues,
     isDecisionField
   };

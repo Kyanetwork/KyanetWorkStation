@@ -6,6 +6,8 @@ const path = require("node:path");
 const {
   normalizeProfile,
   normalizeSuggestion,
+  normalizeDiagnostic,
+  normalizeMetrics,
   suggestionFormValues
 } = require("../public/admin/ai-model");
 
@@ -95,6 +97,40 @@ test("AI suggestion projection ignores unsupported categories and fields", () =>
   assert.equal(suggestion.provider.apiKey, undefined);
 });
 
+test("AI diagnostic and metric projections keep only bounded safe fields", () => {
+  const diagnostic = normalizeDiagnostic({
+    status: "passed",
+    profile: { id: "p1", name: "Provider", protocol: "openai-chat", model: "m" },
+    endpoint: "/chat/completions",
+    checks: { reachable: true, responseJson: true, textExtracted: true, probeMatched: true, usageReported: true },
+    durationMs: 12,
+    usage: { inputTokens: null, outputTokens: "4" },
+    providerRequestId: "req_1",
+    warnings: ["usage"],
+    secret: "do-not-copy"
+  });
+  assert.equal(diagnostic.status, "passed");
+  assert.equal(diagnostic.checks.probeMatched, true);
+  assert.deepEqual(diagnostic.usage, { inputTokens: null, outputTokens: 4 });
+  assert.equal(diagnostic.secret, undefined);
+  assert.equal(normalizeDiagnostic({ httpStatus: 99 }).httpStatus, null);
+  assert.equal(normalizeDiagnostic({ httpStatus: 600 }).httpStatus, null);
+  assert.equal(normalizeDiagnostic({ usage: { inputTokens: true, outputTokens: 1.5 } }).usage.inputTokens, null);
+  assert.equal(normalizeDiagnostic({ usage: { inputTokens: true, outputTokens: 1.5 } }).usage.outputTokens, null);
+
+  const metrics = normalizeMetrics({
+    total: "4",
+    success: 2,
+    inputTokens: true,
+    outputTokens: "not-a-number",
+    groups: Array.from({ length: 101 }, () => ({ operation: "provider_diagnostic", protocol: "openai-chat" }))
+  });
+  assert.equal(metrics.total, 4);
+  assert.equal(metrics.inputTokens, null);
+  assert.equal(metrics.outputTokens, null);
+  assert.equal(metrics.groups.length, 100);
+});
+
 test("admin UI sends the server key field and loads AI state for authenticated sessions", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "..", "public", "admin", "admin.js"), "utf8");
   assert.match(source, /key:\s*document\.getElementById\("aiProfileApiKey"\)\.value/);
@@ -105,4 +141,14 @@ test("admin UI sends the server key field and loads AI state for authenticated s
   assert.match(source, /if \(!aiModel\.isDecisionField\(field\)\) return ""/);
   assert.match(source, /options\.loading \? " disabled"/);
   assert.match(source, /options\.decision === false/);
+});
+
+test("admin UI exposes explicit provider diagnostics and bounded metric refresh", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "..", "public", "admin", "admin.js"), "utf8");
+  assert.match(source, /\/api\/admin\/ai\/profiles\/diagnose/);
+  assert.match(source, /\/api\/admin\/ai\/metrics\?hours=/);
+  assert.match(source, /data-action="ai-diagnose-profile"/);
+  assert.match(source, /withButtonBusy\(btn, "诊断中/);
+  assert.match(source, /aiModel\.normalizeDiagnostic/);
+  assert.match(source, /aiModel\.normalizeMetrics/);
 });

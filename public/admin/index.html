@@ -40,6 +40,13 @@
     .ai-profile-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border:1px solid var(--bd);padding:8px;background:var(--card)}
     .ai-profile-meta{font-size:12px;color:var(--muted);line-height:1.5}
     .ai-profile-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+    .ai-diagnostic-panel,.ai-metrics-panel{border:1px solid var(--bd);padding:9px;margin-top:8px;background:var(--stat-bg)}
+    .ai-diagnostic-panel h4,.ai-metrics-panel h4{margin:0 0 5px;font-size:14px}
+    .ai-diagnostic-note{font-size:12px;color:var(--muted);line-height:1.5;margin:4px 0 7px}
+    .ai-diagnostic-result{border-left:3px solid var(--muted);padding:7px;background:var(--card);font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+    .ai-diagnostic-result.is-pass{border-left-color:var(--ok)}.ai-diagnostic-result.is-fail{border-left-color:var(--danger)}
+    .ai-metrics-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:7px}
+    .ai-metrics-groups{display:grid;gap:5px;margin-top:7px}.ai-metrics-group{border:1px solid var(--bd);padding:6px;background:var(--card);font-size:12px;line-height:1.5}
     .ai-suggestion-panel{border:1px solid #aecdff;background:var(--stat-bg);padding:9px;margin-top:8px}
     .ai-suggestion-head{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
     .ai-suggestion-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:8px}
@@ -169,6 +176,25 @@
           </div>
           <div id="aiProfilesList" class="ai-profile-list" aria-live="polite"></div>
           <div id="aiStatusMsg" class="msg" role="status" aria-live="polite"></div>
+          <section class="ai-diagnostic-panel" aria-labelledby="aiDiagnosticTitle">
+            <h4 id="aiDiagnosticTitle">Provider 真实诊断</h4>
+            <p class="ai-diagnostic-note">诊断会向选定 Provider 发送一次固定探针，可能产生少量 token 消耗；不会切换 active profile，也不会创建建议或知识问答历史。</p>
+            <div id="aiDiagnosticsList" aria-live="polite"><span class="meta">选择 profile 后点击“诊断”</span></div>
+            <div id="aiDiagnosticMsg" class="msg" role="status" aria-live="polite"></div>
+          </section>
+          <section class="ai-metrics-panel" aria-labelledby="aiMetricsTitle">
+            <div class="toolbar">
+              <h4 id="aiMetricsTitle">AI 请求指标</h4>
+              <select id="aiMetricsHours" aria-label="指标时间范围">
+                <option value="24">最近 24 小时</option>
+                <option value="168">最近 7 天</option>
+                <option value="720">最近 30 天</option>
+              </select>
+              <button id="aiMetricsRefreshBtn" type="button">刷新指标</button>
+            </div>
+            <div id="aiMetricsSummary" aria-live="polite"><span class="meta">尚未加载指标</span></div>
+            <div id="aiMetricsMsg" class="msg" role="status" aria-live="polite"></div>
+          </section>
         </section>
       </div>
 
