@@ -77,20 +77,20 @@ Provider 连接诊断、能力探测、耗时/token/失败指标、面向管理�
 
 ## Acceptance Criteria
 
-- [ ] 现有 Copilot 测试继续通过；新增测试证明白名单 prompt 和敏感字段边界不变，未配置
+- [x] 现有 Copilot 测试继续通过；新增测试证明白名单 prompt 和敏感字段边界不变，未配置
       `reasoning_effort` 时请求体不变，Responses 配置按枚举发送，其他协议安全省略。
-- [ ] profile 可保存、更新、清空 `reasoning_effort` 与受控 `promptInstruction`；旧 profile
+- [x] profile 可保存、更新、清空 `reasoning_effort` 与受控 `promptInstruction`；旧 profile
       可正常读取，列表/审计/日志不泄露密钥或指令全文。
-- [ ] 知识库能从多个受控目录扫描 `.md/.txt`，拒绝越界软链接/不支持文件，缓存原子替换，
+- [x] 知识库能从多个受控目录扫描 `.md/.txt`，拒绝越界软链接/不支持文件，缓存原子替换，
       重建失败保留旧缓存；检索结果排序、范围与上下文上限有回归测试。
-- [ ] 知识助手问答返回结构化答案、`document/mixed/general` 依据和服务端映射引用；无充分
+- [x] 知识助手问答返回结构化答案、`document/mixed/general` 依据和服务端映射引用；无充分
       命中时明确显示“非文档依据/未验证”；问答、引用、分页、删除、手动清理和自动清理开关
       均可通过管理员 API 与 UI 验证。
-- [ ] 自动清理默认开启，启动/每小时任务遵守开关，关闭后不自动删但手动操作有效；保留期
+- [x] 自动清理默认开启，启动/每小时任务遵守开关，关闭后不自动删但手动操作有效；保留期
       配置被限制在安全范围。
-- [ ] 管理员及公共页面按钮不再出现浏览器默认样式，直角、亮暗主题、focus/disabled/busy、
+- [x] 管理员及公共页面按钮不再出现浏览器默认样式，直角、亮暗主题、focus/disabled/busy、
       窄屏和键盘路径通过浏览器 smoke 检查。
-- [ ] `node --check`、相关 Node 测试、`npm test`、`npm audit`、`git diff --check` 通过；
+- [x] `node --check`、相关 Node 测试、`npm test`、`npm audit`、`git diff --check` 通过；
       不泄露 API Key、未选中文档、秘密配置或绝对路径。
 
 ## Rollout and rollback constraints

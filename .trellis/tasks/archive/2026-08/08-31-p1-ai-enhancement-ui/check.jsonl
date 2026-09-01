@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality gate and API/database boundaries"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validation, audit, tests, Node 24 release checks"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Cross-driver schema and SQL checks"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality gate"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Safe rendering and accessibility"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "API and DOM boundary normalization"}

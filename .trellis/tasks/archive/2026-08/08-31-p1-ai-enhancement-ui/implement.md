@@ -90,3 +90,16 @@
   产生通用 realpath/原子缓存/动态按钮约定，更新对应 spec，否则记录“无需更新”。
 - 复核 PRD 每个 acceptance criterion、生产 `.env`/数据库/知识库未入 Git、普通业务故障
   隔离和 rollback；提交：`chore: verify AI knowledge and UI iteration`。
+
+## 执行状态（2026-08-31）
+
+- [x] Profile/Provider 参数契约：`reasoningEffort` 枚举、Responses 映射、受控附加指令和
+  旧 profile 兼容。
+- [x] Copilot Prompt 固定安全段、版本标识和审计摘要。
+- [x] 外部 Markdown/TXT 知识库：多根目录、realpath 边界、确定性检索、版本化原子缓存。
+- [x] 三数据库问答历史表、自动清理设置、保留期和跨驱动 CRUD。
+- [x] 管理员知识问答 API：引用映射、依据标识、分页/删除/清理/设置、限流和审计。
+- [x] 管理员知识工作区和全站直角 HUD 控件：双主题、窄屏、键盘焦点和 busy 状态。
+- [x] 文档、运维说明、架构边界及 Trellis backend/frontend 规范同步。
+- [x] 质量门禁：变更 JavaScript 语法检查、聚焦测试、全量测试、官方 registry 审计、
+  `git diff --check` 和浏览器 smoke 均通过；生产 `.env`、数据库、知识库与索引缓存未纳入 Git。
