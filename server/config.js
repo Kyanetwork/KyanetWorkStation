@@ -1,4 +1,5 @@
 const path = require("path");
+const { parseRoots: parseKnowledgeRoots } = require("./knowledge-base");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -31,6 +32,15 @@ function csvOrEmptyList(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseKnowledgeBaseConfig(value) {
+  const parsed = parseKnowledgeRoots(value);
+  return {
+    roots: parsed.roots,
+    warnings: parsed.warnings,
+    parseError: parsed.error || ""
+  };
 }
 
 function isExplicitIntegerInvalid(rawValue, minimum, maximum) {
@@ -124,7 +134,8 @@ function validateRuntimeConfig(candidate = config) {
     ["MEOWSTATUS_TIMEOUT_MS", candidate.meowStatusTimeoutMs, raw.meowStatusTimeoutMs, 1000, 15000],
     ["MEOWSTATUS_REFRESH_MS", candidate.meowStatusRefreshMs, raw.meowStatusRefreshMs, 5000, 24 * 60 * 60 * 1000],
     ["BACKUP_RETENTION_DAYS", candidate.backupRetentionDays, raw.backupRetentionDays, 1, 3650],
-    ["ADMIN_EXPORT_MAX_ROWS", candidate.adminExportMaxRows, raw.adminExportMaxRows, 100, 100000]
+    ["ADMIN_EXPORT_MAX_ROWS", candidate.adminExportMaxRows, raw.adminExportMaxRows, 100, 100000],
+    ["AI_KNOWLEDGE_HISTORY_RETENTION_DAYS", candidate.aiKnowledge && candidate.aiKnowledge.historyRetentionDays, raw.aiKnowledgeHistoryRetentionDays, 1, 3650]
   ];
   for (const [key, value, rawValue, min, max] of positiveIntegerChecks) {
     if (isExplicitIntegerInvalid(rawValue, min, max) || !Number.isInteger(value) || value < min || value > max) {
@@ -205,8 +216,12 @@ const rawInput = {
   smtpEnabled: process.env.SMTP_ENABLED,
   smtpSecure: process.env.SMTP_SECURE,
   smtpRequireTls: process.env.SMTP_REQUIRE_TLS,
-  webhookEnabled: process.env.WEBHOOK_ENABLED
+  webhookEnabled: process.env.WEBHOOK_ENABLED,
+  aiKnowledgeBaseDirs: process.env.AI_KNOWLEDGE_BASE_DIRS,
+  aiKnowledgeHistoryRetentionDays: process.env.AI_KNOWLEDGE_HISTORY_RETENTION_DAYS
 };
+
+const knowledgeBaseConfig = parseKnowledgeBaseConfig(process.env.AI_KNOWLEDGE_BASE_DIRS);
 
 const config = {
   rawInput,
@@ -231,6 +246,13 @@ const config = {
     enabled: parseBoolOrDefault(process.env.AI_COPILOT_ENABLED, false),
     profileEncryptionKey: process.env.AI_PROFILE_ENCRYPTION_KEY || "",
     profileEncryptionKeyValid: /^[a-f0-9]{64}$/iu.test(process.env.AI_PROFILE_ENCRYPTION_KEY || "")
+  },
+  aiKnowledge: {
+    roots: knowledgeBaseConfig.roots,
+    warnings: knowledgeBaseConfig.warnings,
+    parseError: knowledgeBaseConfig.parseError,
+    cachePath: path.join(ROOT_DIR, "data", "ai-knowledge-index.json"),
+    historyRetentionDays: parseIntOrDefault(process.env.AI_KNOWLEDGE_HISTORY_RETENTION_DAYS, 30)
   },
   dbPath: path.resolve(ROOT_DIR, process.env.DB_PATH || "./data/workstation.db"),
   cookieName: process.env.SESSION_COOKIE_NAME || "kws_sid",

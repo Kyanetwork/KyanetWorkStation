@@ -12,6 +12,7 @@
     "backup-db:core": "node scripts/backup-db.js",
     "backup-db:rdbms": "node scripts/backup-db-rdbms.js",
     "verify-backup:sqlite": "node scripts/verify-sqlite-backup.js",
+    "reindex-knowledge": "node scripts/reindex-knowledge.js",
     "backup-db": "bash scripts/backup-db.sh",
     "backup-db:linux": "bash scripts/backup-db.sh",
     "backup-db:win": "powershell -ExecutionPolicy Bypass -File .\\scripts\\backup-db.ps1"

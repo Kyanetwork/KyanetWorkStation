@@ -9,6 +9,7 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/*.jsonl
+data/ai-knowledge-index.json*
 backups/*.db
 backups/*.gz
 backups/**

@@ -203,3 +203,28 @@ test("admin export row limit rejects non-integer and out-of-range values without
     assert.equal(result.errors.some((message) => message.includes(value)), false);
   }
 });
+
+test("knowledge base roots are parsed from bounded JSON configuration", () => {
+  const rootPath = path.resolve(__dirname, "knowledge-fixture");
+  const config = loadConfigWithEnv({
+    AI_KNOWLEDGE_BASE_DIRS: JSON.stringify([
+      { id: "docs", name: "Docs", path: rootPath },
+      { id: "bad", name: "Bad", path: "relative/path" }
+    ])
+  });
+
+  assert.deepEqual(config.aiKnowledge.roots, [{ id: "docs", name: "Docs", path: rootPath }]);
+  assert.equal(config.aiKnowledge.parseError, "");
+  assert.ok(config.aiKnowledge.warnings.some((item) => item.reason === "invalid-root-path"));
+  assert.equal(JSON.stringify(config.aiKnowledge.warnings).includes(rootPath), false);
+});
+
+test("malformed knowledge base JSON is isolated from core runtime configuration", () => {
+  const config = loadConfigWithEnv({
+    AI_KNOWLEDGE_BASE_DIRS: "{not-json"
+  });
+
+  assert.deepEqual(config.aiKnowledge.roots, []);
+  assert.equal(config.aiKnowledge.parseError, "invalid-json");
+  assert.equal(config.validateRuntimeConfig(config).valid, true);
+});
