@@ -18,13 +18,14 @@ function responseFromJson(body, options = {}) {
   };
 }
 
-function profile(protocol, baseUrl) {
+function profile(protocol, baseUrl, extra = {}) {
   return {
     id: "profile-1",
     protocol,
     baseUrl,
     model: "test-model",
-    apiKey: "secret-provider-key"
+    apiKey: "secret-provider-key",
+    ...extra
   };
 }
 
@@ -76,6 +77,60 @@ test("OpenAI Responses adapter does not duplicate an already configured protocol
   assert.equal(body.model, "test-model");
   assert.equal(body.input, "return a response");
   assert.equal(result.providerRequestId, "response-request-1");
+});
+
+test("OpenAI Responses adapter maps a configured reasoning effort", async () => {
+  let request;
+  await requestProviderSuggestion({
+    profile: profile("openai-responses", "https://provider.example/v1", { reasoningEffort: "xhigh" }),
+    prompt: "return a response",
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return responseFromJson({
+        id: "response-request-reasoning",
+        output_text: "{\"summary\":\"ok\"}"
+      });
+    }
+  });
+
+  const body = JSON.parse(request.options.body);
+  assert.deepEqual(body.reasoning, { effort: "xhigh" });
+});
+
+test("Provider omits reasoning when it is empty or unsupported", async () => {
+  for (const reasoningEffort of ["", "unsupported"]) {
+    let request;
+    await requestProviderSuggestion({
+      profile: profile("openai-responses", "https://provider.example/v1", { reasoningEffort }),
+      prompt: "return a response",
+      fetchImpl: async (url, options) => {
+        request = { url, options };
+        return responseFromJson({ output_text: "{\"summary\":\"ok\"}" });
+      }
+    });
+
+    const body = JSON.parse(request.options.body);
+    assert.equal(Object.hasOwn(body, "reasoning"), false);
+  }
+});
+
+test("Chat and Anthropic adapters omit Responses-only reasoning settings", async () => {
+  for (const protocol of ["openai-chat", "anthropic-messages"]) {
+    let request;
+    await requestProviderSuggestion({
+      profile: profile(protocol, "https://provider.example/v1", { reasoningEffort: "xhigh" }),
+      prompt: "return a response",
+      fetchImpl: async (url, options) => {
+        request = { url, options };
+        return responseFromJson(protocol === "openai-chat"
+          ? { choices: [{ message: { content: "{\"summary\":\"ok\"}" } }] }
+          : { content: [{ type: "text", text: "{\"summary\":\"ok\"}" }] });
+      }
+    });
+
+    const body = JSON.parse(request.options.body);
+    assert.equal(Object.hasOwn(body, "reasoning"), false);
+  }
 });
 
 test("Anthropic Messages adapter sends its native message shape and fixed version", async () => {

@@ -14,8 +14,10 @@ const MAX_PROFILE_NAME = 64;
 const MAX_BASE_URL = 300;
 const MAX_MODEL = 120;
 const MAX_API_KEY = 512;
+const MAX_PROMPT_INSTRUCTION = 2000;
 const PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const ALLOWED_PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
+const ALLOWED_REASONING_EFFORTS = new Set(["", "low", "medium", "high", "xhigh", "max"]);
 
 function keyUnavailable() {
   const error = new Error("AI profile encryption key is unavailable");
@@ -54,6 +56,21 @@ function normalizeApiKey(apiKey) {
     throw keyUnavailable();
   }
   return apiKey;
+}
+
+function truncateUnicode(value, maxLength) {
+  return Array.from(value).slice(0, maxLength).join("");
+}
+
+function normalizeReasoningEffort(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return ALLOWED_REASONING_EFFORTS.has(normalized) ? normalized : "";
+}
+
+function normalizePromptInstruction(value) {
+  return typeof value === "string"
+    ? truncateUnicode(value.trim(), MAX_PROMPT_INSTRUCTION)
+    : "";
 }
 
 function encryptApiKey(masterKey, profileId, apiKey) {
@@ -195,6 +212,8 @@ function normalizeStoredProfile(value) {
     protocol,
     baseUrl,
     model,
+    reasoningEffort: normalizeReasoningEffort(value.reasoningEffort ?? value.reasoning_effort),
+    promptInstruction: normalizePromptInstruction(value.promptInstruction),
     keyEnvelope: normalizeEnvelope(value.keyEnvelope),
     createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : ""
@@ -224,6 +243,8 @@ function toProfileDto(profile) {
     protocol: profile.protocol,
     baseUrl: profile.baseUrl,
     model: profile.model,
+    reasoningEffort: profile.reasoningEffort || "",
+    promptInstruction: profile.promptInstruction || "",
     keyConfigured,
     keyMask: keyConfigured ? maskApiKey("configured") : "",
     createdAt: profile.createdAt || "",
@@ -256,11 +277,45 @@ function normalizeWriteProfilePayload(payload) {
   const baseUrl = normalizeBaseUrl(body.baseUrl);
   const model = typeof body.model === "string" ? body.model.trim() : "";
   const key = typeof body.key === "string" ? body.key.trim() : "";
+  const reasoningMarker = Object.getOwnPropertyDescriptor(body, "reasoningEffortProvided");
+  const reasoningEffortProvided = reasoningMarker && reasoningMarker.enumerable === false &&
+    typeof reasoningMarker.value === "boolean"
+    ? reasoningMarker.value
+    : Object.prototype.hasOwnProperty.call(body, "reasoningEffort") ||
+      Object.prototype.hasOwnProperty.call(body, "reasoning_effort");
+  const rawReasoningEffort = Object.prototype.hasOwnProperty.call(body, "reasoningEffort")
+    ? body.reasoningEffort
+    : body.reasoning_effort;
+  const reasoningEffort = normalizeReasoningEffort(rawReasoningEffort);
+  const promptMarker = Object.getOwnPropertyDescriptor(body, "promptInstructionProvided");
+  const promptInstructionProvided = promptMarker && promptMarker.enumerable === false &&
+    typeof promptMarker.value === "boolean"
+    ? promptMarker.value
+    : Object.prototype.hasOwnProperty.call(body, "promptInstruction");
+  const rawPromptInstruction = body.promptInstruction;
+  const promptInstruction = normalizePromptInstruction(rawPromptInstruction);
   if ((body.id !== undefined && body.id !== null && String(body.id).trim() && !id) || !name || name.length > MAX_PROFILE_NAME ||
-    !ALLOWED_PROTOCOLS.has(protocol) || !baseUrl || !model || model.length > MAX_MODEL || key.length > MAX_API_KEY) {
+    !ALLOWED_PROTOCOLS.has(protocol) || !baseUrl || !model || model.length > MAX_MODEL || key.length > MAX_API_KEY ||
+    (reasoningEffortProvided && rawReasoningEffort !== undefined && typeof rawReasoningEffort !== "string") ||
+    (reasoningEffortProvided && !ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) ||
+    (promptInstructionProvided && rawPromptInstruction !== undefined && typeof rawPromptInstruction !== "string")) {
     throw profileError("INVALID_PAYLOAD", "AI profile 配置不合法");
   }
-  return { id, name, protocol, baseUrl, model, key };
+  const normalized = {
+    id,
+    name,
+    protocol,
+    baseUrl,
+    model,
+    key,
+    reasoningEffort,
+    promptInstruction
+  };
+  Object.defineProperties(normalized, {
+    reasoningEffortProvided: { value: reasoningEffortProvided, enumerable: false },
+    promptInstructionProvided: { value: promptInstructionProvided, enumerable: false }
+  });
+  return normalized;
 }
 
 async function saveProfile(payload) {
@@ -293,6 +348,8 @@ async function saveProfile(payload) {
       protocol: next.protocol,
       baseUrl: next.baseUrl,
       model: next.model,
+      reasoningEffort: next.reasoningEffortProvided || !profile ? next.reasoningEffort : profile.reasoningEffort || "",
+      promptInstruction: next.promptInstructionProvided || !profile ? next.promptInstruction : profile.promptInstruction || "",
       keyEnvelope,
       createdAt: profile ? profile.createdAt : now,
       updatedAt: now

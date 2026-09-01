@@ -4,6 +4,7 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const USER_AGENT = "KyanetWorkStation-AI/1";
 const ALLOWED_CATEGORIES = new Set(["Bug", "功能建议", "体验问题", "其他"]);
 const ALLOWED_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
+const ALLOWED_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
 function aiError(code, message) {
   const error = new Error(message);
@@ -157,6 +158,13 @@ function requestDefinition(profile, prompt) {
     };
   }
   if (protocol === "openai-responses") {
+    const body = { model, input: prompt };
+    const reasoningEffort = typeof profile.reasoningEffort === "string"
+      ? profile.reasoningEffort.trim()
+      : "";
+    if (ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) {
+      body.reasoning = { effort: reasoningEffort };
+    }
     return {
       url: buildProviderEndpoint(profile.baseUrl, "/responses"),
       headers: {
@@ -164,7 +172,7 @@ function requestDefinition(profile, prompt) {
         "User-Agent": USER_AGENT,
         Authorization: `Bearer ${key}`
       },
-      body: { model, input: prompt },
+      body,
       extract: extractResponsesText
     };
   }

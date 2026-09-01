@@ -133,17 +133,37 @@ test("admin AI profile API requires a session, masks keys, and hot-switches acti
         protocol: "openai-chat",
         baseUrl: "https://api.openai.com/v1/",
         model: "gpt-4o-mini",
-        key: "sk-test-secret-value"
+        key: "sk-test-secret-value",
+        reasoningEffort: "xhigh",
+        promptInstruction: "请优先给出简洁、可执行的建议。"
       }
     });
     assert.equal(saved.response.status, 200);
     assert.equal(saved.data.ok, true);
     assert.equal(saved.data.data.keyConfigured, true);
     assert.match(saved.data.data.keyMask, /•/u);
+    assert.equal(saved.data.data.reasoningEffort, "xhigh");
+    assert.equal(saved.data.data.promptInstruction, "请优先给出简洁、可执行的建议。");
     assert.equal(JSON.stringify(saved.data).includes("sk-test-secret-value"), false);
     assert.equal(JSON.stringify(saved.data).includes("keyEnvelope"), false);
 
     const profileId = saved.data.data.id;
+    const legacyUpdate = await requestJson(server.baseUrl, "/api/admin/ai/profiles", {
+      method: "POST",
+      headers: { cookie },
+      body: {
+        id: profileId,
+        name: "OpenAI Legacy Update",
+        protocol: "openai-chat",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o-mini",
+        key: ""
+      }
+    });
+    assert.equal(legacyUpdate.response.status, 200);
+    assert.equal(legacyUpdate.data.data.reasoningEffort, "xhigh");
+    assert.equal(legacyUpdate.data.data.promptInstruction, "请优先给出简洁、可执行的建议。");
+
     const active = await requestJson(server.baseUrl, "/api/admin/ai/profiles/active", {
       method: "POST",
       headers: { cookie },
@@ -175,11 +195,33 @@ test("admin AI profile API requires a session, masks keys, and hot-switches acti
         protocol: "openai-chat",
         baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o-mini",
-        key: ""
+        key: "",
+        reasoning_effort: "high",
+        promptInstruction: "更新后的工作指令"
       }
     });
     assert.equal(updatedWithoutKey.response.status, 200);
     assert.equal(updatedWithoutKey.data.data.keyConfigured, true);
+    assert.equal(updatedWithoutKey.data.data.reasoningEffort, "high");
+    assert.equal(updatedWithoutKey.data.data.promptInstruction, "更新后的工作指令");
+
+    const cleared = await requestJson(server.baseUrl, "/api/admin/ai/profiles", {
+      method: "POST",
+      headers: { cookie },
+      body: {
+        id: profileId,
+        name: "OpenAI Updated",
+        protocol: "openai-chat",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o-mini",
+        key: "",
+        reasoningEffort: "",
+        promptInstruction: ""
+      }
+    });
+    assert.equal(cleared.response.status, 200);
+    assert.equal(cleared.data.data.reasoningEffort, "");
+    assert.equal(cleared.data.data.promptInstruction, "");
 
     const switched = await requestJson(server.baseUrl, "/api/admin/ai/profiles/active", {
       method: "POST",
@@ -231,6 +273,37 @@ test("AI profile write rejects cross-origin mutations and unsafe profile payload
     });
     assert.equal(unsafe.response.status, 400);
     assert.equal(unsafe.data.error.code, "INVALID_PAYLOAD");
+
+    const invalidReasoning = await requestJson(server.baseUrl, "/api/admin/ai/profiles", {
+      method: "POST",
+      headers: { cookie },
+      body: {
+        name: "Provider",
+        protocol: "openai-chat",
+        baseUrl: "https://provider.example",
+        model: "model",
+        key: "key",
+        reasoningEffort: "critical"
+      }
+    });
+    assert.equal(invalidReasoning.response.status, 400);
+    assert.equal(invalidReasoning.data.error.code, "INVALID_PAYLOAD");
+
+    const explicitNull = await requestJson(server.baseUrl, "/api/admin/ai/profiles", {
+      method: "POST",
+      headers: { cookie },
+      body: {
+        name: "Null Provider",
+        protocol: "openai-chat",
+        baseUrl: "https://provider.example",
+        model: "model",
+        key: "key",
+        reasoningEffort: null,
+        promptInstruction: null
+      }
+    });
+    assert.equal(explicitNull.response.status, 400);
+    assert.equal(explicitNull.data.error.code, "INVALID_PAYLOAD");
   } finally {
     await server.stop();
   }
