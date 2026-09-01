@@ -302,6 +302,22 @@ function sqliteSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_created_at ON ai_knowledge_answer(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_expires_at ON ai_knowledge_answer(expires_at)",
+    `CREATE TABLE IF NOT EXISTS ai_request_metric (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation TEXT NOT NULL,
+      profile_id TEXT NOT NULL DEFAULT '',
+      protocol TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      usage_present INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_request_metric_created_at ON ai_request_metric(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_request_metric_operation_created ON ai_request_metric(operation, created_at DESC)",
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
@@ -458,6 +474,22 @@ function mysqlSchemaStatements() {
       INDEX idx_ai_knowledge_answer_created_at (created_at),
       INDEX idx_ai_knowledge_answer_expires_at (expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS ai_request_metric (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      operation VARCHAR(32) NOT NULL,
+      profile_id VARCHAR(128) NOT NULL DEFAULT '',
+      protocol VARCHAR(64) NOT NULL DEFAULT '',
+      model VARCHAR(120) NOT NULL DEFAULT '',
+      status VARCHAR(32) NOT NULL,
+      duration_ms BIGINT NOT NULL,
+      input_tokens BIGINT NULL,
+      output_tokens BIGINT NULL,
+      usage_present TINYINT(1) NOT NULL DEFAULT 0,
+      error_code VARCHAR(64) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_ai_request_metric_created_at (created_at),
+      INDEX idx_ai_request_metric_operation_created (operation, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
       created_at VARCHAR(40) NOT NULL,
@@ -611,6 +643,22 @@ function postgresSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_created_at ON ai_knowledge_answer(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_expires_at ON ai_knowledge_answer(expires_at)",
+    `CREATE TABLE IF NOT EXISTS ai_request_metric (
+      id BIGSERIAL PRIMARY KEY,
+      operation TEXT NOT NULL,
+      profile_id TEXT NOT NULL DEFAULT '',
+      protocol TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      duration_ms BIGINT NOT NULL,
+      input_tokens BIGINT,
+      output_tokens BIGINT,
+      usage_present BOOLEAN NOT NULL DEFAULT FALSE,
+      error_code TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_request_metric_created_at ON ai_request_metric(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_request_metric_operation_created ON ai_request_metric(operation, created_at DESC)",
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id BIGSERIAL PRIMARY KEY,
       created_at TEXT NOT NULL,
@@ -1233,9 +1281,8 @@ async function createAiKnowledgeAnswer(input = {}) {
   const model = boundedDbText(input.model, 120).trim();
   const usageJson = JSON.stringify(normalizeKnowledgeUsage(input.usage));
   const promptVersion = boundedDbText(input.promptVersion, 64).trim();
-  const createdAt = typeof input.createdAt === "string" && !Number.isNaN(Date.parse(input.createdAt))
-    ? input.createdAt.slice(0, 40)
-    : nowIso();
+  const createdAtTime = typeof input.createdAt === "string" ? Date.parse(input.createdAt) : NaN;
+  const createdAt = Number.isFinite(createdAtTime) ? new Date(createdAtTime).toISOString() : nowIso();
   const expiresAt = typeof input.expiresAt === "string" && !Number.isNaN(Date.parse(input.expiresAt))
     ? input.expiresAt.slice(0, 40)
     : new Date(Date.parse(createdAt) + knowledgeAnswerRetentionMs()).toISOString();
@@ -1307,6 +1354,159 @@ async function deleteAiKnowledgeAnswer(id) {
 async function deleteExpiredAiKnowledgeAnswers(now = nowIso()) {
   const p1 = placeholder(1);
   const result = await execute(`DELETE FROM ai_knowledge_answer WHERE expires_at <= ${p1}`, [now]);
+  return result.changes;
+}
+
+const AI_METRIC_OPERATIONS = new Set(["copilot_suggest", "knowledge_ask", "provider_diagnostic"]);
+const AI_METRIC_STATUSES = new Set(["success", "failed", "timeout"]);
+const MAX_AI_METRIC_WINDOW_MS = 720 * 60 * 60 * 1000;
+
+function normalizeMetricToken(value) {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+  if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  if (typeof value !== "string" || !/^\d+$/u.test(value.trim())) return null;
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function mapAiRequestMetricSummaryRow(row) {
+  const numberOrNull = (value) => value === null || value === undefined || value === "" ? null : toNumber(value);
+  return {
+    total: toNumber(row && row.total),
+    success: toNumber(row && row.success),
+    failed: toNumber(row && row.failed),
+    timeout: toNumber(row && row.timeout),
+    averageDurationMs: numberOrNull(row && row.average_duration_ms),
+    inputTokens: numberOrNull(row && row.input_tokens),
+    outputTokens: numberOrNull(row && row.output_tokens),
+    unknownUsageCount: toNumber(row && row.unknown_usage_count)
+  };
+}
+
+function mapAiRequestMetricGroupRow(row) {
+  return {
+    operation: String(row && row.operation || "").slice(0, 32),
+    protocol: String(row && row.protocol || "").slice(0, 64),
+    ...mapAiRequestMetricSummaryRow(row)
+  };
+}
+
+async function createAiRequestMetric(input = {}) {
+  const operation = typeof input.operation === "string" && AI_METRIC_OPERATIONS.has(input.operation)
+    ? input.operation
+    : "";
+  const status = typeof input.status === "string" && AI_METRIC_STATUSES.has(input.status)
+    ? input.status
+    : "failed";
+  if (!operation) throw new Error("Invalid AI metric operation");
+  const durationCandidate = typeof input.durationMs === "number" ? input.durationMs : Number(input.durationMs);
+  const durationMs = Number.isSafeInteger(durationCandidate) && durationCandidate >= 0
+    ? Math.min(durationCandidate, 600000)
+    : 0;
+  const profileId = String(input.profileId || "").slice(0, 128);
+  const protocol = String(input.protocol || "").slice(0, 64);
+  const modelCandidate = String(input.model || "").slice(0, 120);
+  const model = /^(?:https?:)?\/\//iu.test(modelCandidate) ? "" : modelCandidate;
+  const errorCode = typeof input.errorCode === "string" && /^[A-Za-z0-9_.-]{0,64}$/u.test(input.errorCode)
+    ? input.errorCode
+    : "";
+  const createdAt = typeof input.createdAt === "string" && !Number.isNaN(Date.parse(input.createdAt))
+    ? input.createdAt.slice(0, 40)
+    : nowIso();
+  const params = [
+    operation,
+    profileId,
+    protocol,
+    model,
+    status,
+    durationMs,
+    normalizeMetricToken(input.inputTokens),
+    normalizeMetricToken(input.outputTokens),
+    toDbBoolean(input.usagePresent === true),
+    errorCode,
+    createdAt
+  ];
+  const marks = params.map((_, index) => placeholder(index + 1));
+  const columns = "operation, profile_id, protocol, model, status, duration_ms, input_tokens, output_tokens, usage_present, error_code, created_at";
+  const sql = client === "postgres"
+    ? `INSERT INTO ai_request_metric (${columns}) VALUES (${marks.join(", ")}) RETURNING id`
+    : `INSERT INTO ai_request_metric (${columns}) VALUES (${marks.join(", ")})`;
+  const result = await execute(sql, params);
+  return result.lastInsertId;
+}
+
+function metricAggregateSql(where) {
+  return `SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      SUM(CASE WHEN status = 'timeout' THEN 1 ELSE 0 END) AS timeout,
+      AVG(duration_ms) AS average_duration_ms,
+      SUM(input_tokens) AS input_tokens,
+      SUM(output_tokens) AS output_tokens,
+      SUM(CASE WHEN input_tokens IS NULL OR output_tokens IS NULL THEN 1 ELSE 0 END) AS unknown_usage_count
+    FROM ai_request_metric WHERE ${where}`;
+}
+
+function normalizeAiMetricWindow({ from, to } = {}) {
+  const fallbackTo = nowIso();
+  const startValue = from === undefined || from === null
+    ? new Date(Date.parse(fallbackTo) - 24 * 60 * 60 * 1000).toISOString()
+    : from;
+  const endValue = to === undefined || to === null ? fallbackTo : to;
+  const startTime = typeof startValue === "string" && startValue.trim() ? Date.parse(startValue) : NaN;
+  const endTime = typeof endValue === "string" && endValue.trim() ? Date.parse(endValue) : NaN;
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+    const error = new Error("Invalid AI metric time window");
+    error.code = "INVALID_PAYLOAD";
+    throw error;
+  }
+  if (startTime >= endTime || endTime - startTime > MAX_AI_METRIC_WINDOW_MS) {
+    const error = new Error("Invalid AI metric time window");
+    error.code = "INVALID_PAYLOAD";
+    throw error;
+  }
+  return {
+    from: new Date(startTime).toISOString(),
+    to: new Date(endTime).toISOString()
+  };
+}
+
+async function listAiRequestMetricSummary({ from, to, maxGroups = 100 } = {}) {
+  const window = normalizeAiMetricWindow({ from, to });
+  const start = window.from;
+  const end = window.to;
+  const limit = Number.isSafeInteger(Number(maxGroups)) && Number(maxGroups) > 0 ? Math.min(Number(maxGroups), 100) : 100;
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  const where = `created_at >= ${p1} AND created_at < ${p2}`;
+  const totalRow = await queryOne(metricAggregateSql(where), [start, end]);
+  const p3 = placeholder(3);
+  const groups = await queryAll(
+    `SELECT operation, protocol,
+       COUNT(*) AS total,
+       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+       SUM(CASE WHEN status = 'timeout' THEN 1 ELSE 0 END) AS timeout,
+       AVG(duration_ms) AS average_duration_ms,
+       SUM(input_tokens) AS input_tokens,
+       SUM(output_tokens) AS output_tokens,
+       SUM(CASE WHEN input_tokens IS NULL OR output_tokens IS NULL THEN 1 ELSE 0 END) AS unknown_usage_count
+     FROM ai_request_metric WHERE ${where}
+     GROUP BY operation, protocol
+     ORDER BY total DESC, operation ASC, protocol ASC
+     LIMIT ${p3}`,
+    [start, end, limit]
+  );
+  return {
+    ...mapAiRequestMetricSummaryRow(totalRow || {}),
+    groups: groups.slice(0, 100).map(mapAiRequestMetricGroupRow)
+  };
+}
+
+async function deleteExpiredAiRequestMetrics(cutoff = nowIso()) {
+  const p1 = placeholder(1);
+  const result = await execute(`DELETE FROM ai_request_metric WHERE created_at < ${p1}`, [cutoff]);
   return result.changes;
 }
 
@@ -2468,6 +2668,9 @@ module.exports = {
   listAiKnowledgeAnswers,
   deleteAiKnowledgeAnswer,
   deleteExpiredAiKnowledgeAnswers,
+  createAiRequestMetric,
+  listAiRequestMetricSummary,
+  deleteExpiredAiRequestMetrics,
   getAiKnowledgeSettings,
   setAiKnowledgeSettings,
   enqueueNotificationDelivery,

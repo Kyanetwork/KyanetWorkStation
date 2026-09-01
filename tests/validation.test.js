@@ -12,6 +12,8 @@ const {
   validateAiProfilePayload,
   validateAiProfileActivePayload,
   validateAiProfileDeletePayload,
+  validateAiProfileDiagnosePayload,
+  validateAiMetricsQueryPayload,
   validateAiSuggestPayload,
   validateAiSuggestionsQueryPayload,
   validateAiSuggestionDecisionPayload
@@ -209,6 +211,21 @@ test("AI profile validators reject non-string identifiers instead of treating th
 
   assert.equal(profile.valid, false);
   assert.equal(active.valid, false);
+});
+
+test("AI diagnostic and metrics validators keep identifiers and time windows bounded", () => {
+  const diagnose = validateAiProfileDiagnosePayload({ profileId: " profile-1 " });
+  const invalidDiagnose = validateAiProfileDiagnosePayload({ profileId: "" });
+  const metrics = validateAiMetricsQueryPayload({ hours: "168" });
+  const defaultMetrics = validateAiMetricsQueryPayload({});
+  const invalidMetrics = validateAiMetricsQueryPayload({ hours: "721" });
+
+  assert.equal(diagnose.valid, true);
+  assert.equal(diagnose.data.profileId, "profile-1");
+  assert.equal(invalidDiagnose.valid, false);
+  assert.deepEqual(metrics.data, { hours: 168 });
+  assert.deepEqual(defaultMetrics.data, { hours: 24 });
+  assert.equal(invalidMetrics.valid, false);
 });
 
 test("AI suggestion validators enforce entity and decision allow-lists", () => {

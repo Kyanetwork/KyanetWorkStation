@@ -142,6 +142,56 @@ test("AI profiles and suggestions persist with expiry filtering and decision aud
     const savedSettings = await db.setAiKnowledgeSettings({ autoCleanup: false, ignored: "drop" });
     assert.deepEqual(savedSettings, { autoCleanup: false, updatedAt: savedSettings.updatedAt });
     assert.equal((await db.getAiKnowledgeSettings()).autoCleanup, false);
+
+    const metricId = await db.createAiRequestMetric({
+      operation: "provider_diagnostic",
+      profileId: "profile-1",
+      protocol: "openai-chat",
+      model: "gpt-4o-mini",
+      status: "success",
+      durationMs: 120,
+      inputTokens: null,
+      outputTokens: "8",
+      usagePresent: true,
+      createdAt: now
+    });
+    assert.ok(Number.isSafeInteger(metricId));
+    await db.createAiRequestMetric({
+      operation: "knowledge_ask",
+      profileId: "profile-1",
+      protocol: "openai-chat",
+      model: "gpt-4o-mini",
+      status: "timeout",
+      durationMs: 80,
+      inputTokens: 4,
+      outputTokens: 5,
+      usagePresent: true,
+      createdAt: now
+    });
+    const metricSummary = await db.listAiRequestMetricSummary({
+      from: "2026-08-27T00:00:00.000Z",
+      to: "2026-08-29T00:00:00.000Z"
+    });
+    assert.equal(metricSummary.total, 2);
+    assert.equal(metricSummary.success, 1);
+    assert.equal(metricSummary.timeout, 1);
+    assert.equal(metricSummary.unknownUsageCount, 1);
+    assert.equal(metricSummary.groups.length, 2);
+    await assert.rejects(
+      () => db.listAiRequestMetricSummary({
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-09-01T00:00:00.000Z"
+      }),
+      (error) => error && error.code === "INVALID_PAYLOAD"
+    );
+    await assert.rejects(
+      () => db.listAiRequestMetricSummary({
+        from: "not-a-date",
+        to: "2026-08-29T00:00:00.000Z"
+      }),
+      (error) => error && error.code === "INVALID_PAYLOAD"
+    );
+    assert.equal(await db.deleteExpiredAiRequestMetrics("2026-08-29T00:00:00.000Z"), 2);
   } finally {
     await db.closeDatabase();
     delete require.cache[configPath];
@@ -161,5 +211,8 @@ test("knowledge answer schema is declared for every supported database", () => {
     assert.ok(statements.some((statement) => statement.includes("ai_knowledge_answer")));
     assert.ok(statements.some((statement) => statement.includes("idx_ai_knowledge_answer_created_at")));
     assert.ok(statements.some((statement) => statement.includes("idx_ai_knowledge_answer_expires_at")));
+    assert.ok(statements.some((statement) => statement.includes("ai_request_metric")));
+    assert.ok(statements.some((statement) => statement.includes("idx_ai_request_metric_created_at")));
+    assert.ok(statements.some((statement) => statement.includes("idx_ai_request_metric_operation_created")));
   }
 });

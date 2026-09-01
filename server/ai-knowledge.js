@@ -3,6 +3,7 @@
 const config = require("./config");
 const db = require("./db");
 const profiles = require("./ai-profiles");
+const aiMetrics = require("./ai-metrics");
 const knowledgeBase = require("./knowledge-base");
 const { requestProviderSuggestion } = require("./ai-provider");
 
@@ -141,7 +142,8 @@ function buildKnowledgePrompt(question, sources = [], promptInstruction = "") {
 function normalizeUsage(usage) {
   const value = usage && typeof usage === "object" ? usage : {};
   const normalize = (candidate) => {
-    const number = typeof candidate === "number" ? candidate : Number(candidate);
+    if (candidate === null || candidate === undefined || candidate === "" || typeof candidate === "boolean") return null;
+    const number = typeof candidate === "number" ? candidate : (typeof candidate === "string" && /^\d+$/u.test(candidate.trim()) ? Number(candidate.trim()) : NaN);
     return Number.isSafeInteger(number) && number >= 0 ? number : null;
   };
   return {
@@ -165,7 +167,8 @@ function dependenciesFrom(value) {
     db: deps.db || db,
     profiles: deps.profiles || profiles,
     provider: deps.provider || requestProviderSuggestion,
-    knowledgeBase: deps.knowledgeBase || knowledgeBase
+    knowledgeBase: deps.knowledgeBase || knowledgeBase,
+    metrics: deps.metrics || aiMetrics
   };
 }
 
@@ -286,6 +289,12 @@ async function getKnowledgeStatus({ dependencies } = {}) {
 
 async function askKnowledge({ question, rootId = "", requestId = "", signal, dependencies, now } = {}) {
   const deps = dependenciesFrom(dependencies);
+  let providerAttempted = false;
+  let providerResult = null;
+  let metricProfile = null;
+  let operationError = null;
+  let startedAt = Date.now();
+  try {
   if (!config.ai.enabled) throw aiError("AI_UNAVAILABLE", "AI Copilot 未启用");
   const settings = knowledgeConfig();
   if (settings.parseError) throw aiError("KNOWLEDGE_CONFIG_INVALID", "知识库目录配置无效");
@@ -309,8 +318,11 @@ async function askKnowledge({ question, rootId = "", requestId = "", signal, dep
     if (error && error.code === "AI_KEY_UNAVAILABLE") throw error;
     throw aiError("AI_KEY_UNAVAILABLE", "AI profile 密钥不可用");
   }
+  metricProfile = activeProfile;
 
-  const providerResult = await deps.provider({
+  startedAt = Date.now();
+  providerAttempted = true;
+  providerResult = await deps.provider({
     profile: { ...activeProfile, apiKey },
     prompt: buildKnowledgePrompt(normalizedQuestion, sources.map(sourceForPrompt), activeProfile.promptInstruction),
     requestId,
@@ -368,6 +380,30 @@ async function askKnowledge({ question, rootId = "", requestId = "", signal, dep
     createdAt: generatedAt,
     expiresAt
   };
+  } catch (error) {
+    operationError = error;
+    throw error;
+  } finally {
+    if (providerAttempted && metricProfile) {
+      try {
+        await deps.metrics.recordAiRequestMetricSafely({
+          operation: "knowledge_ask",
+          profileId: metricProfile.id,
+          protocol: metricProfile.protocol,
+          model: metricProfile.model,
+          status: operationError ? aiMetrics.statusForError(operationError) : "success",
+          durationMs: Math.max(0, Math.min(600000, Date.now() - startedAt)),
+          usage: providerResult && providerResult.usage,
+          usagePresent: providerResult && typeof providerResult.usageReported === "boolean"
+            ? providerResult.usageReported
+            : Boolean(providerResult && providerResult.usage && typeof providerResult.usage === "object" && !Array.isArray(providerResult.usage)),
+          errorCode: operationError && operationError.code ? operationError.code : ""
+        }, { db: deps.db });
+      } catch (_) {
+        // AI metrics are best effort and must not alter the primary result.
+      }
+    }
+  }
 }
 
 async function listKnowledgeHistory(filters = {}, dependencies) {

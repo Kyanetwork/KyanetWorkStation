@@ -12,6 +12,12 @@ function aiError(code, message) {
   return error;
 }
 
+function responseTooLargeError() {
+  const error = aiError("AI_INVALID_RESPONSE", "AI provider 响应超出大小限制");
+  error.responseTooLarge = true;
+  return error;
+}
+
 function normalizeProviderBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) {
     throw aiError("AI_PROVIDER_FAILED", "AI provider 地址不可用");
@@ -80,9 +86,18 @@ function mapUsage(usage) {
   }
   const input = usage && (usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
   const output = usage && (usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens);
+  const normalizeToken = (value) => {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+    if (typeof value === "number") {
+      return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    }
+    if (typeof value !== "string" || !/^\d+$/u.test(value.trim())) return null;
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  };
   return {
-    inputTokens: Number.isSafeInteger(Number(input)) && Number(input) >= 0 ? Number(input) : null,
-    outputTokens: Number.isSafeInteger(Number(output)) && Number(output) >= 0 ? Number(output) : null
+    inputTokens: normalizeToken(input),
+    outputTokens: normalizeToken(output)
   };
 }
 
@@ -90,8 +105,11 @@ function providerRequestId(response, body) {
   const headerId = response && response.headers && typeof response.headers.get === "function"
     ? response.headers.get("x-request-id")
     : "";
-  if (headerId) return String(headerId).slice(0, 128);
-  return body && typeof body.id === "string" ? body.id.slice(0, 128) : "";
+  const candidate = headerId || (body && typeof body.id === "string" ? body.id : "");
+  if (typeof candidate !== "string" || !candidate || candidate.length > 128 || !/^[A-Za-z0-9._:-]+$/u.test(candidate)) {
+    return "";
+  }
+  return candidate;
 }
 
 async function readResponseTextBounded(response) {
@@ -100,7 +118,7 @@ async function readResponseTextBounded(response) {
     : null;
   const declaredLength = Number.parseInt(contentLength, 10);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
-    throw aiError("AI_INVALID_RESPONSE", "AI provider 响应超出大小限制");
+    throw responseTooLargeError();
   }
 
   if (response && response.body && typeof response.body.getReader === "function") {
@@ -115,7 +133,7 @@ async function readResponseTextBounded(response) {
         total += chunk.length;
         if (total > MAX_RESPONSE_BYTES) {
           await reader.cancel().catch(() => {});
-          throw aiError("AI_INVALID_RESPONSE", "AI provider 响应超出大小限制");
+          throw responseTooLargeError();
         }
         chunks.push(chunk);
       }
@@ -130,7 +148,7 @@ async function readResponseTextBounded(response) {
   }
   const text = await response.text();
   if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
-    throw aiError("AI_INVALID_RESPONSE", "AI provider 响应超出大小限制");
+    throw responseTooLargeError();
   }
   return text;
 }
@@ -154,7 +172,9 @@ function requestDefinition(profile, prompt) {
         model,
         messages: [{ role: "user", content: prompt }]
       },
-      extract: extractChatText
+      extract: extractChatText,
+      endpoint: "/chat/completions",
+      reasoningEffortSent: false
     };
   }
   if (protocol === "openai-responses") {
@@ -173,7 +193,9 @@ function requestDefinition(profile, prompt) {
         Authorization: `Bearer ${key}`
       },
       body,
-      extract: extractResponsesText
+      extract: extractResponsesText,
+      endpoint: "/responses",
+      reasoningEffortSent: Object.hasOwn(body, "reasoning")
     };
   }
   if (protocol === "anthropic-messages") {
@@ -190,7 +212,9 @@ function requestDefinition(profile, prompt) {
         max_tokens: 1200,
         messages: [{ role: "user", content: prompt }]
       },
-      extract: extractAnthropicText
+      extract: extractAnthropicText,
+      endpoint: "/messages",
+      reasoningEffortSent: false
     };
   }
   throw aiError("AI_PROVIDER_FAILED", "AI provider 协议不可用");
@@ -210,6 +234,16 @@ async function requestProviderSuggestion({ profile, prompt, requestId = "", sign
   }
   const timer = setTimeout(() => controller.abort(), timeout);
   timer.unref?.();
+  const providerMeta = {
+    reachable: false,
+    httpStatus: null,
+    responseWithinLimit: true,
+    responseJson: false,
+    textExtracted: false,
+    usageReported: false,
+    endpoint: definition.endpoint,
+    reasoningEffortSent: definition.reasoningEffortSent
+  };
   let abortReject;
   const abortPromise = new Promise((_, reject) => {
     abortReject = reject;
@@ -228,31 +262,66 @@ async function requestProviderSuggestion({ profile, prompt, requestId = "", sign
     }));
     const response = await Promise.race([fetchPromise, abortPromise]);
     const status = Number(response && response.status);
+    providerMeta.httpStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+    providerMeta.reachable = true;
     if (!Number.isFinite(status) || status < 200 || status >= 300) {
-      throw aiError("AI_PROVIDER_FAILED", "AI provider 请求失败");
+      const error = aiError("AI_PROVIDER_FAILED", "AI provider 请求失败");
+      error.providerMeta = { ...providerMeta };
+      throw error;
     }
-    const responseText = await readResponseTextBounded(response);
+    let responseText;
+    try {
+      responseText = await readResponseTextBounded(response);
+    } catch (error) {
+      if (error && error.responseTooLarge === true) {
+        providerMeta.responseWithinLimit = false;
+        error.providerMeta = { ...providerMeta };
+      }
+      throw error;
+    }
     let body;
     try {
       body = JSON.parse(responseText);
     } catch (_) {
-      throw aiError("AI_INVALID_RESPONSE", "AI provider 响应格式无效");
+      const error = aiError("AI_INVALID_RESPONSE", "AI provider 响应格式无效");
+      error.providerMeta = { ...providerMeta };
+      throw error;
     }
+    providerMeta.responseJson = true;
     const text = definition.extract(body);
     if (!text) {
-      throw aiError("AI_INVALID_RESPONSE", "AI provider 未返回建议文本");
+      const error = aiError("AI_INVALID_RESPONSE", "AI provider 未返回建议文本");
+      error.providerMeta = { ...providerMeta };
+      throw error;
     }
+    providerMeta.textExtracted = true;
+    providerMeta.usageReported = Boolean(body && body.usage && typeof body.usage === "object" && !Array.isArray(body.usage));
     return {
       text,
       usage: mapUsage(body && body.usage),
-      providerRequestId: providerRequestId(response, body)
+      providerRequestId: providerRequestId(response, body),
+      reachable: providerMeta.reachable,
+      httpStatus: providerMeta.httpStatus,
+      responseWithinLimit: providerMeta.responseWithinLimit,
+      responseJson: providerMeta.responseJson,
+      textExtracted: providerMeta.textExtracted,
+      usageReported: providerMeta.usageReported,
+      endpoint: providerMeta.endpoint,
+      reasoningEffortSent: providerMeta.reasoningEffortSent
     };
   } catch (error) {
-    if (error && error.code) throw error;
-    if (controller.signal.aborted || (error && error.name === "AbortError")) {
-      throw aiError("AI_TIMEOUT", "AI provider 请求超时");
+    if (error && error.code) {
+      if (!error.providerMeta) error.providerMeta = { ...providerMeta };
+      throw error;
     }
-    throw aiError("AI_PROVIDER_FAILED", "AI provider 请求失败");
+    if (controller.signal.aborted || (error && error.name === "AbortError")) {
+      const timeoutError = aiError("AI_TIMEOUT", "AI provider 请求超时");
+      timeoutError.providerMeta = { ...providerMeta };
+      throw timeoutError;
+    }
+    const providerError = aiError("AI_PROVIDER_FAILED", "AI provider 请求失败");
+    providerError.providerMeta = { ...providerMeta };
+    throw providerError;
   } finally {
     clearTimeout(timer);
     if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
@@ -325,6 +394,8 @@ module.exports = {
   requestProviderSuggestion,
   parseSuggestionText,
   readResponseTextBounded,
+  mapUsage,
+  providerRequestId,
   normalizeProviderBaseUrl,
   buildProviderEndpoint
 };

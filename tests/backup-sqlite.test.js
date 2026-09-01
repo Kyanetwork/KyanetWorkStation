@@ -140,6 +140,7 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
       "admin_user",
       "ai_copilot_suggestion",
       "ai_knowledge_answer",
+      "ai_request_metric",
       "feedback",
       "notification_delivery",
       "sqlite_sequence",
@@ -169,6 +170,8 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
     assert.equal(evidence.tables.admin_user.count, 1);
     assert.equal(evidence.tables.notification_delivery.exists, true);
     assert.equal(evidence.tables.ai_copilot_suggestion.exists, true);
+    assert.equal(evidence.tables.ai_knowledge_answer.exists, true);
+    assert.equal(evidence.tables.ai_request_metric.exists, true);
     assert.equal(evidence.tables.admin_audit.exists, true);
     assert.equal(evidence.fullPath, undefined);
   } finally {

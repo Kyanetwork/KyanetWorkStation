@@ -57,6 +57,11 @@ const {
   deleteProfile,
   getAiProfileStatus
 } = require("./ai-profiles");
+const { diagnoseProfile } = require("./ai-diagnostics");
+const {
+  summarizeAiRequestMetrics,
+  cleanupExpiredMetricsIfEnabled
+} = require("./ai-metrics");
 const {
   generateSuggestion,
   listSuggestions,
@@ -112,6 +117,8 @@ const {
   validateAiProfilePayload,
   validateAiProfileActivePayload,
   validateAiProfileDeletePayload,
+  validateAiProfileDiagnosePayload,
+  validateAiMetricsQueryPayload,
   validateAiSuggestPayload,
   validateAiSuggestionsQueryPayload,
   validateAiSuggestionDecisionPayload,
@@ -226,6 +233,20 @@ const aiKnowledgeLimiter = rateLimit({
   }
 });
 
+const aiDiagnosticsLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: {
+      code: "AI_RATE_LIMITED",
+      message: "Provider 诊断请求过于频繁，请稍后再试"
+    }
+  }
+});
+
 function asyncHandler(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
@@ -267,6 +288,9 @@ function sendAiError(res, error) {
   if (code === "AI_TIMEOUT") return sendError(res, 504, code, "AI provider 请求超时，请稍后重试");
   if (code === "AI_PROVIDER_FAILED" || code === "AI_INVALID_RESPONSE") {
     return sendError(res, 502, code, "AI provider 暂时无法提供有效建议");
+  }
+  if (code === "AI_METRICS_UNAVAILABLE") {
+    return sendError(res, 503, code, "AI 指标暂时不可用，请稍后重试");
   }
   if (code === "KNOWLEDGE_CONFIG_INVALID" || code === "KNOWLEDGE_REINDEX_FAILED" || code === "AI_KNOWLEDGE_PERSIST_FAILED") {
     return sendError(res, 503, code, "知识助手当前不可用，请检查知识库配置或数据库状态");
@@ -680,6 +704,68 @@ app.post("/api/admin/audit/list", requireAdminSession, asyncHandler(async (req, 
 app.get("/api/admin/ai/status", requireAdminSession, asyncHandler(async (req, res) => {
   const data = await getAiProfileStatus();
   return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/ai/profiles/diagnose", requireAdminSession, aiDiagnosticsLimiter, asyncHandler(async (req, res) => {
+  const validation = validateAiProfileDiagnosePayload(req.body || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const requestAbortController = new AbortController();
+  const abortOnClose = () => requestAbortController.abort();
+  req.once("close", abortOnClose);
+  try {
+    const data = await diagnoseProfile({
+      profileId: validation.data.profileId,
+      requestId: req.requestId,
+      actor: req.adminUser.username,
+      signal: requestAbortController.signal
+    });
+    await recordAdminAction(req, "ai.profile.diagnose", "ai_profile", null, data.status === "passed" ? "success" : "failed", {
+      profileId: data.profileId,
+      protocol: data.protocol,
+      model: data.model,
+      status: data.status,
+      outcome: data.outcome,
+      reachable: data.checks && data.checks.reachable === true,
+      responseJson: data.checks && data.checks.responseJson === true,
+      textExtracted: data.checks && data.checks.textExtracted === true,
+      probeMatched: data.checks && data.checks.probeMatched === true,
+      responseWithinLimit: data.checks && data.checks.responseWithinLimit === true,
+      usageReported: data.checks && data.checks.usageReported === true,
+      durationMs: data.durationMs,
+      reasoningEffortApplied: data.reasoningEffortApplied === true,
+      providerRequestIdPresent: Boolean(data.providerRequestId),
+      errorCode: data.errorCode || ""
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "ai.profile.diagnose", "ai_profile", null, auditResultForError(error), {
+      profileId: validation.data.profileId,
+      errorCode: error && error.code ? error.code : "AI_DIAGNOSTIC_FAILED"
+    });
+    if (error && error.code === "NOT_FOUND") {
+      return sendAiProfileError(res, error);
+    }
+    return sendAiError(res, error);
+  } finally {
+    req.removeListener("close", abortOnClose);
+  }
+}));
+
+app.get("/api/admin/ai/metrics", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateAiMetricsQueryPayload(req.query || {});
+  if (!validation.valid) {
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const to = nowIso();
+  const from = new Date(Date.parse(to) - validation.data.hours * 60 * 60 * 1000).toISOString();
+  try {
+    const data = await summarizeAiRequestMetrics({ from, to });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return sendAiError(res, error);
+  }
 }));
 
 app.post("/api/admin/ai/profiles", requireAdminSession, asyncHandler(async (req, res) => {
@@ -1438,6 +1524,12 @@ async function startServer() {
       errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_CLEANUP_FAILED"
     }, "knowledge history startup cleanup failed");
   });
+  cleanupExpiredMetricsIfEnabled(nowIso()).catch((error) => {
+    logger.warn({
+      event: "ai.metrics.cleanup.error",
+      errorCode: error && error.code ? error.code : "AI_METRICS_CLEANUP_FAILED"
+    }, "AI metrics startup cleanup failed");
+  });
   // Start the worker after bootstrap without delaying the HTTP listener on a
   // slow or unavailable external notification provider.
   processNotificationOutbox().catch((error) => {
@@ -1468,6 +1560,14 @@ async function startServer() {
         event: "ai.knowledge.history.cleanup.error",
         errorCode: error && error.code ? error.code : "AI_KNOWLEDGE_CLEANUP_FAILED"
       }, "knowledge history cleanup failed");
+    });
+  }, 60 * 60 * 1000).unref();
+  setInterval(() => {
+    cleanupExpiredMetricsIfEnabled(nowIso()).catch((error) => {
+      logger.warn({
+        event: "ai.metrics.cleanup.error",
+        errorCode: error && error.code ? error.code : "AI_METRICS_CLEANUP_FAILED"
+      }, "AI metrics cleanup failed");
     });
   }, 60 * 60 * 1000).unref();
 

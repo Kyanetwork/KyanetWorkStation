@@ -135,7 +135,8 @@ function validateRuntimeConfig(candidate = config) {
     ["MEOWSTATUS_REFRESH_MS", candidate.meowStatusRefreshMs, raw.meowStatusRefreshMs, 5000, 24 * 60 * 60 * 1000],
     ["BACKUP_RETENTION_DAYS", candidate.backupRetentionDays, raw.backupRetentionDays, 1, 3650],
     ["ADMIN_EXPORT_MAX_ROWS", candidate.adminExportMaxRows, raw.adminExportMaxRows, 100, 100000],
-    ["AI_KNOWLEDGE_HISTORY_RETENTION_DAYS", candidate.aiKnowledge && candidate.aiKnowledge.historyRetentionDays, raw.aiKnowledgeHistoryRetentionDays, 1, 3650]
+    ["AI_KNOWLEDGE_HISTORY_RETENTION_DAYS", candidate.aiKnowledge && candidate.aiKnowledge.historyRetentionDays, raw.aiKnowledgeHistoryRetentionDays, 1, 3650],
+    ["AI_METRICS_RETENTION_DAYS", candidate.aiMetricsRetentionDays, raw.aiMetricsRetentionDays, 1, 3650]
   ];
   for (const [key, value, rawValue, min, max] of positiveIntegerChecks) {
     if (isExplicitIntegerInvalid(rawValue, min, max) || !Number.isInteger(value) || value < min || value > max) {
@@ -150,7 +151,8 @@ function validateRuntimeConfig(candidate = config) {
     ["SMTP_ENABLED", candidate.smtp && candidate.smtp.enabled, raw.smtpEnabled],
     ["SMTP_SECURE", candidate.smtp && candidate.smtp.secure, raw.smtpSecure],
     ["SMTP_REQUIRE_TLS", candidate.smtp && candidate.smtp.requireTls, raw.smtpRequireTls],
-    ["WEBHOOK_ENABLED", candidate.webhook && candidate.webhook.enabled, raw.webhookEnabled]
+    ["WEBHOOK_ENABLED", candidate.webhook && candidate.webhook.enabled, raw.webhookEnabled],
+    ["AI_METRICS_AUTO_CLEANUP", candidate.aiMetricsAutoCleanup, raw.aiMetricsAutoCleanup]
   ];
   for (const [key, value, rawValue] of booleanChecks) {
     if (isExplicitBooleanInvalid(rawValue) || typeof value !== "boolean") {
@@ -218,7 +220,9 @@ const rawInput = {
   smtpRequireTls: process.env.SMTP_REQUIRE_TLS,
   webhookEnabled: process.env.WEBHOOK_ENABLED,
   aiKnowledgeBaseDirs: process.env.AI_KNOWLEDGE_BASE_DIRS,
-  aiKnowledgeHistoryRetentionDays: process.env.AI_KNOWLEDGE_HISTORY_RETENTION_DAYS
+  aiKnowledgeHistoryRetentionDays: process.env.AI_KNOWLEDGE_HISTORY_RETENTION_DAYS,
+  aiMetricsRetentionDays: process.env.AI_METRICS_RETENTION_DAYS,
+  aiMetricsAutoCleanup: process.env.AI_METRICS_AUTO_CLEANUP
 };
 
 const knowledgeBaseConfig = parseKnowledgeBaseConfig(process.env.AI_KNOWLEDGE_BASE_DIRS);
@@ -254,6 +258,8 @@ const config = {
     cachePath: path.join(ROOT_DIR, "data", "ai-knowledge-index.json"),
     historyRetentionDays: parseIntOrDefault(process.env.AI_KNOWLEDGE_HISTORY_RETENTION_DAYS, 30)
   },
+  aiMetricsRetentionDays: parseIntOrDefault(process.env.AI_METRICS_RETENTION_DAYS, 30),
+  aiMetricsAutoCleanup: parseBoolOrDefault(process.env.AI_METRICS_AUTO_CLEANUP, true),
   dbPath: path.resolve(ROOT_DIR, process.env.DB_PATH || "./data/workstation.db"),
   cookieName: process.env.SESSION_COOKIE_NAME || "kws_sid",
   sessionTtlHours: parseIntOrDefault(process.env.SESSION_TTL_HOURS, 168),

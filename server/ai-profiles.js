@@ -398,6 +398,14 @@ async function getActiveProfileSnapshot() {
   return active ? cloneState(active) : null;
 }
 
+async function getProfileSnapshot(profileId) {
+  const id = typeof profileId === "string" ? profileId.trim() : "";
+  if (!PROFILE_ID_PATTERN.test(id)) return null;
+  const state = await readProfileState();
+  const profile = state.profiles.find((item) => item.id === id);
+  return profile ? cloneState(profile) : null;
+}
+
 function decryptProfileApiKey(profile) {
   if (!profile || !profile.keyEnvelope) {
     throw keyUnavailable();
@@ -440,6 +448,7 @@ module.exports = {
   setActiveProfile,
   deleteProfile,
   getActiveProfileSnapshot,
+  getProfileSnapshot,
   decryptProfileApiKey,
   getAiProfileStatus,
   MAX_PROFILES,

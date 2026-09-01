@@ -32,6 +32,13 @@ async function startProvider() {
       const raw = Buffer.concat(chunks).toString("utf8");
       requests.push({ url: req.url, headers: req.headers, body: raw });
       res.setHeader("content-type", "application/json");
+      if (raw.includes("KWS_DIAGNOSTIC_OK")) {
+        return res.end(JSON.stringify({
+          id: "stub-diagnostic-request-1",
+          choices: [{ message: { content: "KWS_DIAGNOSTIC_OK" } }],
+          usage: { prompt_tokens: 2, completion_tokens: 1 }
+        }));
+      }
       res.end(JSON.stringify({
         id: "stub-request-1",
         choices: [{ message: { content: JSON.stringify({
@@ -238,5 +245,72 @@ test("admin AI suggest fails closed when the feature is disabled", async () => {
     assert.equal(response.data.error.code, "UNAUTHORIZED");
   } finally {
     await server.stop();
+  }
+});
+
+test("admin can diagnose a non-active profile and read bounded AI metrics", async () => {
+  const provider = await startProvider();
+  const server = await startKwsServer();
+  try {
+    const login = await requestJson(server.baseUrl, "/api/admin/login", {
+      method: "POST",
+      body: { username: "admin", password: "admin-password" }
+    });
+    const cookie = cookieFrom(login.response);
+    const save = async (name) => requestJson(server.baseUrl, "/api/admin/ai/profiles", {
+      method: "POST",
+      headers: { cookie },
+      body: {
+        name,
+        protocol: "openai-chat",
+        baseUrl: provider.baseUrl,
+        model: "stub-model",
+        key: "synthetic-provider-key"
+      }
+    });
+    const first = await save("Primary");
+    const second = await save("Secondary");
+    assert.equal(first.response.status, 200);
+    assert.equal(second.response.status, 200);
+    const active = await requestJson(server.baseUrl, "/api/admin/ai/profiles/active", {
+      method: "POST",
+      headers: { cookie },
+      body: { profileId: first.data.data.id }
+    });
+    assert.equal(active.response.status, 200);
+
+    const diagnostic = await requestJson(server.baseUrl, "/api/admin/ai/profiles/diagnose", {
+      method: "POST",
+      headers: { cookie },
+      body: { profileId: second.data.data.id }
+    });
+    assert.equal(diagnostic.response.status, 200, JSON.stringify(diagnostic.data));
+    assert.equal(diagnostic.data.data.status, "passed");
+    assert.equal(diagnostic.data.data.profileId, second.data.data.id);
+    assert.equal(diagnostic.data.data.checks.probeMatched, true);
+    assert.equal(diagnostic.data.data.endpoint, "/chat/completions");
+    assert.equal(JSON.stringify(diagnostic.data).includes("synthetic-provider-key"), false);
+
+    const status = await requestJson(server.baseUrl, "/api/admin/ai/status", { headers: { cookie } });
+    assert.equal(status.data.data.activeProfile.id, first.data.data.id);
+    const metricResponse = await requestJson(server.baseUrl, "/api/admin/ai/metrics?hours=24", { headers: { cookie } });
+    assert.equal(metricResponse.response.status, 200, JSON.stringify(metricResponse.data));
+    assert.equal(metricResponse.data.data.total, 1);
+    assert.equal(metricResponse.data.data.success, 1);
+    assert.equal(metricResponse.data.data.groups[0].operation, "provider_diagnostic");
+    assert.equal(provider.requests.length, 1);
+
+    const missingDiagnostic = await requestJson(server.baseUrl, "/api/admin/ai/profiles/diagnose", {
+      method: "POST",
+      headers: { cookie },
+      body: { profileId: "missing-profile" }
+    });
+    assert.equal(missingDiagnostic.response.status, 404);
+    assert.equal(missingDiagnostic.data.error.code, "NOT_FOUND");
+    assert.equal(missingDiagnostic.data.error.message, "AI profile 不存在");
+    assert.equal(provider.requests.length, 1);
+  } finally {
+    await server.stop();
+    await provider.stop();
   }
 });

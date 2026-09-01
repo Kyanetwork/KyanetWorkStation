@@ -228,3 +228,28 @@ test("malformed knowledge base JSON is isolated from core runtime configuration"
   assert.equal(config.aiKnowledge.parseError, "invalid-json");
   assert.equal(config.validateRuntimeConfig(config).valid, true);
 });
+
+test("AI metrics cleanup defaults to enabled with a 30-day retention", () => {
+  const config = loadConfigWithEnv({
+    AI_METRICS_RETENTION_DAYS: undefined,
+    AI_METRICS_AUTO_CLEANUP: undefined
+  });
+  assert.equal(config.aiMetricsRetentionDays, 30);
+  assert.equal(config.aiMetricsAutoCleanup, true);
+  assert.equal(config.validateRuntimeConfig(config).valid, true);
+});
+
+test("AI metrics configuration accepts bounded values and rejects invalid values", () => {
+  for (const value of [1, 3650]) {
+    const configured = loadConfigWithEnv({ AI_METRICS_RETENTION_DAYS: value, AI_METRICS_AUTO_CLEANUP: "false" });
+    assert.equal(configured.aiMetricsRetentionDays, value);
+    assert.equal(configured.aiMetricsAutoCleanup, false);
+    assert.equal(configured.validateRuntimeConfig(configured).valid, true);
+  }
+  for (const value of ["0", "3651", "1.5", "invalid"]) {
+    const configured = loadConfigWithEnv({ AI_METRICS_RETENTION_DAYS: value });
+    const result = configured.validateRuntimeConfig(configured);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((message) => message.includes("AI_METRICS_RETENTION_DAYS")));
+  }
+});

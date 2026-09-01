@@ -145,6 +145,104 @@ test("askKnowledge maps only current document source ids and does not persist in
   }
 });
 
+test("askKnowledge preserves an explicit provider usageReported=false in metrics", async () => {
+  const previousEnabled = config.ai.enabled;
+  const previousKnowledge = config.aiKnowledge;
+  config.ai.enabled = true;
+  config.aiKnowledge = { roots: [], cachePath: "" };
+  let metric = null;
+  const dependencies = {
+    knowledgeBase: {
+      loadIndex: () => ({ available: true, roots: [], chunks: [] }),
+      searchIndex: () => []
+    },
+    profiles: {
+      getActiveProfileSnapshot: async () => ({ id: "p", name: "P", protocol: "openai-chat", model: "m" }),
+      decryptProfileApiKey: () => "key"
+    },
+    provider: async () => ({
+      text: JSON.stringify({ answer: "回答", basis: "general", citedSourceIds: [] }),
+      usage: { inputTokens: null, outputTokens: null },
+      usageReported: false
+    }),
+    db: {
+      createAiKnowledgeAnswer: async () => 9
+    },
+    metrics: {
+      recordAiRequestMetricSafely: async (value) => { metric = value; return true; }
+    }
+  };
+  try {
+    await askKnowledge({ question: "问题", dependencies });
+    assert.equal(metric.usagePresent, false);
+    assert.deepEqual(metric.usage, { inputTokens: null, outputTokens: null });
+  } finally {
+    config.ai.enabled = previousEnabled;
+    config.aiKnowledge = previousKnowledge;
+  }
+});
+
+test("askKnowledge keeps invalid or unknown provider usage as null", async () => {
+  const previousEnabled = config.ai.enabled;
+  const previousKnowledge = config.aiKnowledge;
+  config.ai.enabled = true;
+  config.aiKnowledge = { roots: [], cachePath: "" };
+  const dependencies = {
+    knowledgeBase: {
+      loadIndex: () => ({ available: true, roots: [], chunks: [] }),
+      searchIndex: () => []
+    },
+    profiles: {
+      getActiveProfileSnapshot: async () => ({ id: "p", name: "P", protocol: "openai-chat", model: "m" }),
+      decryptProfileApiKey: () => "key"
+    },
+    provider: async () => ({
+      text: JSON.stringify({ answer: "回答", basis: "general", citedSourceIds: [] }),
+      usage: { inputTokens: null, outputTokens: "", ignored: true }
+    }),
+    db: { createAiKnowledgeAnswer: async () => 11 }
+  };
+  try {
+    const result = await askKnowledge({ question: "问题", dependencies });
+    assert.deepEqual(result.usage, { inputTokens: null, outputTokens: null });
+  } finally {
+    config.ai.enabled = previousEnabled;
+    config.aiKnowledge = previousKnowledge;
+  }
+});
+
+test("askKnowledge keeps its answer when metric persistence fails", async () => {
+  const previousEnabled = config.ai.enabled;
+  const previousKnowledge = config.aiKnowledge;
+  config.ai.enabled = true;
+  config.aiKnowledge = { roots: [], cachePath: "" };
+  const dependencies = {
+    knowledgeBase: {
+      loadIndex: () => ({ available: true, roots: [], chunks: [] }),
+      searchIndex: () => []
+    },
+    profiles: {
+      getActiveProfileSnapshot: async () => ({ id: "p", name: "P", protocol: "openai-chat", model: "m" }),
+      decryptProfileApiKey: () => "key"
+    },
+    provider: async () => ({ text: JSON.stringify({ answer: "回答", basis: "general", citedSourceIds: [] }), usage: null }),
+    db: {
+      createAiKnowledgeAnswer: async () => 10
+    },
+    metrics: {
+      recordAiRequestMetricSafely: async () => { throw new Error("database secret"); }
+    }
+  };
+  try {
+    const result = await askKnowledge({ question: "问题", dependencies });
+    assert.equal(result.id, 10);
+    assert.equal(result.answer, "回答");
+  } finally {
+    config.ai.enabled = previousEnabled;
+    config.aiKnowledge = previousKnowledge;
+  }
+});
+
 test("knowledge status and reindex fail closed when root configuration is invalid", async () => {
   const previousKnowledge = config.aiKnowledge;
   config.aiKnowledge = { roots: [], parseError: "invalid-json", cachePath: "" };

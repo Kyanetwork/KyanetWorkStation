@@ -299,6 +299,65 @@ test("generateSuggestion applies the bounded profile instruction and versions st
   }
 });
 
+test("generateSuggestion preserves an explicit provider usageReported=false in metrics", async () => {
+  const previousEnabled = config.ai.enabled;
+  config.ai.enabled = true;
+  let metric = null;
+  const dependencies = {
+    db: {
+      getFeedbackById: async () => ({ id: 11, type: "Bug", title: "t", content: "c", status: "new" }),
+      listAiSourceItems: async () => [],
+      createAiSuggestion: async () => 44
+    },
+    profiles: {
+      getActiveProfileSnapshot: async () => ({ id: "p", name: "P", protocol: "openai-chat", model: "m", keyEnvelope: { version: 1 } }),
+      decryptProfileApiKey: () => "key"
+    },
+    provider: async () => ({
+      text: JSON.stringify({ summary: "ok" }),
+      usage: { inputTokens: null, outputTokens: null },
+      usageReported: false
+    }),
+    metrics: {
+      recordAiRequestMetricSafely: async (value) => { metric = value; return true; }
+    }
+  };
+  try {
+    await generateSuggestion({ entityType: "feedback", entityId: 11, dependencies });
+    assert.equal(metric.usagePresent, false);
+    assert.deepEqual(metric.usage, { inputTokens: null, outputTokens: null });
+  } finally {
+    config.ai.enabled = previousEnabled;
+  }
+});
+
+test("generateSuggestion keeps its result when metric persistence fails", async () => {
+  const previousEnabled = config.ai.enabled;
+  config.ai.enabled = true;
+  const dependencies = {
+    db: {
+      getFeedbackById: async () => ({ id: 12, type: "Bug", title: "t", content: "c", status: "new" }),
+      listAiSourceItems: async () => [],
+      createAiSuggestion: async () => 45
+    },
+    profiles: {
+      getActiveProfileSnapshot: async () => ({ id: "p", name: "P", protocol: "openai-chat", model: "m", keyEnvelope: { version: 1 } }),
+      decryptProfileApiKey: () => "key"
+    },
+    provider: async () => ({ text: JSON.stringify({ summary: "ok" }), usage: null }),
+    metrics: {
+      recordAiRequestMetricSafely: async () => { throw new Error("database secret"); }
+    }
+  };
+  try {
+    const result = await generateSuggestion({ entityType: "feedback", entityId: 12, dependencies });
+    assert.equal(result.id, 45);
+    assert.equal(result.suggestion.summary, "ok");
+  } finally {
+    config.ai.enabled = previousEnabled;
+  }
+});
+
 test("generateSuggestion rejects a third concurrent request without creating a partial suggestion", async () => {
   const previousEnabled = config.ai.enabled;
   config.ai.enabled = true;

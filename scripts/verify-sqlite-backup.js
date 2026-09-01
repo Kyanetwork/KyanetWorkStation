@@ -16,6 +16,8 @@ const REQUIRED_TABLES = [
   "account_session",
   "notification_delivery",
   "ai_copilot_suggestion",
+  "ai_knowledge_answer",
+  "ai_request_metric",
   "workstation_setting",
   "admin_audit"
 ];

@@ -49,7 +49,18 @@ const METADATA_RULES = Object.freeze({
   indexedFiles: "number",
   chunkCount: "number",
   warningCount: "number",
-  deleted: "number"
+  deleted: "number",
+  outcome: "string",
+  durationMs: "number",
+  reachable: "boolean",
+  responseJson: "boolean",
+  textExtracted: "boolean",
+  probeMatched: "boolean",
+  responseWithinLimit: "boolean",
+  usageReported: "boolean",
+  reasoningEffortApplied: "boolean",
+  reasoningEffortSent: "boolean",
+  providerRequestIdPresent: "boolean"
 });
 
 function boundedString(value, maxLength) {

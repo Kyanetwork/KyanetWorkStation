@@ -177,6 +177,18 @@ test("Provider errors are bounded and map to stable error codes", async () => {
     }),
     (error) => error && error.code === "AI_INVALID_RESPONSE"
   );
+
+  await assert.rejects(
+    () => requestProviderSuggestion({
+      profile: profile("openai-chat", "https://provider.example/v1"),
+      prompt: "prompt",
+      fetchImpl: async () => ({
+        status: 200,
+        headers: { get() { return null; } }
+      })
+    }),
+    (error) => error && error.code === "AI_INVALID_RESPONSE" && error.providerMeta && error.providerMeta.responseWithinLimit === true
+  );
 });
 
 test("Provider usage with an explicit null value remains unknown", async () => {

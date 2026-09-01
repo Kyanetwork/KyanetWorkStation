@@ -756,6 +756,21 @@ function validateAiProfileDeletePayload(payload) {
   return result;
 }
 
+function validateAiProfileDiagnosePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const result = normalizeAiProfileIdPayload(body, "profileId", "profile id 不合法");
+  if (!result.valid) return result;
+  if (!result.data.profileId) return { valid: false, message: "profile id 不合法" };
+  return result;
+}
+
+function validateAiMetricsQueryPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const hours = parseStrictPositiveInteger(body.hours, "hours", 720, 24);
+  if (!hours.valid) return hours;
+  return { valid: true, data: { hours: hours.value } };
+}
+
 function validateAiEntityPayload(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const entityType = normalizeString(body.entityType);
@@ -911,6 +926,8 @@ module.exports = {
   validateAiProfilePayload,
   validateAiProfileActivePayload,
   validateAiProfileDeletePayload,
+  validateAiProfileDiagnosePayload,
+  validateAiMetricsQueryPayload,
   validateAiSuggestPayload,
   validateAiSuggestionsQueryPayload,
   validateAiSuggestionDecisionPayload,

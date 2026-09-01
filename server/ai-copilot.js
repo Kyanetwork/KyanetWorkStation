@@ -3,6 +3,7 @@ const config = require("./config");
 const { logger } = require("./logger");
 const db = require("./db");
 const profiles = require("./ai-profiles");
+const aiMetrics = require("./ai-metrics");
 const {
   requestProviderSuggestion,
   parseSuggestionText
@@ -239,7 +240,8 @@ function dependenciesFrom(value) {
   return {
     db: deps.db || db,
     profiles: deps.profiles || profiles,
-    provider: deps.provider || requestProviderSuggestion
+    provider: deps.provider || requestProviderSuggestion,
+    metrics: deps.metrics || aiMetrics
   };
 }
 
@@ -256,6 +258,10 @@ async function generateSuggestion({ entityType, entityId, requestId = "", actor 
   inFlight += 1;
   const deps = dependenciesFrom(dependencies);
   const startedAt = Date.now();
+  let providerAttempted = false;
+  let providerResult = null;
+  let metricProfile = null;
+  let operationError = null;
   const logContext = {
     requestId: safeText(requestId, AI_LOG_REQUEST_ID_MAX),
     entityType: entityType === "worktask" ? "worktask" : "feedback",
@@ -284,6 +290,7 @@ async function generateSuggestion({ entityType, entityId, requestId = "", actor 
       if (error && error.code === "AI_KEY_UNAVAILABLE") throw error;
       throw aiError("AI_KEY_UNAVAILABLE", "AI profile 密钥不可用");
     }
+    metricProfile = activeProfile;
 
     const sourceItems = typeof deps.db.listAiSourceItems === "function"
       ? await deps.db.listAiSourceItems(100)
@@ -297,7 +304,8 @@ async function generateSuggestion({ entityType, entityId, requestId = "", actor 
       items: sourceItems
     });
     const prompt = buildCopilotPrompt(input, similarItems, activeProfile.promptInstruction);
-    const providerResult = await deps.provider({
+    providerAttempted = true;
+    providerResult = await deps.provider({
       profile: { ...activeProfile, apiKey },
       prompt,
       requestId,
@@ -344,6 +352,7 @@ async function generateSuggestion({ entityType, entityId, requestId = "", actor 
     }, "AI suggestion generated");
     return output;
   } catch (error) {
+    operationError = error;
     logger.warn({
       event: "ai.copilot.request.failure",
       ...logContext,
@@ -352,6 +361,25 @@ async function generateSuggestion({ entityType, entityId, requestId = "", actor 
     }, "AI suggestion failed");
     throw error;
   } finally {
+    if (providerAttempted && metricProfile) {
+      try {
+        await deps.metrics.recordAiRequestMetricSafely({
+          operation: "copilot_suggest",
+          profileId: metricProfile.id,
+          protocol: metricProfile.protocol,
+          model: metricProfile.model,
+          status: operationError ? aiMetrics.statusForError(operationError) : "success",
+          durationMs: Math.max(0, Math.min(600000, Date.now() - startedAt)),
+          usage: providerResult && providerResult.usage,
+          usagePresent: providerResult && typeof providerResult.usageReported === "boolean"
+            ? providerResult.usageReported
+            : Boolean(providerResult && providerResult.usage && typeof providerResult.usage === "object" && !Array.isArray(providerResult.usage)),
+          errorCode: operationError && operationError.code ? operationError.code : ""
+        }, { db: deps.db });
+      } catch (_) {
+        // AI metrics are best effort and must not alter the primary result.
+      }
+    }
     inFlight -= 1;
   }
 }
