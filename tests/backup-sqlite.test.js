@@ -139,6 +139,7 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
       "admin_session",
       "admin_user",
       "ai_copilot_suggestion",
+      "ai_knowledge_answer",
       "feedback",
       "notification_delivery",
       "sqlite_sequence",
@@ -148,7 +149,7 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
     assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM feedback").get().count, 1);
     assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM worktask").get().count, 1);
     assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM admin_user").get().count, 1);
-    assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM workstation_setting").get().count, 3);
+    assert.equal(restored.prepare("SELECT COUNT(*) AS count FROM workstation_setting").get().count, 4);
 
     const verifyResult = spawnSync(process.execPath, [VERIFY_SCRIPT, "--backup", backupPath], {
       cwd: ROOT_DIR,

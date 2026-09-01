@@ -10,6 +10,7 @@ const client = (config.dbClient || "sqlite").toLowerCase();
 const STATUS_PROFILE_SETTING_KEY = "status.profile";
 const MINECRAFT_STATUS_SETTING_KEY = "status.minecraft";
 const AI_PROVIDER_PROFILES_SETTING_KEY = "ai_provider_profiles";
+const AI_KNOWLEDGE_SETTINGS_KEY = "ai_knowledge_settings";
 const DEFAULT_AI_PROVIDER_PROFILES = {
   version: 1,
   activeProfileId: "",
@@ -23,6 +24,10 @@ const DEFAULT_STATUS_PROFILE = {
 };
 const DEFAULT_MINECRAFT_STATUS = {
   enabled: false,
+  updatedAt: ""
+};
+const DEFAULT_AI_KNOWLEDGE_SETTINGS = {
+  autoCleanup: true,
   updatedAt: ""
 };
 
@@ -279,6 +284,24 @@ function sqliteSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)",
+    `CREATE TABLE IF NOT EXISTS ai_knowledge_answer (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      basis TEXT NOT NULL,
+      caveats TEXT NOT NULL DEFAULT '',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      root_id TEXT NOT NULL DEFAULT '',
+      profile_id TEXT NOT NULL DEFAULT '',
+      protocol TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      usage_json TEXT NOT NULL DEFAULT '{}',
+      prompt_version TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_created_at ON ai_knowledge_answer(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_expires_at ON ai_knowledge_answer(expires_at)",
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
@@ -417,6 +440,24 @@ function mysqlSchemaStatements() {
       INDEX idx_ai_suggestion_entity_created (entity_type, entity_id, created_at),
       INDEX idx_ai_suggestion_expires_at (expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS ai_knowledge_answer (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      basis VARCHAR(16) NOT NULL,
+      caveats VARCHAR(1200) NOT NULL DEFAULT '',
+      sources_json TEXT NOT NULL,
+      root_id VARCHAR(128) NOT NULL DEFAULT '',
+      profile_id VARCHAR(128) NOT NULL DEFAULT '',
+      protocol VARCHAR(64) NOT NULL DEFAULT '',
+      model VARCHAR(120) NOT NULL DEFAULT '',
+      usage_json TEXT NOT NULL,
+      prompt_version VARCHAR(64) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      expires_at VARCHAR(40) NOT NULL,
+      INDEX idx_ai_knowledge_answer_created_at (created_at),
+      INDEX idx_ai_knowledge_answer_expires_at (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
       created_at VARCHAR(40) NOT NULL,
@@ -552,6 +593,24 @@ function postgresSchemaStatements() {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_entity_created ON ai_copilot_suggestion(entity_type, entity_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_ai_suggestion_expires_at ON ai_copilot_suggestion(expires_at)",
+    `CREATE TABLE IF NOT EXISTS ai_knowledge_answer (
+      id BIGSERIAL PRIMARY KEY,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      basis TEXT NOT NULL,
+      caveats TEXT NOT NULL DEFAULT '',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      root_id TEXT NOT NULL DEFAULT '',
+      profile_id TEXT NOT NULL DEFAULT '',
+      protocol TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      usage_json TEXT NOT NULL DEFAULT '{}',
+      prompt_version TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_created_at ON ai_knowledge_answer(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_knowledge_answer_expires_at ON ai_knowledge_answer(expires_at)",
     `CREATE TABLE IF NOT EXISTS admin_audit (
       id BIGSERIAL PRIMARY KEY,
       created_at TEXT NOT NULL,
@@ -585,6 +644,7 @@ async function initializeDatabase() {
   await ensureAccountSessionSchema();
   await ensureStatusSettings();
   await ensureAiProviderProfilesSetting();
+  await ensureAiKnowledgeSettings();
 }
 
 async function columnExists(tableName, columnName) {
@@ -1069,6 +1129,187 @@ async function deleteExpiredAiSuggestions(now = nowIso()) {
   return result.changes;
 }
 
+const KNOWLEDGE_BASIS = new Set(["document", "mixed", "general"]);
+const KNOWLEDGE_SOURCE_FIELDS = ["sourceId", "libraryName", "relativePath", "title", "heading", "excerpt"];
+
+function boundedDbText(value, maxLength) {
+  const text = typeof value === "string" ? value : value == null ? "" : String(value);
+  return Array.from(text).slice(0, maxLength).join("");
+}
+
+function isSafeKnowledgeRelativePath(value) {
+  if (!value || value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/u.test(value)) {
+    return false;
+  }
+  const segments = value.replace(/\\/gu, "/").split("/");
+  return segments.length > 0 && !segments.some((segment) => segment === ".." || segment === "");
+}
+
+function normalizeKnowledgeSources(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 6).map((entry) => {
+    const source = entry && typeof entry === "object" && !Array.isArray(entry) ? entry : {};
+    const normalized = {};
+    for (const field of KNOWLEDGE_SOURCE_FIELDS) {
+      if (typeof source[field] !== "string") continue;
+      const maxLength = field === "excerpt" ? 1200 : field === "relativePath" ? 500 : field === "title" || field === "heading" ? 300 : 128;
+      const text = boundedDbText(source[field], maxLength).trim();
+      if (!text) continue;
+      if (field === "relativePath" && !isSafeKnowledgeRelativePath(text)) continue;
+      normalized[field] = text;
+    }
+    return normalized;
+  }).filter((source) => Object.keys(source).length > 0);
+}
+
+function normalizeKnowledgeUsage(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const normalizeTokenCount = (candidate) => {
+    const number = typeof candidate === "number" ? candidate : Number(candidate);
+    return Number.isSafeInteger(number) && number >= 0 ? number : null;
+  };
+  return {
+    inputTokens: normalizeTokenCount(source.inputTokens),
+    outputTokens: normalizeTokenCount(source.outputTokens)
+  };
+}
+
+function mapAiKnowledgeAnswerRow(row, now = nowIso()) {
+  let sources = [];
+  let usage = normalizeKnowledgeUsage(null);
+  try {
+    const parsedSources = JSON.parse(row.sources_json || "[]");
+    sources = normalizeKnowledgeSources(parsedSources);
+  } catch (_) {
+    sources = [];
+  }
+  try {
+    usage = normalizeKnowledgeUsage(JSON.parse(row.usage_json || "{}"));
+  } catch (_) {
+    usage = normalizeKnowledgeUsage(null);
+  }
+  const expiresAt = boundedDbText(row.expires_at, 40);
+  const expiresTime = Date.parse(expiresAt);
+  const nowTime = Date.parse(now);
+  return {
+    id: toNumber(row.id),
+    question: boundedDbText(row.question, 4000),
+    answer: boundedDbText(row.answer, 6000),
+    basis: KNOWLEDGE_BASIS.has(row.basis) ? row.basis : "general",
+    caveats: boundedDbText(row.caveats, 1200),
+    sources,
+    rootId: boundedDbText(row.root_id, 128),
+    profileId: boundedDbText(row.profile_id, 128),
+    protocol: boundedDbText(row.protocol, 64),
+    model: boundedDbText(row.model, 120),
+    usage,
+    promptVersion: boundedDbText(row.prompt_version, 64),
+    createdAt: boundedDbText(row.created_at, 40),
+    expiresAt,
+    expired: Number.isFinite(expiresTime) && Number.isFinite(nowTime) ? expiresTime <= nowTime : false
+  };
+}
+
+function knowledgeAnswerRetentionMs() {
+  const configured = config && (
+    config.aiKnowledgeHistoryRetentionDays ||
+    (config.knowledge && config.knowledge.historyRetentionDays)
+  );
+  const days = Number(configured);
+  return Number.isFinite(days) && days >= 1 && days <= 3650
+    ? Math.trunc(days) * 24 * 60 * 60 * 1000
+    : 30 * 24 * 60 * 60 * 1000;
+}
+
+async function createAiKnowledgeAnswer(input = {}) {
+  const question = boundedDbText(input.question, 4000).trim();
+  const answer = boundedDbText(input.answer, 6000);
+  const basis = KNOWLEDGE_BASIS.has(input.basis) ? input.basis : "general";
+  const caveats = boundedDbText(input.caveats, 1200);
+  const sourcesJson = JSON.stringify(normalizeKnowledgeSources(input.sources));
+  const rootId = boundedDbText(input.rootId, 128).trim();
+  const profileId = boundedDbText(input.profileId, 128).trim();
+  const protocol = boundedDbText(input.protocol, 64).trim();
+  const model = boundedDbText(input.model, 120).trim();
+  const usageJson = JSON.stringify(normalizeKnowledgeUsage(input.usage));
+  const promptVersion = boundedDbText(input.promptVersion, 64).trim();
+  const createdAt = typeof input.createdAt === "string" && !Number.isNaN(Date.parse(input.createdAt))
+    ? input.createdAt.slice(0, 40)
+    : nowIso();
+  const expiresAt = typeof input.expiresAt === "string" && !Number.isNaN(Date.parse(input.expiresAt))
+    ? input.expiresAt.slice(0, 40)
+    : new Date(Date.parse(createdAt) + knowledgeAnswerRetentionMs()).toISOString();
+  const params = [question, answer, basis, caveats, sourcesJson, rootId, profileId, protocol, model, usageJson, promptVersion, createdAt, expiresAt];
+  const marks = params.map((_, index) => placeholder(index + 1));
+  const columns = "question, answer, basis, caveats, sources_json, root_id, profile_id, protocol, model, usage_json, prompt_version, created_at, expires_at";
+  const sql = client === "postgres"
+    ? `INSERT INTO ai_knowledge_answer (${columns}) VALUES (${marks.join(", ")}) RETURNING id`
+    : `INSERT INTO ai_knowledge_answer (${columns}) VALUES (${marks.join(", ")})`;
+  const result = await execute(sql, params);
+  return result.lastInsertId;
+}
+
+async function getAiKnowledgeAnswerById(id, now = nowIso()) {
+  const p1 = placeholder(1);
+  const row = await queryOne(
+    `SELECT id, question, answer, basis, caveats, sources_json, root_id, profile_id, protocol, model, usage_json, prompt_version, created_at, expires_at
+     FROM ai_knowledge_answer WHERE id = ${p1} LIMIT 1`,
+    [id]
+  );
+  return row ? mapAiKnowledgeAnswerRow(row, now) : null;
+}
+
+async function listAiKnowledgeAnswers({ page = 1, pageSize = 20, keyword = "", rootId = "", now = nowIso() } = {}) {
+  const normalizedPage = Number.isSafeInteger(Number(page)) && Number(page) > 0 ? Math.min(Number(page), 100000) : 1;
+  const normalizedPageSize = Number.isSafeInteger(Number(pageSize)) && Number(pageSize) > 0 ? Math.min(Number(pageSize), 100) : 20;
+  const normalizedKeyword = boundedDbText(keyword, 200).trim();
+  const normalizedRootId = boundedDbText(rootId, 128).trim();
+  const conditions = [];
+  const params = [];
+  let parameterIndex = 1;
+  if (normalizedKeyword) {
+    conditions.push(`(question LIKE ${placeholder(parameterIndex)} OR answer LIKE ${placeholder(parameterIndex + 1)})`);
+    const query = `%${normalizedKeyword}%`;
+    params.push(query, query);
+    parameterIndex += 2;
+  }
+  if (normalizedRootId) {
+    conditions.push(`root_id = ${placeholder(parameterIndex++)}`);
+    params.push(normalizedRootId);
+  }
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM ai_knowledge_answer ${whereClause}`, params);
+  const offset = (normalizedPage - 1) * normalizedPageSize;
+  const limitMarker = placeholder(parameterIndex++);
+  const offsetMarker = placeholder(parameterIndex++);
+  const rows = await queryAll(
+    `SELECT id, question, answer, basis, caveats, sources_json, root_id, profile_id, protocol, model, usage_json, prompt_version, created_at, expires_at
+     FROM ai_knowledge_answer ${whereClause}
+     ORDER BY created_at DESC, id DESC LIMIT ${limitMarker} OFFSET ${offsetMarker}`,
+    [...params, normalizedPageSize, offset]
+  );
+  const total = toNumber(totalRow && totalRow.count);
+  return {
+    items: rows.map((row) => mapAiKnowledgeAnswerRow(row, now)),
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    total,
+    totalPages: total > 0 ? Math.ceil(total / normalizedPageSize) : 0
+  };
+}
+
+async function deleteAiKnowledgeAnswer(id) {
+  const p1 = placeholder(1);
+  const result = await execute(`DELETE FROM ai_knowledge_answer WHERE id = ${p1}`, [id]);
+  return result.changes;
+}
+
+async function deleteExpiredAiKnowledgeAnswers(now = nowIso()) {
+  const p1 = placeholder(1);
+  const result = await execute(`DELETE FROM ai_knowledge_answer WHERE expires_at <= ${p1}`, [now]);
+  return result.changes;
+}
+
 async function ensureSettingJson(key, defaults) {
   const p1 = placeholder(1);
   const row = await queryOne(`SELECT setting_key FROM workstation_setting WHERE setting_key = ${p1} LIMIT 1`, [key]);
@@ -1086,6 +1327,31 @@ async function ensureStatusSettings() {
 
 async function ensureAiProviderProfilesSetting() {
   await ensureSettingJson(AI_PROVIDER_PROFILES_SETTING_KEY, DEFAULT_AI_PROVIDER_PROFILES);
+}
+
+function normalizeAiKnowledgeSettings(value, updatedAt = "") {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    autoCleanup: typeof raw.autoCleanup === "boolean" ? raw.autoCleanup : DEFAULT_AI_KNOWLEDGE_SETTINGS.autoCleanup,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt.slice(0, 40) : updatedAt
+  };
+}
+
+async function ensureAiKnowledgeSettings() {
+  await ensureSettingJson(AI_KNOWLEDGE_SETTINGS_KEY, DEFAULT_AI_KNOWLEDGE_SETTINGS);
+}
+
+async function getAiKnowledgeSettings() {
+  return normalizeAiKnowledgeSettings(
+    await getSettingJson(AI_KNOWLEDGE_SETTINGS_KEY, DEFAULT_AI_KNOWLEDGE_SETTINGS)
+  );
+}
+
+async function setAiKnowledgeSettings(value) {
+  const next = normalizeAiKnowledgeSettings(value);
+  next.updatedAt = nowIso();
+  await setSettingJson(AI_KNOWLEDGE_SETTINGS_KEY, next);
+  return next;
 }
 
 async function getStatusSettings() {
@@ -2142,6 +2408,9 @@ async function closeDatabase() {
 
 module.exports = {
   client,
+  sqliteSchemaStatements,
+  mysqlSchemaStatements,
+  postgresSchemaStatements,
   initializeDatabase,
   ensureBootstrapAdmin,
   cleanupExpiredSessions,
@@ -2194,6 +2463,13 @@ module.exports = {
   listAiSuggestions,
   recordAiSuggestionDecision,
   deleteExpiredAiSuggestions,
+  createAiKnowledgeAnswer,
+  getAiKnowledgeAnswerById,
+  listAiKnowledgeAnswers,
+  deleteAiKnowledgeAnswer,
+  deleteExpiredAiKnowledgeAnswers,
+  getAiKnowledgeSettings,
+  setAiKnowledgeSettings,
   enqueueNotificationDelivery,
   enqueueNotificationDeliveries,
   listDueNotificationDeliveries,
