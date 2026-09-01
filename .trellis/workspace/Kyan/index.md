@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-08-31
+- **Total Sessions**: 8
+- **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~181 | Active |
+| `journal-1.md` | ~204 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-09-01 | P1-B Provider 诊断与 AI 指标 | `ed3ed01`, `6a319a1`, `2d98403` | `main` |
 | 7 | 2026-08-31 | P1 AI 知识助手与 WorkStation UI 收尾 | `9427f1d`, `2a81c30`, `6a25e3b`, `cc620bf`, `34f5745`, `9d42a64`, `fc572f4` | `main` |
 | 6 | 2026-08-31 | R-002 管理导出与审计收尾 | `b60851d`, `a06f218` | `main` |
 | 5 | 2026-08-28 | P1 管理员 AI Copilot 实现与收尾 | `2fb5405`, `015c51f` | `main` |

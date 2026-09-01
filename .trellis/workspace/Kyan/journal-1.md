@@ -179,3 +179,26 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: P1-B Provider 诊断与 AI 指标
+
+**Date**: 2026-09-01
+**Task**: P1-B Provider 诊断与 AI 指标
+**Branch**: `main`
+
+### Summary
+
+完成按 profile 的显式 Provider 真实诊断、固定 sentinel、Responses reasoning_effort 标记、三协议边界与有界 AI 请求指标；接入管理员诊断/指标面板、自动清理、审计脱敏、备份关键表校验及文档规范。通过 npm test 180/180、npm audit 0 vulnerabilities、Node 语法检查、git diff --check、Trellis 校验；已归档任务，未 push。生产真实 Provider 诊断待在已配置 AI 的服务器上执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed3ed01` | (see git log) |
+| `6a319a1` | (see git log) |
+| `2d98403` | (see git log) |
+
+### Status
+
+[OK] **Completed**
