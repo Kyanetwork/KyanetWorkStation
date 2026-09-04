@@ -34,6 +34,11 @@ npm ci --omit=dev --foreground-scripts
 node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqlite3 ok')"
 ```
 
+项目管理是纯增量数据库能力。新版首次启动会在现有数据库上幂等创建 `project`、
+`project_milestone`、`project_item` 及索引，不回填或修改 Feedback/WorkTask 原表；发布前仍应
+备份并确认数据库可读，启动后用管理员/API 冒烟验证项目列表、归档/恢复、里程碑和来源归属。
+旧版本回滚时保留这三张新表即可，旧代码会忽略它们，不要为回滚执行 `DROP TABLE`。
+
 若当前目录是手动上传的、没有可信 Git 历史，先在旁边目录克隆并完成健康检查，
 再切换服务目录；不要在未备份时对现有目录执行 `git init` 或强制覆盖。Git 更新
 只应覆盖受版本控制的代码、静态资源、脚本和文档。以下内容必须保留在部署环境，
@@ -90,6 +95,17 @@ pm2 save
 pm2 status
 curl -fsS http://127.0.0.1:3000/api/health
 ```
+
+项目发布后的最小冒烟（在管理员会话下）还应覆盖：
+
+```bash
+# 通过页面或等价 API 完成：创建项目 → 新增/完成/撤销/恢复里程碑
+# → 分别绑定 Feedback 与 WorkTask → 归档/恢复 → 设置公开开关
+curl -fsS http://127.0.0.1:3000/api/public/projects
+```
+
+公共项目详情只使用页面返回的 `publicKey` 访问 `/api/public/projects/<publicKey>`；归档、未公开和
+不存在项目应统一返回 404。来源详情中的绑定、里程碑调整和解绑必须在管理员页面重新读取详情后确认。
 
 在维护窗口可用 `pm2 logs kyanet-workstation --lines 50` 查看最近日志。要验证开机恢复，
 先确认 `pm2 save` 已完成，再重启服务器；重新登录后检查 `pm2 status`、`pm2 show

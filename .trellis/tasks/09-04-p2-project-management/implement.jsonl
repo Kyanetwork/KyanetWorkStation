@@ -1,1 +1,11 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/tasks/09-04-p2-project-management/research/data-model-options.md","reason":"已确认的 project/project_milestone/project_item 多态关系、唯一归属和三驱动 schema 取舍。"}
+{"file":".trellis/spec/backend/index.md","reason":"后端变更前置清单、API/数据库边界和质量门禁入口。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"三驱动 schema、参数化 SQL、映射、增量初始化和无事务 facade 约束。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"管理会话、同源/JSON 中间件、错误 envelope 和 404/409 映射契约。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试、审计脱敏、公共 projection allow-list 和运行时检查规则。"}
+{"file":".trellis/spec/frontend/index.md","reason":"静态页面变更前置清单和浏览器行为质量要求。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"原生 HTML 组件、按钮 type、转义、可访问性和直角视觉约束。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"管理员 page-local state、hash、服务端刷新和禁止持久化业务数据的约束。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"node --check、亮暗主题、窄屏、键盘和 API 错误状态人工冒烟清单。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"纯 JavaScript API 边界归一化、缺省字段和安全渲染规则。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"数据库→API→管理员/公共页面的数据流、allow-list 和跨层回归检查。"}

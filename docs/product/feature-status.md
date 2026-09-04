@@ -27,7 +27,8 @@
 | 服务状态卡片与适配器边界 | 已实现/P1 | `server/meowstatus.js`、`public/index/main.js`；当前仅复用 MeowStatus，不建设通用插件平台 |
 | 管理员 AI Copilot | 已实现/P1 增强 | 默认关闭；多 profile 单 active 热切换；OpenAI Chat/Responses、Anthropic Messages；摘要、分类、优先级、标签、相似条目和回复草稿；支持 Responses `reasoning_effort`、受控附加指令、按 profile 真实 Provider 诊断与有界请求指标；建议仅供人工确认 |
 | 管理员个人知识助手 | 已实现/P1 | 外部 Markdown/TXT 只读目录、显式索引、确定性检索、服务端引用映射、`document/mixed/general` 依据、问答历史与可开关自动清理；不修改业务、不执行文档指令 |
-| Kanban、子任务、里程碑 | P2 计划 | 依赖 P1 工作收件箱稳定 |
+| P2 项目管理基础能力 | 已实现/P2 | `project`/`project_milestone`/`project_item` 三表增量模型；Feedback 与 WorkTask 分立归属、里程碑生命周期、自动/自定义完成度、管理员 hash 详情和按开关控制的公共项目列表/详情；完整 Kanban、子任务、依赖和批量操作仍延期 |
+| Kanban、子任务、依赖和批量操作 | P2 计划 | 建立在项目组织层之上，需单独设计关系图、并发和批量交互 |
 | 用户侧/运维侧 AI | P2 计划 | 依赖 Provider、脱敏和权限边界；当前不开放 |
 | 新 KyanetAccount 联动 | P2/独立计划 | 未来按新协议设计，不自动认领历史匿名记录 |
 | 原生文件上传、实时聊天、多租户、复杂 RBAC | 暂缓 | 当前不满足规模和维护成本目标 |

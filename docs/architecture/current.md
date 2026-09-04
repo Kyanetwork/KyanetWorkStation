@@ -64,6 +64,28 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 
 反馈和 WorkTask 保持独立业务表。未来工作台通过聚合读取层和安全 DTO 组合展示，不直接改变两张表的业务语义。
 
+### 项目组织层
+
+项目能力由 `project`、`project_milestone` 和 `project_item` 三张增量表承载，SQLite、MySQL、
+PostgreSQL 使用等价字段和索引。`project_item` 以 `source_type + source_id` 唯一约束保证一条
+Feedback 或 WorkTask 只能归属一个项目；里程碑关联由服务端校验为同项目且有效。项目归档和里程碑
+撤销均为软状态，撤销里程碑会清空关联但恢复不会自动重绑。
+
+管理端请求流为：
+
+```text
+管理员项目列表/来源详情
+  -> validation.js（ID、枚举、Unicode 长度、日期、公开开关）
+  -> app.js（管理员会话 + 同源/JSON）
+  -> db.js（项目/里程碑/多态关系 CRUD 与孤儿清理）
+  -> 脱敏 admin DTO + 审计 metadata
+```
+
+公共端只通过 `listPublicProjects`/`getPublicProjectByKey` 查询，使用创建时生成且不可变的随机
+`publicKey`。基础信息、里程碑、更新时间和完成度分别受项目级开关控制；公共投影只包含名称、说明、
+有效里程碑、安全日期/完成度，不包含来源 ID、正文、联系方式、管理员字段或数据库内部 ID。项目管理
+不驱动 AI、通知或 Account 联动。
+
 ## 认证边界（当前代码状态）
 
 - 管理员会话使用独立 Cookie 和服务端会话表，Token 只以哈希形式保存。

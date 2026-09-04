@@ -24,7 +24,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`。
 - 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
   干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
-  当前完整测试为 `123/123`（以最近一次 Node 24 `npm test` 输出为准）。
+  当前完整测试为 `196/196`（2026-09-04，Node 24 / better-sqlite3 13.0.3）。
 
 ## 必须覆盖的行为
 
@@ -48,16 +48,21 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
   `X-Export-Count`、`ADMIN_EXPORT_MAX_ROWS` 超限拒绝和流中断关闭。
 - 管理员状态、删除、主页展示、备注/回复、安排/创建、AI 决策、通知重试和状态设置等动作
   写入 `admin_audit`；需验证管理员权限、分页筛选、白名单元数据和审计写入失败降级。
+- 项目管理需验证项目创建/编辑/归档/恢复、里程碑完成/撤销/恢复、Feedback 与 WorkTask 单项目
+  归属/换里程碑/解绑、冲突错误和写入后真实状态重读；归档项目不得新增里程碑或绑定。
+- 公共项目列表/详情只能通过随机 `publicKey` 访问；基础信息、里程碑、更新时间和完成度按独立开关
+  投影，归档/未公开/不存在统一 404，响应不得出现内部 ID、来源正文、联系方式或管理员字段。
 
 ## 发布门禁
 
 | 门禁 | 证据 | 状态 |
 |---|---|---|
 | 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
-| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：123/123 |
-| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | canonical registry 当前 0 项 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：196/196（2026-09-04） |
+| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | 阻塞：2026-09-04 canonical registry 报告 `qs@6.15.3` 依赖链 3 个 moderate；强制修复会升级 Express 5，需独立兼容性任务，不在本次发布中直接执行 |
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |
+| 项目管理 API/UI | 项目 CRUD、里程碑、来源归属冲突、hash 详情、公共开关和窄屏/主题冒烟 | 自动回归已覆盖；部署环境需执行一次管理员与公共页面冒烟 |
 | AI Copilot 边界 | AI profile/API/Provider/Copilot 回归与状态降级 | 本地 stub 与隔离 HTTP 已覆盖；真实 Provider 按运维手册受控验证 |
 | AI Provider 真实诊断 | 对当前部署目标点击一次指定 profile 的固定 sentinel；记录脱敏 status/协议/模型摘要/耗时/usage/错误码且 active 不变 | `<PASS_OR_BLOCKER>` |
 | AI 请求指标 | 生成一次建议/问答或诊断后读取 24h 汇总，确认三类 operation、状态、耗时、未知 usage 和自动清理边界 | `<PASS_OR_BLOCKER>` |

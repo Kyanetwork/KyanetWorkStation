@@ -39,6 +39,43 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/notify/smtp-test` | 发送 SMTP 测试邮件 |
 | `POST /api/admin/notify/webhook-test` | 发送 Webhook 测试消息 |
 
+### 管理员项目管理
+
+项目是 Feedback 与 WorkTask 的组织层；两类来源仍使用各自原生表、状态和处理接口，单条来源最多
+归属一个项目。项目、里程碑和来源关系接口均要求管理员会话，写接口还要求 JSON 与同源请求。
+
+| 方法与路径 | 用途 |
+|---|---|
+| `POST /api/admin/project/list` | 分页查询项目；`status` 支持 `all`、`active`、`archived`，可按关键词筛选 |
+| `GET /api/admin/project/:id` | 读取项目详情、全部里程碑和按 Feedback/WorkTask 分开的安全来源摘要 |
+| `GET /api/admin/project/item?sourceType=...&sourceId=...` | 查询单条来源当前项目归属 |
+| `POST /api/admin/project/item-candidates` | 按来源类型和关键词分页查询可绑定候选项 |
+| `POST /api/admin/project/create` | 创建项目 |
+| `POST /api/admin/project/update` | 部分更新项目名称、说明、公开开关和自动/自定义完成度 |
+| `POST /api/admin/project/archive` / `restore` | 软归档或恢复项目；关系和来源记录保留 |
+| `POST /api/admin/project/milestone/create` | 为活跃项目新增里程碑 |
+| `POST /api/admin/project/milestone/update` | 更新里程碑标题、说明、目标日期、完成标记和排序 |
+| `POST /api/admin/project/milestone/revoke` / `restore` | 软撤销或恢复里程碑；撤销会解除关联且不自动重绑 |
+| `POST /api/admin/project/item/assign` | 将 Feedback/WorkTask 绑定到活跃项目，可选同项目有效里程碑 |
+| `POST /api/admin/project/item/update` | 调整同项目内的里程碑关联 |
+| `POST /api/admin/project/item/unassign` | 解除来源项目归属 |
+
+项目创建/更新字段包括 `name`（1–120 个 Unicode 字符）、`description`（最多 2000）、四个独立公开
+开关 `publicBasic`/`publicMilestones`/`publicUpdatedAt`/`publicCompletion`，以及
+`completionMode`（`auto`/`custom`）和 0–100 的 `customCompletion`。自动完成度按有效里程碑的完成比例
+四舍五入；无有效里程碑时为“未设置”。归档项目可以整理元数据和已有关系，但不能新增里程碑或绑定。
+
+公共项目接口不需要认证：
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /api/public/projects` | 返回基础信息公开且未归档项目的 `publicKey`、名称和说明 |
+| `GET /api/public/projects/:publicKey` | 按不可猜测的随机 key 返回公共详情；里程碑、更新时间、完成度按独立开关省略或返回 |
+
+公共投影不返回内部 ID、来源关联、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
+不存在或 key 不合法时统一返回 404。项目关系冲突返回 `PROJECT_ITEM_CONFLICT`，跨项目/撤销里程碑关联返回
+`PROJECT_MILESTONE_CONFLICT`，归档项目新增操作返回 `PROJECT_STATE_CONFLICT`。
+
 ### 管理员 AI Copilot
 
 | 方法与路径 | 用途 |

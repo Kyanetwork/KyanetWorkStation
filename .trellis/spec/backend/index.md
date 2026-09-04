@@ -14,6 +14,7 @@ stack.
 | [Quality Guidelines](./quality-guidelines.md) | JavaScript tests, security boundaries, and review checks | Current |
 | [Logging Guidelines](./logging-guidelines.md) | Pino fields, request ids, levels, and redaction | Current |
 | [External Boundaries](./external-boundaries.md) | MeowStatus, notification handoff, isolated backup verification, and AI Provider contracts | Current |
+| [Project Management](./project-management.md) | Project schema, source ownership, public projections, and API errors | Current |
 
 ## Pre-development checklist
 
