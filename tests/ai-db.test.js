@@ -79,7 +79,7 @@ test("AI profiles and suggestions persist with expiry filtering and decision aud
     assert.equal(listed[0].resultJson.summary, "summary");
     assert.equal(await db.getAiSuggestionById(activeId).then((row) => row.status), "available");
 
-    assert.equal(await db.recordAiSuggestionDecision(activeId, "accepted", ["replyDraft", "unknown"], "admin"), 1);
+    assert.equal(await db.recordAiSuggestionDecision(activeId, "accepted", ["replyDraft", "unknown"], "admin", now), 1);
     const decided = await db.getAiSuggestionById(activeId);
     assert.equal(decided.status, "accepted");
     assert.deepEqual(decided.acceptedFields, ["replyDraft"]);

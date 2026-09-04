@@ -122,6 +122,42 @@
     `).join("");
   }
 
+  function appendTextElement(parent, tagName, className, value) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    element.textContent = value == null ? "" : String(value);
+    parent.appendChild(element);
+    return element;
+  }
+
+  function renderPublicProjects(projectData) {
+    const section = document.getElementById("projectsShowcase");
+    const container = document.getElementById("projectHomeList");
+    if (!section || !container) return;
+
+    const projects = Array.isArray(projectData) ? projectData.filter((project) => (
+      project && typeof project.publicKey === "string" && project.publicKey.trim()
+    )) : [];
+    container.replaceChildren();
+    section.classList.toggle("hidden", projects.length === 0);
+    if (!projects.length) return;
+
+    for (const project of projects) {
+      const name = typeof project.name === "string" && project.name.trim()
+        ? project.name.trim()
+        : "未命名项目";
+      const card = document.createElement("a");
+      card.className = "project-home-card";
+      card.href = `/project/?key=${encodeURIComponent(project.publicKey.trim())}`;
+      card.setAttribute("aria-label", `查看项目：${name}`);
+      appendTextElement(card, "span", "project-kicker", "PUBLIC PROJECT");
+      appendTextElement(card, "h3", "project-home-card-title", name);
+      appendTextElement(card, "p", "project-home-card-description", project.description || "暂无项目说明。");
+      appendTextElement(card, "span", "project-home-card-action", "查看项目详情 →");
+      container.appendChild(card);
+    }
+  }
+
   function renderMeowStatus(statusData) {
     const section = document.getElementById("meowStatusSection");
     const profilePanel = document.getElementById("profileStatusPanel");
@@ -231,10 +267,12 @@
 
   async function loadHomeShowcase() {
     try {
-      const [uiConfig, highlights, meowStatus] = await Promise.all([
+      const publicProjects = fetchJson("/api/public/projects").catch(() => ({ items: [] }));
+      const [uiConfig, highlights, meowStatus, projects] = await Promise.all([
         fetchJson("/api/public/config"),
         fetchJson("/api/public/highlights"),
-        fetchJson("/api/public/meowstatus")
+        fetchJson("/api/public/meowstatus"),
+        publicProjects
       ]);
 
       state.locale = uiConfig.displayLocale || "zh-CN";
@@ -254,11 +292,13 @@
         "暂无被设置为主页显示的进行中任务。",
         (item) => `类型：${item.type} | 来源：${item.createdByAdmin ? "本人添加" : "用户提交"} | 状态：${worktaskStatusLabel(item.status)} | 优先级：${worktaskPriorityLabel(item.priority)} | 更新时间：${formatDateTime(item.updatedAt)}`
       );
+      renderPublicProjects(projects && projects.items);
       renderMeowStatus(meowStatus || {});
       startMeowStatusRefreshTimer();
     } catch (_) {
       renderList("homeFeedbackList", [], "主页展示数据加载失败，请稍后刷新。", () => "");
       renderList("homeWorktaskList", [], "主页展示数据加载失败，请稍后刷新。", () => "");
+      renderPublicProjects([]);
     }
   }
 

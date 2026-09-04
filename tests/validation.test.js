@@ -296,3 +296,11 @@ test("audit validator accepts knowledge assistant entity type", () => {
   assert.equal(result.valid, true);
   assert.equal(result.data.entityType, "ai_knowledge");
 });
+
+test("audit validator accepts project entity types", () => {
+  for (const entityType of ["project", "project_milestone", "project_item"]) {
+    const result = validateAuditListPayload({ entityType });
+    assert.equal(result.valid, true, entityType);
+    assert.equal(result.data.entityType, entityType);
+  }
+});

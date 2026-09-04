@@ -143,6 +143,9 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
       "ai_request_metric",
       "feedback",
       "notification_delivery",
+      "project",
+      "project_item",
+      "project_milestone",
       "sqlite_sequence",
       "workstation_setting",
       "worktask"
@@ -173,6 +176,9 @@ test("SQLite backup can be checksum-verified and restored in an isolated databas
     assert.equal(evidence.tables.ai_knowledge_answer.exists, true);
     assert.equal(evidence.tables.ai_request_metric.exists, true);
     assert.equal(evidence.tables.admin_audit.exists, true);
+    assert.equal(evidence.tables.project.exists, true);
+    assert.equal(evidence.tables.project_milestone.exists, true);
+    assert.equal(evidence.tables.project_item.exists, true);
     assert.equal(evidence.fullPath, undefined);
   } finally {
     if (restored) restored.close();
@@ -280,6 +286,17 @@ test("initializeDatabase upgrades legacy SQLite submissions and remains idempote
         const indexColumns = upgraded.prepare(`PRAGMA index_info(${indexName})`).all().map((row) => row.name);
         assert.deepEqual(indexColumns, ["account_user_id"], `${table} account index must target account_user_id`);
       }
+      for (const table of ["project", "project_milestone", "project_item"]) {
+        const exists = upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+        assert.ok(exists, `${table} must be added during legacy initialization`);
+      }
+      for (const indexName of ["idx_project_status_updated", "idx_project_milestone_project", "idx_project_item_project", "idx_project_item_milestone"]) {
+        const exists = upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").get(indexName);
+        assert.ok(exists, `${indexName} must be added during legacy initialization`);
+      }
+      assert.equal(upgraded.prepare("SELECT COUNT(*) AS count FROM project").get().count, 0);
+      assert.equal(upgraded.prepare("SELECT COUNT(*) AS count FROM project_milestone").get().count, 0);
+      assert.equal(upgraded.prepare("SELECT COUNT(*) AS count FROM project_item").get().count, 0);
     } finally {
       upgraded.close();
     }

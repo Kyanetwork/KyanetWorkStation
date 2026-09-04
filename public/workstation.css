@@ -1058,3 +1058,623 @@ textarea {
     width: 100%;
   }
 }
+
+/* Project management and public project pages share the same square, cool-tone
+   visual language as the existing workstation modules. */
+.project-shell,
+.project-public-content {
+  display: grid;
+  gap: var(--ws-space-4);
+}
+
+.project-header,
+.project-detail-head,
+.project-public-section-head,
+.project-home-heading,
+.project-public-milestone-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ws-space-4);
+}
+
+.project-header h2,
+.project-header p,
+.project-detail-head h3,
+.project-detail-head p,
+.project-home-heading h2,
+.project-home-heading p,
+.project-public-section-head h2,
+.project-public-section-head p {
+  margin: 0;
+}
+
+.project-header p,
+.project-home-heading p {
+  margin-top: 5px;
+  max-width: 68ch;
+  color: var(--ws-muted);
+  font-size: 13px;
+}
+
+.project-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ws-accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.project-toolbar {
+  padding: var(--ws-space-3);
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface-alt);
+}
+
+.project-create-form,
+.project-edit-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--ws-space-3);
+  padding: var(--ws-space-4);
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface-alt);
+}
+
+.project-create-form > label,
+.project-edit-form > label {
+  display: grid;
+  gap: 5px;
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-create-form > textarea,
+.project-edit-form > textarea,
+.project-create-form > .field-wide,
+.project-edit-form > .field-wide {
+  grid-column: 1 / -1;
+}
+
+.project-create-form > label:has(textarea),
+.project-edit-form > label:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+.project-create-form > label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.project-create-form input[type="checkbox"],
+.project-public-options input[type="checkbox"] {
+  min-height: auto;
+  accent-color: var(--ws-accent-strong);
+}
+
+.project-list {
+  display: grid;
+  gap: var(--ws-space-2);
+}
+
+.project-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ws-space-4);
+  padding: var(--ws-space-4);
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-accent);
+  background: var(--ws-surface);
+}
+
+.project-list-main {
+  min-width: 0;
+}
+
+.project-list-main h3 {
+  margin: 0 0 5px;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+.project-list-main p {
+  margin: 3px 0 0;
+}
+
+.project-detail {
+  border-top: 1px solid var(--ws-border-strong);
+  padding-top: var(--ws-space-5);
+}
+
+.project-detail-head {
+  align-items: center;
+  margin-bottom: var(--ws-space-4);
+}
+
+.project-detail-head h3 {
+  overflow-wrap: anywhere;
+  font-size: 22px;
+}
+
+.project-detail-head .meta {
+  margin-top: 5px;
+}
+
+.project-public-link,
+.project-public-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid var(--ws-border-strong);
+  padding: 8px 12px;
+  color: var(--ws-accent-strong);
+  background: var(--ws-accent-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.project-public-link:hover,
+.project-public-back:hover {
+  border-color: var(--ws-accent);
+  color: var(--ws-accent-strong);
+}
+
+.project-public-options {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: var(--ws-space-2) var(--ws-space-4);
+  margin: 0;
+  padding: var(--ws-space-3);
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface);
+}
+
+.project-public-options legend {
+  padding: 0 5px;
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-public-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ws-text);
+  font-size: 13px;
+}
+
+.project-subsection {
+  margin-top: var(--ws-space-5);
+  border-top: 1px solid var(--ws-border);
+  padding-top: var(--ws-space-4);
+}
+
+.subsection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ws-space-3);
+  margin-bottom: var(--ws-space-3);
+}
+
+.subsection-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.project-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr) minmax(90px, 0.6fr) auto;
+  align-items: center;
+  gap: var(--ws-space-2);
+  margin-bottom: var(--ws-space-3);
+}
+
+.project-milestone-list,
+.project-lane,
+.project-candidates {
+  display: grid;
+  gap: var(--ws-space-2);
+}
+
+.project-milestone-row,
+.project-lane-item,
+.project-candidate-row {
+  border: 1px solid var(--ws-border);
+  padding: var(--ws-space-3);
+  background: var(--ws-surface-alt);
+}
+
+.project-milestone-row.is-revoked {
+  border-style: dashed;
+  opacity: 0.76;
+}
+
+.project-milestone-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr) minmax(90px, 0.6fr) auto;
+  align-items: center;
+  gap: var(--ws-space-2);
+}
+
+.project-milestone-fields label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ws-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-milestone-fields textarea {
+  grid-column: 1 / -1;
+  min-height: 58px;
+}
+
+.project-inline-form textarea {
+  grid-column: 1 / -1;
+}
+
+.project-milestone-fields input[type="checkbox"] {
+  min-height: auto;
+  accent-color: var(--ws-accent-strong);
+}
+
+.project-milestone-row > .meta {
+  margin-top: var(--ws-space-2);
+  overflow-wrap: anywhere;
+}
+
+.project-milestone-row > .ops {
+  margin-top: var(--ws-space-2);
+}
+
+.project-lane-item > div:first-child,
+.project-candidate-row > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-lane-item .ops {
+  margin-top: var(--ws-space-2);
+}
+
+.project-lane-item .ops select {
+  flex: 1 1 200px;
+}
+
+.project-candidate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ws-space-3);
+}
+
+.project-home-heading {
+  align-items: flex-end;
+}
+
+.project-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ws-space-3);
+  margin-top: var(--ws-space-4);
+}
+
+.project-home-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-accent);
+  padding: var(--ws-space-4);
+  color: inherit;
+  background: var(--ws-surface-alt);
+  text-decoration: none;
+  transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+
+.project-home-card:hover {
+  border-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+  color: inherit;
+  transform: translateY(-2px);
+}
+
+.project-home-card-title {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+}
+
+.project-home-card-description {
+  flex: 1 1 auto;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.project-home-card-action {
+  margin-top: var(--ws-space-4);
+  color: var(--ws-accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.project-public-page {
+  max-width: 900px;
+}
+
+.project-public-hero h1 {
+  max-width: 30ch;
+  overflow-wrap: anywhere;
+}
+
+.project-loading {
+  color: var(--ws-muted);
+  font-size: 13px;
+}
+
+.project-public-message {
+  display: grid;
+  justify-items: start;
+  gap: var(--ws-space-3);
+}
+
+.project-public-message h2,
+.project-public-message p {
+  margin: 0;
+}
+
+.project-public-message button {
+  width: auto;
+}
+
+.project-public-meta {
+  margin-top: var(--ws-space-3);
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.project-public-panel {
+  margin: 0;
+}
+
+.project-public-section-head {
+  align-items: center;
+}
+
+.project-public-section-head h2 {
+  font-size: 20px;
+}
+
+.project-completion-value {
+  color: var(--ws-accent-strong);
+  font-size: 24px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.project-progress-track {
+  height: 10px;
+  margin-top: var(--ws-space-4);
+  border: 1px solid var(--ws-border-strong);
+  background: var(--ws-surface-alt);
+}
+
+.project-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ws-accent-strong);
+  transition: width 180ms ease;
+}
+
+.project-public-milestones {
+  display: grid;
+  gap: var(--ws-space-2);
+  margin-top: var(--ws-space-4);
+}
+
+.project-public-milestone {
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-accent);
+  padding: var(--ws-space-4);
+  background: var(--ws-surface-alt);
+}
+
+.project-public-milestone-head {
+  align-items: center;
+}
+
+.project-public-milestone-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+.project-public-milestone-description {
+  margin: var(--ws-space-2) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ws-text);
+  font-size: 13px;
+}
+
+.project-public-milestone-date {
+  margin-top: var(--ws-space-3);
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.state-pill.is-complete {
+  border-color: var(--ws-ok) !important;
+  color: var(--ws-ok) !important;
+  background: var(--ws-ok-soft) !important;
+}
+
+.project-source-control {
+  display: grid;
+  gap: var(--ws-space-2);
+  margin-top: var(--ws-space-3);
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-border-strong);
+  padding: var(--ws-space-3);
+  background: var(--ws-surface-alt);
+}
+
+.project-source-control-head,
+.project-source-current,
+.project-source-edit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ws-space-2);
+}
+
+.project-source-control-head,
+.project-source-current {
+  justify-content: space-between;
+}
+
+.project-source-control-head strong {
+  color: var(--ws-text);
+  font-size: 13px;
+}
+
+.project-source-control button {
+  width: auto;
+  min-height: 34px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 0;
+  padding: 6px 10px;
+  color: var(--ws-text);
+  background: var(--ws-surface);
+  font-size: 12px;
+}
+
+.project-source-control button:hover:not(:disabled) {
+  border-color: var(--ws-accent);
+  color: var(--ws-accent-strong);
+  background: var(--ws-accent-soft);
+}
+
+.project-source-control button.primary {
+  border-color: var(--ws-accent-strong);
+  color: #fff;
+  background: var(--ws-accent-strong);
+}
+
+.project-source-control button.danger {
+  border-color: var(--ws-danger);
+  color: var(--ws-danger);
+  background: var(--ws-danger-soft);
+}
+
+.project-source-edit {
+  align-items: flex-end;
+}
+
+.project-source-edit label {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 5px;
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-source-edit select {
+  width: 100%;
+}
+
+.project-source-panel > .meta {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .project-create-form,
+  .project-edit-form,
+  .project-milestone-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .project-inline-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .project-inline-form input:first-child,
+  .project-inline-form button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .project-header,
+  .project-detail-head,
+  .project-public-section-head,
+  .project-home-heading,
+  .project-public-milestone-head,
+  .project-candidate-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-list-item,
+  .project-home-grid,
+  .project-create-form,
+  .project-edit-form,
+  .project-milestone-fields,
+  .project-inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-create-form > label:has(textarea),
+  .project-edit-form > label:has(textarea),
+  .project-create-form > textarea,
+  .project-edit-form > textarea,
+  .project-create-form > .field-wide,
+  .project-edit-form > .field-wide,
+  .project-milestone-fields textarea,
+  .project-inline-form textarea,
+  .project-inline-form input:first-child,
+  .project-inline-form button {
+    grid-column: auto;
+  }
+
+  .project-detail-head .project-public-link,
+  .project-public-message button,
+  .project-public-message .project-public-back {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .project-list-item > button {
+    width: 100%;
+  }
+
+  .project-source-control-head,
+  .project-source-current,
+  .project-source-edit {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-source-control button,
+  .project-source-edit label {
+    width: 100%;
+  }
+}

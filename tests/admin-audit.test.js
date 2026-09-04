@@ -4,9 +4,47 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { sanitizeAuditMetadata } = require("../server/admin-audit-metadata");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const DB_PATH = path.join(ROOT_DIR, "server", "db.js");
+
+test("项目审计只保留 ID、来源摘要、开关和 changedFields", () => {
+  const safe = sanitizeAuditMetadata({
+    projectId: 12,
+    milestoneId: 4,
+    sourceType: "feedback",
+    sourceId: 9,
+    publicBasic: true,
+    publicMilestones: false,
+    publicUpdatedAt: true,
+    publicCompletion: false,
+    changedFields: ["name", "description", "publicBasic", "completionMode"],
+    name: "不应写入",
+    description: "不应写入",
+    title: "不应写入",
+    content: "secret",
+    publicKey: "550e8400-e29b-41d4-a716-446655440000",
+    url: "https://secret.example/path"
+  });
+
+  assert.deepEqual(safe, {
+    projectId: 12,
+    milestoneId: 4,
+    sourceType: "feedback",
+    sourceId: 9,
+    publicBasic: true,
+    publicMilestones: false,
+    publicUpdatedAt: true,
+    publicCompletion: false,
+    changedFields: ["name", "description", "publicBasic", "completionMode"]
+  });
+  assert.equal(safe.name, undefined);
+  assert.equal(safe.description, undefined);
+  assert.equal(safe.content, undefined);
+  assert.equal(safe.publicKey, undefined);
+  assert.equal(safe.url, undefined);
+});
 
 function runDatabaseScript(dbPath, body) {
   const script = [

@@ -39,6 +39,25 @@ const {
   updateWorktaskNoteReply,
   arrangeWorktask,
   deleteWorktask,
+  createProject,
+  getProjectById,
+  listProjects,
+  updateProject,
+  archiveProject,
+  restoreProject,
+  getProjectDetail,
+  createProjectMilestone,
+  getProjectMilestoneById,
+  updateProjectMilestone,
+  revokeProjectMilestone,
+  restoreProjectMilestone,
+  getProjectItemBySource,
+  listProjectItemCandidates,
+  assignProjectItem,
+  updateProjectItemMilestone,
+  unassignProjectItem,
+  listPublicProjects,
+  getPublicProjectByKey,
   getHomeHighlights,
   getStatusSettings,
   updateStatusProfileSettings,
@@ -125,7 +144,20 @@ const {
   validateAiKnowledgeAskPayload,
   validateAiKnowledgeHistoryQueryPayload,
   validateAiKnowledgeAnswerDeletePayload,
-  validateAiKnowledgeSettingsPayload
+  validateAiKnowledgeSettingsPayload,
+  validateProjectListPayload,
+  validateProjectIdPayload,
+  validateProjectCreatePayload,
+  validateProjectUpdatePayload,
+  validateProjectMilestoneCreatePayload,
+  validateProjectMilestoneUpdatePayload,
+  validateProjectMilestoneIdPayload,
+  validateProjectItemQueryPayload,
+  validateProjectItemCandidatesPayload,
+  validateProjectItemAssignPayload,
+  validateProjectItemUpdatePayload,
+  validateProjectItemUnassignPayload,
+  validatePublicProjectKey
 } = require("./validation");
 const {
   FEEDBACK_EXPORT_COLUMNS,
@@ -297,6 +329,16 @@ function sendAiError(res, error) {
   }
   if (code === "KNOWLEDGE_BUSY") return sendError(res, 429, code, "知识库正在重建，请稍后再试");
   if (code === "AI_SUGGESTION_CONFLICT") return sendError(res, 409, code, "AI 建议已过期或已经处理");
+  throw error;
+}
+
+function sendProjectError(res, error) {
+  const code = error && error.code;
+  if (code === "INVALID_PAYLOAD") return sendError(res, 400, code, "项目请求参数不合法");
+  if (code === "NOT_FOUND") return sendError(res, 404, code, "项目或关联资源不存在");
+  if (code === "PROJECT_ITEM_CONFLICT") return sendError(res, 409, code, "该来源已归属其他项目或当前关联不匹配");
+  if (code === "PROJECT_MILESTONE_CONFLICT") return sendError(res, 409, code, "里程碑不存在、已撤销或不属于当前项目");
+  if (code === "PROJECT_STATE_CONFLICT") return sendError(res, 409, code, "归档项目不能新增里程碑或工作项");
   throw error;
 }
 
@@ -548,6 +590,19 @@ app.get("/api/public/highlights", asyncHandler(async (req, res) => {
   });
 }));
 
+app.get("/api/public/projects", asyncHandler(async (req, res) => {
+  const data = await listPublicProjects();
+  return res.json({ ok: true, data });
+}));
+
+app.get("/api/public/projects/:publicKey", asyncHandler(async (req, res) => {
+  const validation = validatePublicProjectKey(req.params && req.params.publicKey);
+  if (!validation.valid) return sendError(res, 404, "NOT_FOUND", "项目暂不可用");
+  const data = await getPublicProjectByKey(validation.value);
+  if (!data) return sendError(res, 404, "NOT_FOUND", "项目暂不可用");
+  return res.json({ ok: true, data });
+}));
+
 app.get("/api/public/meowstatus", asyncHandler(async (req, res) => {
   const settings = await getStatusSettings();
   const data = {
@@ -655,6 +710,265 @@ app.get("/api/admin/me", requireAdminSession, (req, res) => {
     data: { username: req.adminUser.username }
   });
 });
+
+app.post("/api/admin/project/list", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectListPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const data = await listProjects(validation.data);
+  return res.json({ ok: true, data });
+}));
+
+// Keep static project sub-routes before GET /:id.  Otherwise "item" would be
+// interpreted as a numeric project id by a future route change.
+app.get("/api/admin/project/item", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemQueryPayload(req.query || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const data = await getProjectItemBySource(validation.data);
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/project/item-candidates", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemCandidatesPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const data = await listProjectItemCandidates(validation.data);
+  return res.json({ ok: true, data });
+}));
+
+app.post("/api/admin/project/create", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectCreatePayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  try {
+    const id = await createProject(validation.data);
+    const data = await getProjectById(id);
+    await recordAdminAction(req, "project.create", "project", id, "success", {
+      projectId: id,
+      publicBasic: validation.data.publicBasic,
+      publicMilestones: validation.data.publicMilestones,
+      publicUpdatedAt: validation.data.publicUpdatedAt,
+      publicCompletion: validation.data.publicCompletion,
+      completionMode: validation.data.completionMode,
+      changedFields: ["name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "completionMode"]
+    });
+    return res.status(201).json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.create", "project", null, auditResultForError(error), { errorCode: error && error.code ? error.code : "PROJECT_CREATE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/update", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectUpdatePayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  const changedFields = Object.keys(validation.data).filter((field) => field !== "id");
+  try {
+    const changes = await updateProject(validation.data);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.update", "project", id, "not_found", { projectId: id, changedFields });
+      return sendError(res, 404, "NOT_FOUND", "项目不存在");
+    }
+    const data = await getProjectById(id);
+    await recordAdminAction(req, "project.update", "project", id, "success", {
+      projectId: id,
+      changedFields,
+      publicBasic: data.publicBasic,
+      publicMilestones: data.publicMilestones,
+      publicUpdatedAt: data.publicUpdatedAt,
+      publicCompletion: data.publicCompletion,
+      completionMode: data.completionMode
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.update", "project", id, auditResultForError(error), { projectId: id, changedFields, errorCode: error && error.code ? error.code : "PROJECT_UPDATE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/archive", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectIdPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  try {
+    const changes = await archiveProject(id);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.archive", "project", id, "not_found", { projectId: id, projectStatus: "archived" });
+      return sendError(res, 404, "NOT_FOUND", "项目不存在");
+    }
+    const data = await getProjectById(id);
+    await recordAdminAction(req, "project.archive", "project", id, "success", { projectId: id, projectStatus: data.status });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.archive", "project", id, auditResultForError(error), { projectId: id, errorCode: error && error.code ? error.code : "PROJECT_ARCHIVE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/restore", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectIdPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  try {
+    const changes = await restoreProject(id);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.restore", "project", id, "not_found", { projectId: id, projectStatus: "active" });
+      return sendError(res, 404, "NOT_FOUND", "项目不存在");
+    }
+    const data = await getProjectById(id);
+    await recordAdminAction(req, "project.restore", "project", id, "success", { projectId: id, projectStatus: data.status });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.restore", "project", id, auditResultForError(error), { projectId: id, errorCode: error && error.code ? error.code : "PROJECT_RESTORE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/milestone/create", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectMilestoneCreatePayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { projectId } = validation.data;
+  try {
+    const id = await createProjectMilestone(validation.data);
+    const detail = await getProjectDetail(projectId);
+    const data = detail && detail.milestones.find((milestone) => milestone.id === id);
+    await recordAdminAction(req, "project.milestone.create", "project_milestone", id, "success", {
+      projectId,
+      milestoneId: id,
+      changedFields: ["title", "description", "targetDate", "isCompleted", "sortOrder"]
+    });
+    return res.status(201).json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.milestone.create", "project_milestone", null, auditResultForError(error), { projectId, errorCode: error && error.code ? error.code : "PROJECT_MILESTONE_CREATE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/milestone/update", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectMilestoneUpdatePayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  const changedFields = Object.keys(validation.data).filter((field) => field !== "id");
+  try {
+    const changes = await updateProjectMilestone(validation.data);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.milestone.update", "project_milestone", id, "not_found", { milestoneId: id, changedFields });
+      return sendError(res, 404, "NOT_FOUND", "里程碑不存在");
+    }
+    const data = await getProjectMilestoneById(id);
+    await recordAdminAction(req, "project.milestone.update", "project_milestone", id, "success", { milestoneId: id, changedFields });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.milestone.update", "project_milestone", id, auditResultForError(error), { milestoneId: id, changedFields, errorCode: error && error.code ? error.code : "PROJECT_MILESTONE_UPDATE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/milestone/revoke", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectMilestoneIdPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  try {
+    const changes = await revokeProjectMilestone(id);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.milestone.revoke", "project_milestone", id, "not_found", { milestoneId: id });
+      return sendError(res, 404, "NOT_FOUND", "里程碑不存在");
+    }
+    await recordAdminAction(req, "project.milestone.revoke", "project_milestone", id, "success", { milestoneId: id, projectStatus: "revoked" });
+    return res.json({ ok: true, data: { id, status: "revoked" } });
+  } catch (error) {
+    await recordAdminAction(req, "project.milestone.revoke", "project_milestone", id, auditResultForError(error), { milestoneId: id, errorCode: error && error.code ? error.code : "PROJECT_MILESTONE_REVOKE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/milestone/restore", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectMilestoneIdPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const { id } = validation.data;
+  try {
+    const changes = await restoreProjectMilestone(id);
+    if (changes === 0) {
+      await recordAdminAction(req, "project.milestone.restore", "project_milestone", id, "not_found", { milestoneId: id });
+      return sendError(res, 404, "NOT_FOUND", "里程碑不存在");
+    }
+    await recordAdminAction(req, "project.milestone.restore", "project_milestone", id, "success", { milestoneId: id, projectStatus: "active" });
+    return res.json({ ok: true, data: { id, status: "active" } });
+  } catch (error) {
+    await recordAdminAction(req, "project.milestone.restore", "project_milestone", id, auditResultForError(error), { milestoneId: id, errorCode: error && error.code ? error.code : "PROJECT_MILESTONE_RESTORE_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/item/assign", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemAssignPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const dataInput = validation.data;
+  try {
+    const data = await assignProjectItem(dataInput);
+    await recordAdminAction(req, "project.item.assign", "project_item", data.id, "success", {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      milestoneId: dataInput.milestoneId
+    });
+    return res.status(201).json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.item.assign", "project_item", null, auditResultForError(error), {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      milestoneId: dataInput.milestoneId,
+      errorCode: error && error.code ? error.code : "PROJECT_ITEM_ASSIGN_FAILED"
+    });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/item/update", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemUpdatePayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const dataInput = validation.data;
+  try {
+    const data = await updateProjectItemMilestone(dataInput);
+    await recordAdminAction(req, "project.item.update", "project_item", data.id, "success", {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      milestoneId: dataInput.milestoneId
+    });
+    return res.json({ ok: true, data });
+  } catch (error) {
+    await recordAdminAction(req, "project.item.update", "project_item", null, auditResultForError(error), {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      milestoneId: dataInput.milestoneId,
+      errorCode: error && error.code ? error.code : "PROJECT_ITEM_UPDATE_FAILED"
+    });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/item/unassign", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemUnassignPayload(req.body || {});
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const dataInput = validation.data;
+  try {
+    const changes = await unassignProjectItem(dataInput);
+    await recordAdminAction(req, "project.item.unassign", "project_item", null, "success", dataInput);
+    return res.json({ ok: true, data: { removed: changes > 0 } });
+  } catch (error) {
+    await recordAdminAction(req, "project.item.unassign", "project_item", null, auditResultForError(error), { ...dataInput, errorCode: error && error.code ? error.code : "PROJECT_ITEM_UNASSIGN_FAILED" });
+    return sendProjectError(res, error);
+  }
+}));
+
+app.get("/api/admin/project/:id", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectIdPayload({ id: req.params && req.params.id });
+  if (!validation.valid) return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  const data = await getProjectDetail(validation.data.id);
+  if (!data) return sendError(res, 404, "NOT_FOUND", "项目不存在");
+  return res.json({ ok: true, data });
+}));
 
 app.post("/api/admin/logout", requireAdminSession, asyncHandler(async (req, res) => {
   await destroySessionByCookieToken(req.adminToken);

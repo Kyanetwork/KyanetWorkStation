@@ -33,16 +33,22 @@
   const inboxMsg = document.getElementById("inboxMsg");
   const inboxList = document.getElementById("inboxList");
   const toastWrap = document.getElementById("toastWrap");
+  const projectMsg = document.getElementById("projectMsg");
+  const projectList = document.getElementById("projectList");
+  const projectDetail = document.getElementById("projectDetail");
+  const projectModel = window.KwsProjectModel;
 
   const tabInbox = document.getElementById("tabInbox");
   const tabFeedback = document.getElementById("tabFeedback");
   const tabWorktask = document.getElementById("tabWorktask");
   const tabWorktaskCreate = document.getElementById("tabWorktaskCreate");
+  const tabProjects = document.getElementById("tabProjects");
   const tabKnowledge = document.getElementById("tabKnowledge");
   const moduleInbox = document.getElementById("moduleInbox");
   const moduleFeedback = document.getElementById("moduleFeedback");
   const moduleWorktask = document.getElementById("moduleWorktask");
   const moduleWorktaskCreate = document.getElementById("moduleWorktaskCreate");
+  const moduleProjects = document.getElementById("moduleProjects");
   const moduleKnowledge = document.getElementById("moduleKnowledge");
   const inboxModel = window.KwsInboxModel;
   const aiModel = window.KwsAiModel;
@@ -59,6 +65,17 @@
     },
     feedback: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
     worktask: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
+    projects: {
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+      total: 0,
+      loaded: false,
+      items: [],
+      detail: null,
+      detailId: null,
+      loading: false
+    },
     statusSettings: {
       profile: { enabled: true, apiBaseUrl: "http://127.0.0.1:8080", timeoutMs: 5000 },
       minecraft: { enabled: true }
@@ -991,6 +1008,10 @@
         <div class="meta">类型：${escapeHtml(item.type)} | 状态：${feedbackStatusLabel(item.status)} | 首页展示状态：${homeDisplayLabel(Boolean(item.showOnHome))} | 联系方式：${escapeHtml(item.contact)} | 提交：${escapeHtml(formatDateTimeDisplay(item.createdAt))}</div>
         <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
+        <section class="project-source-control" data-project-source-control data-source-type="feedback" data-source-id="${escapeHtml(item.id)}">
+          <div class="project-source-control-head"><strong>项目归属</strong><button type="button" data-action="project-source-load" data-source-type="feedback" data-source-id="${escapeHtml(item.id)}">加载项目归属</button></div>
+          <div class="project-source-panel meta">点击加载当前项目关系。</div>
+        </section>
         <div class="ops">
           <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新反馈</button>
           <button type="button" data-action="feedback-status" data-id="${item.id}" data-status="reviewed" ${item.status === "reviewed" ? "disabled" : ""}>已查看</button>
@@ -1040,6 +1061,10 @@
         <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
         <div class="meta">期望时间：${escapeHtml(formatDateTimeDisplay(item.expectedAt))} | 计划时间：${escapeHtml(formatDateTimeDisplay(item.scheduledAt))} | 负责人：${escapeHtml(item.assignee || "未分配")} | 标签：${escapeHtml(item.tags || "-")}</div>
         <div class="content">${linkifySafeText(item.content)}</div>
+        <section class="project-source-control" data-project-source-control data-source-type="worktask" data-source-id="${escapeHtml(item.id)}">
+          <div class="project-source-control-head"><strong>项目归属</strong><button type="button" data-action="project-source-load" data-source-type="worktask" data-source-id="${escapeHtml(item.id)}">加载项目归属</button></div>
+          <div class="project-source-panel meta">点击加载当前项目关系。</div>
+        </section>
         <div class="ops">
           <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="new" ${item.status === "new" ? "disabled" : ""}>新工单</button>
           <button type="button" data-action="worktask-status" data-id="${item.id}" data-status="scheduled" ${item.status === "scheduled" ? "disabled" : ""}>已安排</button>
@@ -1391,27 +1416,406 @@
     notify(inboxMsg, "ok", "回复草稿已填入，请编辑后手动保存");
   }
 
+  function projectCompletionLabel(value) {
+    return Number.isSafeInteger(value) ? `${value}%` : "未设置";
+  }
+
+  function projectStatusLabel(status) {
+    return status === "archived" ? "已归档" : "活跃";
+  }
+
+  function projectPublicLabel(publicBasic) {
+    return publicBasic ? "公开" : "未公开";
+  }
+
+  function projectSourceMessage(sourceType) {
+    return sourceType === "worktask" ? worktaskMsg : feedbackMsg;
+  }
+
+  function projectSourceMilestoneOptions(detail, selectedId) {
+    const selected = selectedId === null || selectedId === undefined ? "" : String(selectedId);
+    const milestones = detail && Array.isArray(detail.milestones)
+      ? detail.milestones.filter((item) => item && item.status === "active")
+      : [];
+    return `<option value="">不关联里程碑</option>${milestones.map((item) => `<option value="${escapeHtml(item.id)}"${String(item.id) === selected ? " selected" : ""}>${escapeHtml(item.title || `里程碑 ${item.id}`)}</option>`).join("")}`;
+  }
+
+  function projectSourceProjectOptions(projects, selectedId) {
+    const selected = selectedId === null || selectedId === undefined ? "" : String(selectedId);
+    return `<option value="">选择活跃项目</option>${projects.map((item) => `<option value="${escapeHtml(item.id)}"${String(item.id) === selected ? " selected" : ""}>${escapeHtml(item.name || `项目 ${item.id}`)}</option>`).join("")}`;
+  }
+
+  function renderProjectSourceControl(container, relation, projects, currentDetail) {
+    const panel = container && container.querySelector(".project-source-panel");
+    if (!panel) return;
+    const sourceType = container.dataset.sourceType;
+    const sourceId = Number(container.dataset.sourceId);
+    if (relation && Number.isSafeInteger(Number(relation.projectId)) && Number(relation.projectId) > 0) {
+      const project = currentDetail && currentDetail.project
+        ? currentDetail.project
+        : projects.find((item) => Number(item.id) === Number(relation.projectId));
+      const projectName = project && project.name ? project.name : `项目 #${relation.projectId}`;
+      const status = project && project.status === "archived" ? "已归档" : "活跃";
+      panel.innerHTML = `<div class="project-source-current"><span>当前项目：<strong>${escapeHtml(projectName)}</strong> · ${escapeHtml(status)}</span><button type="button" data-action="project-source-open" data-project-id="${escapeHtml(relation.projectId)}">打开项目</button></div>
+        <div class="project-source-edit"><label>里程碑<select data-action-field="project-source-milestone">${projectSourceMilestoneOptions(currentDetail, relation.milestoneId)}</select></label><button type="button" data-action="project-source-save" data-project-id="${escapeHtml(relation.projectId)}">保存里程碑</button><button type="button" class="danger" data-action="project-source-unassign">解绑</button></div>`;
+      container._projectSource = { relation, projects, detail: currentDetail };
+      return;
+    }
+    panel.innerHTML = `<div class="project-source-edit"><label>项目<select data-action-field="project-source-project">${projectSourceProjectOptions(projects, "")}</select></label><label>里程碑<select data-action-field="project-source-milestone" disabled><option value="">选择项目后加载</option></select></label><button type="button" class="primary" data-action="project-source-bind">绑定</button></div><p class="meta">来源目前未归类；移动到其他项目需先解绑原归属。</p>`;
+    container._projectSource = { relation: null, projects, detail: null };
+    void sourceType;
+    void sourceId;
+  }
+
+  async function loadProjectSourceMilestones(container, projectId) {
+    const parsedId = Number(projectId);
+    if (!Number.isSafeInteger(parsedId) || parsedId <= 0) return;
+    const detail = await api(`/api/admin/project/${parsedId}`, null, { method: "GET" });
+    const sourceState = container._projectSource || { relation: null, projects: [] };
+    sourceState.detail = detail;
+    sourceState.selectedProjectId = parsedId;
+    container._projectSource = sourceState;
+    const select = container.querySelector('[data-action-field="project-source-milestone"]');
+    if (select) {
+      select.disabled = false;
+      select.innerHTML = projectSourceMilestoneOptions(detail, sourceState.relation ? sourceState.relation.milestoneId : null);
+    }
+  }
+
+  async function loadProjectSourceControl(container, trigger) {
+    if (!container) return;
+    const sourceType = container.dataset.sourceType;
+    const sourceId = Number(container.dataset.sourceId);
+    if (!projectModel || !["feedback", "worktask"].includes(sourceType) || !Number.isSafeInteger(sourceId) || sourceId <= 0) return;
+    const run = async () => {
+      const relationData = await api(`/api/admin/project/item?sourceType=${encodeURIComponent(sourceType)}&sourceId=${encodeURIComponent(sourceId)}`, null, { method: "GET" });
+      const relation = relationData && relationData.sourceType ? relationData : null;
+      const projectList = await api("/api/admin/project/list", { status: "active", page: 1, pageSize: 100 });
+      const projects = Array.isArray(projectList.items) ? projectList.items.map(projectModel.normalizeProjectSummary) : [];
+      let currentDetail = null;
+      if (relation && relation.projectId) {
+        try {
+          currentDetail = await api(`/api/admin/project/${Number(relation.projectId)}`, null, { method: "GET" });
+        } catch (_) {
+          currentDetail = null;
+        }
+      }
+      renderProjectSourceControl(container, relation, projects, currentDetail);
+    };
+    await withButtonBusy(trigger || container.querySelector('[data-action="project-source-load"]'), "加载中…", run);
+  }
+
+  async function handleProjectSourceAction(button) {
+    const container = button.closest("[data-project-source-control]");
+    if (!container) return;
+    const sourceType = container.dataset.sourceType;
+    const sourceId = Number(container.dataset.sourceId);
+    if (button.dataset.action === "project-source-load") {
+      await loadProjectSourceControl(container, button);
+      return;
+    }
+    if (button.dataset.action === "project-source-open") {
+      const projectId = Number(button.dataset.projectId);
+      window.location.hash = projectModel.projectHash(projectId).slice(1);
+      switchModule("projects");
+      await loadProjectDetail(projectId);
+      return;
+    }
+    const sourceState = container._projectSource || {};
+    const relation = sourceState.relation;
+    const panel = container.querySelector(".project-source-panel");
+    if (button.dataset.action === "project-source-bind") {
+      const projectSelect = panel && panel.querySelector('[data-action-field="project-source-project"]');
+      const milestoneSelect = panel && panel.querySelector('[data-action-field="project-source-milestone"]');
+      const projectId = Number(projectSelect && projectSelect.value);
+      if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new Error("请先选择活跃项目");
+      await withButtonBusy(button, "绑定中…", async () => {
+        await api("/api/admin/project/item/assign", { projectId, sourceType, sourceId, milestoneId: milestoneSelect && milestoneSelect.value ? Number(milestoneSelect.value) : null });
+        await loadProjectSourceControl(container);
+      });
+      notify(projectSourceMessage(sourceType), "ok", "来源已绑定到项目");
+      return;
+    }
+    if (!relation || !relation.projectId) return;
+    if (button.dataset.action === "project-source-save") {
+      const milestoneSelect = panel && panel.querySelector('[data-action-field="project-source-milestone"]');
+      await withButtonBusy(button, "保存中…", async () => {
+        await api("/api/admin/project/item/update", { projectId: Number(relation.projectId), sourceType, sourceId, milestoneId: milestoneSelect && milestoneSelect.value ? Number(milestoneSelect.value) : null });
+        await loadProjectSourceControl(container);
+      });
+      notify(projectSourceMessage(sourceType), "ok", "来源里程碑已保存");
+      return;
+    }
+    if (button.dataset.action === "project-source-unassign") {
+      if (!confirm("确认解除该来源的项目归属吗？")) return;
+      await withButtonBusy(button, "解绑中…", async () => {
+        await api("/api/admin/project/item/unassign", { projectId: Number(relation.projectId), sourceType, sourceId });
+        await loadProjectSourceControl(container);
+      });
+      notify(projectSourceMessage(sourceType), "ok", "来源已解除项目归属");
+    }
+  }
+
+  async function handleProjectSourceChange(event) {
+    const select = event.target.closest('[data-action-field="project-source-project"]');
+    if (!select) return;
+    const container = select.closest("[data-project-source-control]");
+    if (!container) return;
+    try {
+      await loadProjectSourceMilestones(container, select.value);
+    } catch (error) {
+      notify(projectSourceMessage(container.dataset.sourceType), "error", error.message);
+    }
+  }
+
+  function renderProjectList(data) {
+    if (!projectList) return;
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    if (!items.length) {
+      projectList.innerHTML = '<p class="empty-state">暂无项目，请新建项目或调整筛选条件。</p>';
+    } else {
+      projectList.innerHTML = items.map((raw) => {
+        const item = projectModel.normalizeProjectSummary(raw);
+        return `<article class="project-list-item">
+          <div class="project-list-main">
+            <h3>${escapeHtml(item.name || "未命名项目")}</h3>
+            <p class="meta">${escapeHtml(item.description || "暂无说明")}</p>
+            <p class="meta">${escapeHtml(projectStatusLabel(item.status))} · ${escapeHtml(projectPublicLabel(item.publicBasic))} · ${escapeHtml(projectCompletionLabel(item.completion))} · ${escapeHtml(item.itemCount)} 个工作项 · 更新于 ${escapeHtml(formatDateTimeDisplay(item.updatedAt))}</p>
+          </div>
+          <button type="button" class="secondary" data-action="project-open" data-id="${item.id}">查看详情</button>
+        </article>`;
+      }).join("");
+    }
+    const page = Number(data && data.page) || 1;
+    const totalPages = Number(data && data.totalPages) || 1;
+    state.projects.page = page;
+    state.projects.totalPages = totalPages;
+    state.projects.total = Number(data && data.total) || 0;
+    document.getElementById("projectCount").textContent = `${state.projects.total} 个项目`;
+    document.getElementById("projectPageText").textContent = `第 ${page} / ${totalPages} 页 · 总计 ${state.projects.total} 个`;
+    document.getElementById("projectPrevBtn").disabled = page <= 1;
+    document.getElementById("projectNextBtn").disabled = page >= totalPages;
+  }
+
+  async function loadProjects() {
+    if (!projectList) return;
+    clearMessage(projectMsg);
+    projectList.setAttribute("aria-busy", "true");
+    try {
+      const data = await api("/api/admin/project/list", {
+        status: document.getElementById("projectListStatus").value,
+        keyword: document.getElementById("projectListKeyword").value.trim(),
+        page: state.projects.page,
+        pageSize: state.projects.pageSize
+      });
+      state.projects.items = Array.isArray(data.items) ? data.items.map(projectModel.normalizeProjectSummary) : [];
+      state.projects.loaded = true;
+      renderProjectList(data);
+    } finally {
+      projectList.setAttribute("aria-busy", "false");
+    }
+  }
+
+  function activeProjectMilestones() {
+    return state.projects.detail && Array.isArray(state.projects.detail.milestones)
+      ? state.projects.detail.milestones.filter((item) => item.status === "active")
+      : [];
+  }
+
+  function milestoneOptions(selectedId) {
+    const selected = selectedId === null || selectedId === undefined ? "" : String(selectedId);
+    return `<option value="">不关联里程碑</option>${activeProjectMilestones().map((item) => `<option value="${item.id}"${String(item.id) === selected ? " selected" : ""}>${escapeHtml(item.title || `里程碑 ${item.id}`)}</option>`).join("")}`;
+  }
+
+  function renderProjectMilestones(milestones) {
+    const container = document.getElementById("projectMilestoneList");
+    if (!container) return;
+    if (!milestones.length) {
+      container.innerHTML = '<p class="empty-state">暂无里程碑。</p>';
+      return;
+    }
+    container.innerHTML = milestones.map((item) => `<div class="project-milestone-row ${item.status === "revoked" ? "is-revoked" : ""}">
+      <div class="project-milestone-fields">
+        <input data-milestone-field="title" data-id="${item.id}" value="${escapeHtml(item.title)}" maxlength="160" aria-label="里程碑标题">
+        <textarea data-milestone-field="description" data-id="${item.id}" maxlength="2000" rows="2" aria-label="里程碑说明">${escapeHtml(item.description)}</textarea>
+        <input data-milestone-field="targetDate" data-id="${item.id}" type="date" value="${escapeHtml(item.targetDate)}" aria-label="目标日期">
+        <input data-milestone-field="sortOrder" data-id="${item.id}" type="number" min="0" max="100000" value="${item.sortOrder}" aria-label="排序">
+        <label><input data-milestone-field="isCompleted" data-id="${item.id}" type="checkbox"${item.isCompleted ? " checked" : ""}> 完成</label>
+      </div>
+      <div class="meta">${item.status === "revoked" ? "已撤销" : "有效"} · ${escapeHtml(item.description || "无说明")}</div>
+      <div class="ops">
+        ${item.status === "revoked"
+          ? `<button type="button" data-action="project-milestone-restore" data-id="${item.id}">恢复</button>`
+          : `<button type="button" class="primary" data-action="project-milestone-save" data-id="${item.id}">保存</button><button type="button" class="danger" data-action="project-milestone-revoke" data-id="${item.id}">撤销</button>`}
+      </div>
+    </div>`).join("");
+  }
+
+  function renderProjectLane(targetId, items) {
+    const container = document.getElementById(targetId);
+    if (!container) return;
+    if (!items.length) {
+      container.innerHTML = '<p class="empty-state">暂无归属工作项。</p>';
+      return;
+    }
+    container.innerHTML = items.map((item) => `<article class="project-lane-item">
+      <div><strong>${escapeHtml(item.title || "无标题")}</strong><span class="meta"> · ${escapeHtml(item.status || "未知状态")}${item.priority ? ` · 优先级 ${escapeHtml(item.priority)}` : ""}</span></div>
+      <div class="meta">来源 #${escapeHtml(item.sourceId)} · 更新于 ${escapeHtml(formatDateTimeDisplay(item.updatedAt))}</div>
+      <div class="ops">
+        <select data-action-field="milestone" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}" aria-label="选择里程碑">${milestoneOptions(item.milestoneId)}</select>
+        <button type="button" class="primary" data-action="project-item-save" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}">保存里程碑</button>
+        <button type="button" class="danger" data-action="project-item-unassign" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}">解绑</button>
+      </div>
+    </article>`).join("");
+  }
+
+  function renderProjectDetail(data) {
+    const detail = projectModel.normalizeProjectDetail(data);
+    state.projects.detail = detail;
+    const project = detail.project;
+    document.getElementById("projectDetailTitle").textContent = project.name || "项目详情";
+    document.getElementById("projectDetailMeta").textContent = `${projectStatusLabel(project.status)} · 完成度 ${projectCompletionLabel(project.completion)} · ${project.itemCount} 个工作项 · 创建于 ${formatDateTimeDisplay(project.createdAt)}`;
+    document.getElementById("projectName").value = project.name;
+    document.getElementById("projectDescription").value = project.description;
+    document.getElementById("projectPublicBasic").checked = project.publicBasic;
+    document.getElementById("projectPublicMilestones").checked = project.publicMilestones;
+    document.getElementById("projectPublicUpdatedAt").checked = project.publicUpdatedAt;
+    document.getElementById("projectPublicCompletion").checked = project.publicCompletion;
+    document.getElementById("projectCompletionMode").value = project.completionMode;
+    document.getElementById("projectCustomCompletion").value = project.customCompletion === null ? "" : String(project.customCompletion);
+    document.getElementById("projectCompletionText").textContent = projectCompletionLabel(project.completion);
+    const archiveButton = document.getElementById("projectArchiveBtn");
+    const restoreButton = document.getElementById("projectRestoreBtn");
+    archiveButton.classList.toggle("hidden", project.status === "archived");
+    restoreButton.classList.toggle("hidden", project.status !== "archived");
+    const publicLink = document.getElementById("projectPublicLink");
+    if (project.publicBasic && project.publicKey) {
+      publicLink.href = `/project/?key=${encodeURIComponent(project.publicKey)}`;
+      publicLink.classList.remove("hidden");
+    } else {
+      publicLink.removeAttribute("href");
+      publicLink.classList.add("hidden");
+    }
+    renderProjectMilestones(detail.milestones);
+    const lanes = projectModel.splitProjectItems(detail.items);
+    renderProjectLane("projectFeedbackLane", lanes.feedback);
+    renderProjectLane("projectWorktaskLane", lanes.worktask);
+    projectDetail.classList.remove("hidden");
+  }
+
+  async function loadProjectDetail(id) {
+    const parsedId = Number(id);
+    if (!Number.isSafeInteger(parsedId) || parsedId <= 0) return;
+    clearMessage(projectMsg);
+    try {
+      const data = await api(`/api/admin/project/${parsedId}`, null, { method: "GET" });
+      state.projects.detailId = parsedId;
+      renderProjectDetail(data);
+    } catch (error) {
+      state.projects.detail = null;
+      state.projects.detailId = null;
+      projectDetail.classList.add("hidden");
+      throw error;
+    }
+  }
+
+  async function reloadProjectDetail() {
+    if (state.projects.detailId) await loadProjectDetail(state.projects.detailId);
+    state.projects.loaded = false;
+    await loadProjects();
+  }
+
+  async function projectWrite(pathname, payload, message) {
+    const button = document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null;
+    await withButtonBusy(button || document.getElementById("projectSearchBtn"), "保存中…", async () => {
+      await api(pathname, payload);
+      await reloadProjectDetail();
+    });
+    notify(projectMsg, "ok", message);
+  }
+
+  async function loadProjectCandidates(sourceType) {
+    const target = document.getElementById(sourceType === "feedback" ? "projectFeedbackCandidates" : "projectWorktaskCandidates");
+    if (!target || !state.projects.detailId) return;
+    target.classList.remove("hidden");
+    target.innerHTML = '<p class="meta">正在加载候选工作项…</p>';
+    const data = await api("/api/admin/project/item-candidates", { sourceType, page: 1, pageSize: 20 });
+    const items = Array.isArray(data.items) ? data.items : [];
+    target.innerHTML = items.length ? items.map((item) => `<div class="project-candidate-row">
+      <span><strong>${escapeHtml(item.title || "无标题")}</strong><span class="meta"> · #${escapeHtml(item.sourceId)} · ${escapeHtml(item.status || "")}</span></span>
+      ${item.projectId && item.projectId !== state.projects.detailId
+        ? '<span class="meta">已归属其他项目，请先解绑</span>'
+        : item.projectId ? '<span class="meta">已在当前项目</span>' : `<button type="button" class="primary" data-action="project-candidate-assign" data-source-type="${escapeHtml(sourceType)}" data-source-id="${item.sourceId}">绑定</button>`}
+    </div>`).join("") : '<p class="empty-state">暂无可绑定候选项。</p>';
+  }
+
+  async function handleProjectAction(button) {
+    const action = button.dataset.action;
+    const projectId = state.projects.detailId;
+    if (!projectId) return;
+    if (action === "project-milestone-save") {
+      const id = Number(button.dataset.id);
+      const fields = projectDetail.querySelectorAll(`[data-milestone-field][data-id="${id}"]`);
+      const payload = { id };
+      fields.forEach((field) => {
+        const name = field.dataset.milestoneField;
+        payload[name] = field.type === "checkbox" ? field.checked : field.value;
+      });
+      await projectWrite("/api/admin/project/milestone/update", payload, "里程碑已保存");
+    } else if (action === "project-milestone-revoke" || action === "project-milestone-restore") {
+      const id = Number(button.dataset.id);
+      if (action === "project-milestone-revoke" && !confirm("撤销该里程碑并解除其工作项关联吗？")) return;
+      await projectWrite(`/api/admin/project/milestone/${action.endsWith("revoke") ? "revoke" : "restore"}`, { id }, action.endsWith("revoke") ? "里程碑已撤销" : "里程碑已恢复");
+    } else if (action === "project-item-save") {
+      const sourceType = button.dataset.sourceType;
+      const sourceId = Number(button.dataset.sourceId);
+      const select = projectDetail.querySelector(`[data-action-field="milestone"][data-source-type="${sourceType}"][data-source-id="${sourceId}"]`);
+      await projectWrite("/api/admin/project/item/update", { projectId, sourceType, sourceId, milestoneId: select && select.value ? Number(select.value) : null }, "工作项里程碑已保存");
+    } else if (action === "project-item-unassign") {
+      if (!confirm("确认解绑该工作项吗？")) return;
+      await projectWrite("/api/admin/project/item/unassign", { projectId, sourceType: button.dataset.sourceType, sourceId: Number(button.dataset.sourceId) }, "工作项已解绑");
+    } else if (action === "project-candidate-assign") {
+      await projectWrite("/api/admin/project/item/assign", { projectId, sourceType: button.dataset.sourceType, sourceId: Number(button.dataset.sourceId) }, "工作项已绑定");
+    }
+  }
+
+  async function syncProjectHash() {
+    const parsed = projectModel.parseProjectHash(window.location.hash);
+    if (!window.location.hash.startsWith("#projects")) return;
+    if (state.active !== "projects") switchModule("projects");
+    if (parsed.id) {
+      await loadProjectDetail(parsed.id);
+    } else {
+      projectDetail.classList.add("hidden");
+      state.projects.detailId = null;
+    }
+  }
+
   function switchModule(module) {
     state.active = module;
     const isInbox = module === "inbox";
     const isFeedback = module === "feedback";
     const isWorktask = module === "worktask";
     const isWorktaskCreate = module === "worktaskCreate";
+    const isProjects = module === "projects";
     const isKnowledge = module === "knowledge";
     tabInbox.classList.toggle("active", isInbox);
     tabFeedback.classList.toggle("active", isFeedback);
     tabWorktask.classList.toggle("active", isWorktask);
     tabWorktaskCreate.classList.toggle("active", isWorktaskCreate);
+    tabProjects.classList.toggle("active", isProjects);
     tabKnowledge.classList.toggle("active", isKnowledge);
     tabInbox.setAttribute("aria-selected", String(isInbox));
     tabFeedback.setAttribute("aria-selected", String(isFeedback));
     tabWorktask.setAttribute("aria-selected", String(isWorktask));
     tabWorktaskCreate.setAttribute("aria-selected", String(isWorktaskCreate));
+    tabProjects.setAttribute("aria-selected", String(isProjects));
     tabKnowledge.setAttribute("aria-selected", String(isKnowledge));
     moduleInbox.classList.toggle("hidden", !isInbox);
     moduleFeedback.classList.toggle("hidden", !isFeedback);
     moduleWorktask.classList.toggle("hidden", !isWorktask);
     moduleWorktaskCreate.classList.toggle("hidden", !isWorktaskCreate);
+    moduleProjects.classList.toggle("hidden", !isProjects);
     moduleKnowledge.classList.toggle("hidden", !isKnowledge);
 
     if (isInbox && !state.inbox.loaded && !state.inbox.loading) {
@@ -1422,6 +1826,12 @@
     }
     if (isWorktask && !state.worktask.loaded) {
       loadWorktask().catch((err) => showMessage(globalMsg, "error", err.message));
+    }
+    if (isProjects && !state.projects.loaded && !state.projects.loading) {
+      state.projects.loading = true;
+      loadProjects()
+        .catch((err) => showMessage(projectMsg, "error", err.message))
+        .finally(() => { state.projects.loading = false; });
     }
     if (isKnowledge && !state.knowledge.loaded && !state.knowledge.loading) {
       state.knowledge.loading = true;
@@ -1444,7 +1854,12 @@
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
       await loadAiMetrics().catch((err) => notify(aiMetricsMsg, "error", err.message));
       await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
-      switchModule("inbox");
+      if (projectModel && window.location.hash.startsWith("#projects")) {
+        switchModule("projects");
+        syncProjectHash().catch((err) => notify(projectMsg, "error", err.message));
+      } else {
+        switchModule("inbox");
+      }
     } catch (error) {
       showMessage(loginMsg, "error", error.message);
     }
@@ -1460,7 +1875,12 @@
       await loadAiStatus().catch((err) => notify(aiStatusMsg, "error", err.message));
       await loadAiMetrics().catch((err) => notify(aiMetricsMsg, "error", err.message));
       await loadKnowledgeStatus().catch((err) => notify(knowledgeStatusMsg, "error", err.message));
-      switchModule("inbox");
+      if (projectModel && window.location.hash.startsWith("#projects")) {
+        switchModule("projects");
+        syncProjectHash().catch((err) => notify(projectMsg, "error", err.message));
+      } else {
+        switchModule("inbox");
+      }
     } catch (_) {
       loginCard.classList.remove("hidden");
       adminPanel.classList.add("hidden");
@@ -1483,6 +1903,12 @@
       state.inbox.worktaskData = null;
       state.feedback.loaded = false;
       state.worktask.loaded = false;
+      state.projects.loaded = false;
+      state.projects.items = [];
+      state.projects.detail = null;
+      state.projects.detailId = null;
+      if (projectList) projectList.innerHTML = "";
+      if (projectDetail) projectDetail.classList.add("hidden");
       resetWorktaskCreateForm();
       clearMessage(worktaskCreateMsg);
       clearMessage(smtpTestMsg);
@@ -1525,6 +1951,11 @@
         await loadInbox();
       } else if (state.active === "feedback") await loadFeedback();
       else if (state.active === "worktask") await loadWorktask();
+      else if (state.active === "projects") {
+        state.projects.loaded = false;
+        await loadProjects();
+        if (state.projects.detailId) await loadProjectDetail(state.projects.detailId);
+      }
       else clearMessage(worktaskCreateMsg);
       notify(globalMsg, "ok", "当前板块已刷新");
     } catch (error) {
@@ -1609,7 +2040,131 @@
   tabFeedback.addEventListener("click", () => switchModule("feedback"));
   tabWorktask.addEventListener("click", () => switchModule("worktask"));
   tabWorktaskCreate.addEventListener("click", () => switchModule("worktaskCreate"));
+  tabProjects.addEventListener("click", () => {
+    window.location.hash = "projects";
+    switchModule("projects");
+  });
   tabKnowledge.addEventListener("click", () => switchModule("knowledge"));
+
+  document.getElementById("projectCreateBtn").addEventListener("click", () => {
+    document.getElementById("projectCreateForm").classList.toggle("hidden");
+    document.getElementById("projectCreateName").focus();
+  });
+  document.getElementById("projectCreateCancelBtn").addEventListener("click", () => {
+    document.getElementById("projectCreateForm").reset();
+    document.getElementById("projectCreateForm").classList.add("hidden");
+  });
+  document.getElementById("projectCreateForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector("button[type=submit]");
+    try {
+      await withButtonBusy(button, "创建中…", async () => {
+        const data = await api("/api/admin/project/create", {
+          name: document.getElementById("projectCreateName").value.trim(),
+          description: document.getElementById("projectCreateDescription").value.trim(),
+          publicBasic: document.getElementById("projectCreatePublicBasic").checked
+        });
+        form.reset();
+        form.classList.add("hidden");
+        await loadProjects();
+        window.location.hash = projectModel.projectHash(data.id).slice(1);
+        await loadProjectDetail(data.id);
+      });
+      notify(projectMsg, "ok", "项目已创建");
+    } catch (error) {
+      notify(projectMsg, "error", error.message);
+    }
+  });
+  document.getElementById("projectSearchBtn").addEventListener("click", async () => {
+    state.projects.page = 1;
+    state.projects.loaded = false;
+    try { await loadProjects(); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectPrevBtn").addEventListener("click", async () => {
+    if (state.projects.page <= 1) return;
+    state.projects.page -= 1;
+    try { await loadProjects(); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectNextBtn").addEventListener("click", async () => {
+    if (state.projects.page >= state.projects.totalPages) return;
+    state.projects.page += 1;
+    try { await loadProjects(); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  projectList.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action=\"project-open\"]");
+    if (!button) return;
+    const id = Number(button.dataset.id);
+    window.location.hash = projectModel.projectHash(id).slice(1);
+    try { await loadProjectDetail(id); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectEditForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.projects.detailId) return;
+    try {
+      await projectWrite("/api/admin/project/update", {
+        id: state.projects.detailId,
+        name: document.getElementById("projectName").value.trim(),
+        description: document.getElementById("projectDescription").value.trim(),
+        publicBasic: document.getElementById("projectPublicBasic").checked,
+        publicMilestones: document.getElementById("projectPublicMilestones").checked,
+        publicUpdatedAt: document.getElementById("projectPublicUpdatedAt").checked,
+        publicCompletion: document.getElementById("projectPublicCompletion").checked,
+        completionMode: document.getElementById("projectCompletionMode").value,
+        customCompletion: document.getElementById("projectCustomCompletion").value === "" ? null : Number(document.getElementById("projectCustomCompletion").value)
+      }, "项目设置已保存");
+    } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectArchiveBtn").addEventListener("click", async (event) => {
+    if (!state.projects.detailId || !confirm("归档该项目吗？已有工作项关系会保留。")) return;
+    try { await projectWrite("/api/admin/project/archive", { id: state.projects.detailId }, "项目已归档"); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectRestoreBtn").addEventListener("click", async () => {
+    if (!state.projects.detailId) return;
+    try { await projectWrite("/api/admin/project/restore", { id: state.projects.detailId }, "项目已恢复"); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectMilestoneForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.projects.detailId) return;
+    try {
+      await projectWrite("/api/admin/project/milestone/create", {
+        projectId: state.projects.detailId,
+        title: document.getElementById("projectMilestoneTitle").value.trim(),
+        description: document.getElementById("projectMilestoneDescription").value.trim(),
+        targetDate: document.getElementById("projectMilestoneTargetDate").value,
+        sortOrder: Number(document.getElementById("projectMilestoneSortOrder").value || 0)
+      }, "里程碑已新增");
+      event.currentTarget.reset();
+      document.getElementById("projectMilestoneSortOrder").value = "0";
+    } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  document.getElementById("projectMilestoneList").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    try { await withButtonBusy(button, "处理中…", () => handleProjectAction(button)); } catch (error) { notify(projectMsg, "error", error.message); }
+  });
+  for (const sourceType of ["feedback", "worktask"]) {
+    const button = document.getElementById(sourceType === "feedback" ? "projectFeedbackCandidatesBtn" : "projectWorktaskCandidatesBtn");
+    button.addEventListener("click", async () => {
+      try { await loadProjectCandidates(sourceType); } catch (error) { notify(projectMsg, "error", error.message); }
+    });
+    const lane = document.getElementById(sourceType === "feedback" ? "projectFeedbackLane" : "projectWorktaskLane");
+    lane.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("button[data-action]");
+      if (!actionButton) return;
+      try { await withButtonBusy(actionButton, "处理中…", () => handleProjectAction(actionButton)); } catch (error) { notify(projectMsg, "error", error.message); }
+    });
+    const candidates = document.getElementById(sourceType === "feedback" ? "projectFeedbackCandidates" : "projectWorktaskCandidates");
+    candidates.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("button[data-action=\"project-candidate-assign\"]");
+      if (!actionButton) return;
+      try { await withButtonBusy(actionButton, "绑定中…", () => handleProjectAction(actionButton)); } catch (error) { notify(projectMsg, "error", error.message); }
+    });
+  }
+  window.addEventListener("hashchange", () => {
+    if (!state.projects.detailId && !window.location.hash.startsWith("#projects")) return;
+    syncProjectHash().catch((error) => notify(projectMsg, "error", error.message));
+  });
 
   document.getElementById("knowledgeReindexBtn").addEventListener("click", async () => {
     try {
@@ -1900,6 +2455,10 @@
     if (!btn) return;
     const id = Number(btn.dataset.id);
     try {
+      if (btn.dataset.action && btn.dataset.action.startsWith("project-source-")) {
+        await handleProjectSourceAction(btn);
+        return;
+      }
       if (btn.dataset.action === "feedback-status") {
         await withButtonBusy(btn, "更新中...", async () => {
           await api("/api/admin/feedback/status", { id, status: btn.dataset.status });
@@ -1945,6 +2504,10 @@
     const id = Number(btn.dataset.id);
 
     try {
+      if (btn.dataset.action && btn.dataset.action.startsWith("project-source-")) {
+        await handleProjectSourceAction(btn);
+        return;
+      }
       if (btn.dataset.action === "worktask-status") {
         await withButtonBusy(btn, "更新中...", async () => {
           await api("/api/admin/worktask/status", { id, status: btn.dataset.status });
@@ -2011,6 +2574,9 @@
       notify(worktaskMsg, "error", error.message);
     }
   });
+
+  document.getElementById("feedbackList").addEventListener("change", handleProjectSourceChange);
+  document.getElementById("worktaskList").addEventListener("change", handleProjectSourceChange);
 
   (async () => {
     resetWorktaskCreateForm();

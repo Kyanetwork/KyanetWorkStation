@@ -19,7 +19,10 @@ const REQUIRED_TABLES = [
   "ai_knowledge_answer",
   "ai_request_metric",
   "workstation_setting",
-  "admin_audit"
+  "admin_audit",
+  "project",
+  "project_milestone",
+  "project_item"
 ];
 
 function parseArgs(argv) {

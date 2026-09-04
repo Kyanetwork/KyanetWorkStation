@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <title>公开项目 | Kyanetwork</title>
+  <link rel="stylesheet" href="/workstation.css">
+</head>
+<body>
+  <main class="wrap project-public-page">
+    <section class="hero project-public-hero" aria-labelledby="projectName">
+      <div class="topbar">
+        <span class="badge">PUBLIC PROJECT</span>
+        <div class="topbar-actions">
+          <a class="theme-btn" href="/">返回KWS入口</a>
+          <button id="themeToggle" class="theme-btn" type="button">切换深色</button>
+        </div>
+      </div>
+      <div id="projectLoading" class="project-loading" role="status" aria-live="polite">正在加载项目…</div>
+      <div id="projectHeader" class="hidden">
+        <h1 id="projectName">公开项目</h1>
+        <p id="projectDescription"></p>
+        <div id="projectUpdatedAt" class="project-public-meta hidden"></div>
+      </div>
+    </section>
+
+    <section id="projectError" class="showcase project-public-message hidden" role="alert" aria-live="assertive">
+      <h2>项目加载失败</h2>
+      <p id="projectErrorText">请稍后重试。</p>
+      <button id="projectRetryBtn" class="primary" type="button">重试</button>
+    </section>
+
+    <section id="projectUnavailable" class="showcase project-public-message hidden" role="status" aria-live="polite">
+      <h2>项目暂不可用</h2>
+      <p>该项目不存在、未公开或已停止公开。</p>
+      <a class="project-public-back" href="/">返回KWS入口</a>
+    </section>
+
+    <section id="projectContent" class="project-public-content hidden" aria-label="项目公开内容">
+      <section id="projectCompletionPanel" class="showcase project-public-panel hidden" aria-labelledby="projectCompletionTitle">
+        <div class="project-public-section-head">
+          <div>
+            <span class="project-kicker">PROGRESS</span>
+            <h2 id="projectCompletionTitle">完成度</h2>
+          </div>
+          <strong id="projectCompletionValue" class="project-completion-value"></strong>
+        </div>
+        <div class="project-progress-track" aria-hidden="true"><span id="projectCompletionBar"></span></div>
+      </section>
+
+      <section id="projectMilestonesSection" class="showcase project-public-panel hidden" aria-labelledby="projectMilestonesTitle">
+        <div class="project-public-section-head">
+          <div>
+            <span class="project-kicker">MILESTONES</span>
+            <h2 id="projectMilestonesTitle">里程碑</h2>
+          </div>
+        </div>
+        <div id="projectMilestoneList" class="project-public-milestones"></div>
+      </section>
+    </section>
+
+    <footer class="footer">
+      <p>© 2026 Kyanetwork All rights reserved.</p>
+      <p>此页面仅展示项目主动公开的信息。</p>
+    </footer>
+  </main>
+  <script src="/theme.js"></script>
+  <script src="/project/main.js"></script>
+</body>
+</html>

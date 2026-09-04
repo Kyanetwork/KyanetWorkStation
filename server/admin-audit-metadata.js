@@ -3,6 +3,13 @@ const ALLOWED_AUDIT_FIELDS = new Set([
   ...ALLOWED_SUGGESTION_FIELDS,
   "adminNote", "publicReply", "expectedAt", "scheduledAt", "assignee", "showOnHome"
 ]);
+const PROJECT_CHANGED_FIELDS = new Set([
+  "name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion",
+  "completionMode", "customCompletion", "title", "targetDate", "isCompleted", "sortOrder", "status"
+]);
+const PROJECT_SOURCE_TYPES = new Set(["feedback", "worktask"]);
+const PROJECT_STATUSES = new Set(["active", "archived"]);
+const PROJECT_COMPLETION_MODES = new Set(["auto", "custom"]);
 
 const METADATA_RULES = Object.freeze({
   rowCount: "number",
@@ -60,7 +67,18 @@ const METADATA_RULES = Object.freeze({
   usageReported: "boolean",
   reasoningEffortApplied: "boolean",
   reasoningEffortSent: "boolean",
-  providerRequestIdPresent: "boolean"
+  providerRequestIdPresent: "boolean",
+  projectId: "number",
+  milestoneId: "number",
+  sourceId: "number",
+  sourceType: "projectSourceType",
+  projectStatus: "projectStatus",
+  completionMode: "projectCompletionMode",
+  changedFields: "projectChangedFields",
+  publicBasic: "boolean",
+  publicMilestones: "boolean",
+  publicUpdatedAt: "boolean",
+  publicCompletion: "boolean"
 });
 
 function boundedString(value, maxLength) {
@@ -100,6 +118,16 @@ function sanitizeAuditMetadata(metadata) {
       normalized[key] = value
         .filter((item) => typeof item === "string" && ALLOWED_AUDIT_FIELDS.has(item))
         .slice(0, ALLOWED_AUDIT_FIELDS.size);
+    } else if (rule === "projectSourceType" && typeof value === "string" && PROJECT_SOURCE_TYPES.has(value)) {
+      normalized[key] = value;
+    } else if (rule === "projectStatus" && typeof value === "string" && PROJECT_STATUSES.has(value)) {
+      normalized[key] = value;
+    } else if (rule === "projectCompletionMode" && typeof value === "string" && PROJECT_COMPLETION_MODES.has(value)) {
+      normalized[key] = value;
+    } else if (rule === "projectChangedFields" && Array.isArray(value)) {
+      normalized[key] = value
+        .filter((item) => typeof item === "string" && PROJECT_CHANGED_FIELDS.has(item))
+        .slice(0, PROJECT_CHANGED_FIELDS.size);
     }
   }
   let serialized;
@@ -115,6 +143,10 @@ function sanitizeAuditMetadata(metadata) {
 module.exports = {
   ALLOWED_AUDIT_FIELDS,
   ALLOWED_SUGGESTION_FIELDS,
+  PROJECT_CHANGED_FIELDS,
+  PROJECT_SOURCE_TYPES,
+  PROJECT_STATUSES,
+  PROJECT_COMPLETION_MODES,
   METADATA_RULES,
   sanitizeAuditMetadata
 };

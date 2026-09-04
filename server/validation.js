@@ -7,7 +7,7 @@ const ALLOWED_WORKTASK_PRIORITY = new Set(["low", "medium", "high", "urgent"]);
 const ALLOWED_AI_PROTOCOLS = new Set(["openai-chat", "openai-responses", "anthropic-messages"]);
 const ALLOWED_REASONING_EFFORTS = new Set(["", "low", "medium", "high", "xhigh", "max"]);
 const ALLOWED_AI_SUGGESTION_FIELDS = new Set(["summary", "category", "priority", "tags", "replyDraft"]);
-const ALLOWED_AUDIT_ENTITY_TYPES = new Set(["feedback", "worktask", "ai_profile", "ai_suggestion", "ai_knowledge", "notification", "notification_handoff", "status"]);
+const ALLOWED_AUDIT_ENTITY_TYPES = new Set(["feedback", "worktask", "ai_profile", "ai_suggestion", "ai_knowledge", "notification", "notification_handoff", "status", "project", "project_milestone", "project_item"]);
 const AI_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const AI_KNOWLEDGE_ROOT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -894,6 +894,353 @@ function validateAiKnowledgeSettingsPayload(payload) {
   return { valid: true, data: { autoCleanup: body.autoCleanup } };
 }
 
+// Project management keeps its own strict boundary.  These helpers avoid the
+// permissive parseInt/Date behaviour used by a few legacy endpoints while
+// preserving the existing validation.js response shape.
+const ALLOWED_PROJECT_STATUS = new Set(["active", "archived"]);
+const ALLOWED_PROJECT_LIST_STATUSES = new Set(["all", "active", "archived"]);
+const ALLOWED_PROJECT_COMPLETION_MODES = new Set(["auto", "custom"]);
+const ALLOWED_PROJECT_SOURCE_TYPES = new Set(["feedback", "worktask"]);
+const PROJECT_PUBLIC_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function parseProjectId(value, fieldName = "id") {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value > 0
+      ? { valid: true, value }
+      : { valid: false, message: `${fieldName} 不合法` };
+  }
+  if (typeof value !== "string" || !/^\d+$/u.test(value.trim())) {
+    return { valid: false, message: `${fieldName} 不合法` };
+  }
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? { valid: true, value: parsed }
+    : { valid: false, message: `${fieldName} 不合法` };
+}
+
+function parseProjectInteger(value, fieldName, minimum, maximum, fallback) {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: fallback };
+  }
+  const parsed = typeof value === "number"
+    ? { valid: Number.isSafeInteger(value) && value >= 0, value }
+    : typeof value === "string" && /^\d+$/u.test(value.trim())
+      ? { valid: Number.isSafeInteger(Number(value.trim())), value: Number(value.trim()) }
+      : { valid: false, value: 0 };
+  if (!parsed.valid || parsed.value < minimum || parsed.value > maximum) {
+    return { valid: false, message: `${fieldName} 不合法` };
+  }
+  return parsed;
+}
+
+function parseProjectBoolean(value, fieldName, fallback = false) {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: fallback };
+  }
+  const parsed = parseBooleanLike(value);
+  return parsed === null
+    ? { valid: false, message: `${fieldName} 必须为 true/false 或 1/0` }
+    : { valid: true, value: parsed };
+}
+
+function parseProjectString(body, fieldName, maximum, { required = false, defaultValue = "" } = {}) {
+  if (body[fieldName] === undefined || body[fieldName] === null) {
+    if (required) return { valid: false, message: `${fieldName} 必须是字符串` };
+    return { valid: true, value: defaultValue };
+  }
+  if (typeof body[fieldName] !== "string") {
+    return { valid: false, message: `${fieldName} 必须是字符串` };
+  }
+  const value = truncateUnicode(body[fieldName].trim(), maximum);
+  if (required && !value) return { valid: false, message: `${fieldName} 不能为空` };
+  if (Array.from(body[fieldName].trim()).length > maximum) {
+    return { valid: false, message: `${fieldName} 过长` };
+  }
+  return { valid: true, value };
+}
+
+function parseProjectDate(value, fieldName = "targetDate") {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: "" };
+  }
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value.trim())) {
+    return { valid: false, message: `${fieldName} 必须是 YYYY-MM-DD` };
+  }
+  const normalized = value.trim();
+  const [year, month, day] = normalized.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return { valid: false, message: `${fieldName} 必须是有效日期` };
+  }
+  return { valid: true, value: normalized };
+}
+
+function parseProjectCompletion(value, fieldName = "customCompletion") {
+  if (value === null || value === undefined || value === "") {
+    return { valid: true, value: null };
+  }
+  const parsed = parseProjectInteger(value, fieldName, 0, 100);
+  if (!parsed.valid || parsed.value < 0 || parsed.value > 100) {
+    return { valid: false, message: `${fieldName} 必须是 0-100 的整数` };
+  }
+  return parsed;
+}
+
+function validateProjectListPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (body.status !== undefined && body.status !== null && typeof body.status !== "string") {
+    return { valid: false, message: "status 不合法" };
+  }
+  const status = normalizeString(body.status) || "active";
+  if (!ALLOWED_PROJECT_LIST_STATUSES.has(status)) return { valid: false, message: "status 不合法" };
+  if (body.keyword !== undefined && body.keyword !== null && typeof body.keyword !== "string") {
+    return { valid: false, message: "keyword 必须是字符串" };
+  }
+  const keyword = normalizeString(body.keyword);
+  if (Array.from(keyword).length > 200) return { valid: false, message: "keyword 过长" };
+  const page = parseProjectInteger(body.page, "page", 1, 100000, 1);
+  const pageSize = parseProjectInteger(body.pageSize, "pageSize", 1, 100, 20);
+  if (!page.valid) return page;
+  if (!pageSize.valid) return pageSize;
+  return { valid: true, data: { status, keyword, page: page.value, pageSize: pageSize.value } };
+}
+
+function validateProjectIdPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const id = parseProjectId(body.id);
+  return id.valid ? { valid: true, data: { id: id.value } } : id;
+}
+
+function parseProjectPublicFields(body) {
+  const fields = {};
+  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion"]) {
+    const result = parseProjectBoolean(body[fieldName], fieldName, false);
+    if (!result.valid) return result;
+    fields[fieldName] = result.value;
+  }
+  return { valid: true, data: fields };
+}
+
+function validateProjectCompletionFields(body, { requireCustom = false } = {}) {
+  const rawMode = body.completionMode === undefined || body.completionMode === null || body.completionMode === ""
+    ? "auto"
+    : normalizeString(body.completionMode);
+  if (!ALLOWED_PROJECT_COMPLETION_MODES.has(rawMode)) {
+    return { valid: false, message: "completionMode 不合法" };
+  }
+  const completion = parseProjectCompletion(body.customCompletion);
+  if (!completion.valid) return completion;
+  if (rawMode === "custom" && requireCustom && completion.value === null) {
+    return { valid: false, message: "custom 模式必须提供 customCompletion" };
+  }
+  return {
+    valid: true,
+    data: {
+      completionMode: rawMode,
+      customCompletion: rawMode === "auto" ? null : completion.value
+    }
+  };
+}
+
+function validateProjectCreatePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const name = parseProjectString(body, "name", 120, { required: true });
+  const description = parseProjectString(body, "description", 2000);
+  if (!name.valid) return name;
+  if (!description.valid) return description;
+  const publicFields = parseProjectPublicFields(body);
+  if (!publicFields.valid) return publicFields;
+  const completion = validateProjectCompletionFields(body, { requireCustom: true });
+  if (!completion.valid) return completion;
+  return {
+    valid: true,
+    data: {
+      name: name.value,
+      description: description.value,
+      ...publicFields.data,
+      ...completion.data
+    }
+  };
+}
+
+function validateProjectUpdatePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const id = parseProjectId(body.id);
+  if (!id.valid) return id;
+  const data = { id: id.value };
+  let provided = false;
+  if (hasOwn(body, "name")) {
+    const result = parseProjectString(body, "name", 120, { required: true });
+    if (!result.valid) return result;
+    data.name = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "description")) {
+    const result = parseProjectString(body, "description", 2000);
+    if (!result.valid) return result;
+    data.description = result.value;
+    provided = true;
+  }
+  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion"]) {
+    if (!hasOwn(body, fieldName)) continue;
+    const result = parseProjectBoolean(body[fieldName], fieldName);
+    if (!result.valid) return result;
+    data[fieldName] = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "completionMode") || hasOwn(body, "customCompletion")) {
+    const completion = validateProjectCompletionFields(body, { requireCustom: body.completionMode === "custom" });
+    if (!completion.valid) return completion;
+    data.completionMode = completion.data.completionMode;
+    data.customCompletion = completion.data.customCompletion;
+    provided = true;
+  }
+  if (!provided) return { valid: false, message: "请至少提供一个可更新字段" };
+  return { valid: true, data };
+}
+
+function validateProjectMilestoneCreatePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const projectId = parseProjectId(body.projectId, "projectId");
+  if (!projectId.valid) return projectId;
+  const title = parseProjectString(body, "title", 160, { required: true });
+  const description = parseProjectString(body, "description", 2000);
+  const targetDate = parseProjectDate(body.targetDate);
+  const isCompleted = parseProjectBoolean(body.isCompleted, "isCompleted", false);
+  const sortOrder = parseProjectInteger(body.sortOrder, "sortOrder", 0, 100000, 0);
+  for (const result of [title, description, targetDate, isCompleted, sortOrder]) {
+    if (!result.valid) return result;
+  }
+  return {
+    valid: true,
+    data: {
+      projectId: projectId.value,
+      title: title.value,
+      description: description.value,
+      targetDate: targetDate.value,
+      isCompleted: isCompleted.value,
+      sortOrder: sortOrder.value
+    }
+  };
+}
+
+function validateProjectMilestoneUpdatePayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const id = parseProjectId(body.id);
+  if (!id.valid) return id;
+  const data = { id: id.value };
+  let provided = false;
+  if (hasOwn(body, "title")) {
+    const result = parseProjectString(body, "title", 160, { required: true });
+    if (!result.valid) return result;
+    data.title = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "description")) {
+    const result = parseProjectString(body, "description", 2000);
+    if (!result.valid) return result;
+    data.description = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "targetDate")) {
+    const result = parseProjectDate(body.targetDate);
+    if (!result.valid) return result;
+    data.targetDate = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "isCompleted")) {
+    const result = parseProjectBoolean(body.isCompleted, "isCompleted");
+    if (!result.valid) return result;
+    data.isCompleted = result.value;
+    provided = true;
+  }
+  if (hasOwn(body, "sortOrder")) {
+    const result = parseProjectInteger(body.sortOrder, "sortOrder", 0, 100000);
+    if (!result.valid) return result;
+    data.sortOrder = result.value;
+    provided = true;
+  }
+  if (!provided) return { valid: false, message: "请至少提供一个可更新字段" };
+  return { valid: true, data };
+}
+
+function validateProjectMilestoneIdPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const id = parseProjectId(body.id, "id");
+  return id.valid ? { valid: true, data: { id: id.value } } : id;
+}
+
+function validateProjectSourceFields(body) {
+  const sourceType = normalizeString(body.sourceType);
+  const sourceId = parseProjectId(body.sourceId === undefined ? body.entityId : body.sourceId, "sourceId");
+  if (!ALLOWED_PROJECT_SOURCE_TYPES.has(sourceType)) return { valid: false, message: "sourceType 不合法" };
+  if (!sourceId.valid) return sourceId;
+  return { valid: true, data: { sourceType, sourceId: sourceId.value } };
+}
+
+function validateProjectItemQueryPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  return validateProjectSourceFields(body);
+}
+
+function validateProjectItemCandidatesPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const sourceType = normalizeString(body.sourceType);
+  if (!ALLOWED_PROJECT_SOURCE_TYPES.has(sourceType)) return { valid: false, message: "sourceType 不合法" };
+  if (body.keyword !== undefined && body.keyword !== null && typeof body.keyword !== "string") {
+    return { valid: false, message: "keyword 必须是字符串" };
+  }
+  const keyword = normalizeString(body.keyword);
+  if (Array.from(keyword).length > 200) return { valid: false, message: "keyword 过长" };
+  const page = parseProjectInteger(body.page, "page", 1, 100000, 1);
+  const pageSize = parseProjectInteger(body.pageSize, "pageSize", 1, 100, 20);
+  if (!page.valid) return page;
+  if (!pageSize.valid) return pageSize;
+  return { valid: true, data: { sourceType, keyword, page: page.value, pageSize: pageSize.value } };
+}
+
+function validateProjectItemAssignPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const projectId = parseProjectId(body.projectId, "projectId");
+  if (!projectId.valid) return projectId;
+  const source = validateProjectSourceFields(body);
+  if (!source.valid) return source;
+  const milestoneRaw = body.milestoneId;
+  let milestoneId = null;
+  if (milestoneRaw !== undefined && milestoneRaw !== null && milestoneRaw !== "") {
+    const parsed = parseProjectId(milestoneRaw, "milestoneId");
+    if (!parsed.valid) return parsed;
+    milestoneId = parsed.value;
+  }
+  return { valid: true, data: { projectId: projectId.value, ...source.data, milestoneId } };
+}
+
+function validateProjectItemUpdatePayload(payload) {
+  const result = validateProjectItemAssignPayload(payload);
+  if (!result.valid) return result;
+  return result;
+}
+
+function validateProjectItemUnassignPayload(payload) {
+  const result = validateProjectItemAssignPayload(payload);
+  if (!result.valid) return result;
+  return {
+    valid: true,
+    data: {
+      projectId: result.data.projectId,
+      sourceType: result.data.sourceType,
+      sourceId: result.data.sourceId
+    }
+  };
+}
+
+function validatePublicProjectKey(value) {
+  const key = typeof value === "string" ? value.trim() : "";
+  return PROJECT_PUBLIC_KEY_PATTERN.test(key)
+    ? { valid: true, value: key }
+    : { valid: false, message: "publicKey 不合法" };
+}
+
 module.exports = {
   ALLOWED_STATUS,
   ALLOWED_TYPES,
@@ -934,5 +1281,22 @@ module.exports = {
   validateAiKnowledgeAskPayload,
   validateAiKnowledgeHistoryQueryPayload,
   validateAiKnowledgeAnswerDeletePayload,
-  validateAiKnowledgeSettingsPayload
+  validateAiKnowledgeSettingsPayload,
+  ALLOWED_PROJECT_STATUS,
+  ALLOWED_PROJECT_LIST_STATUSES,
+  ALLOWED_PROJECT_COMPLETION_MODES,
+  ALLOWED_PROJECT_SOURCE_TYPES,
+  validateProjectListPayload,
+  validateProjectIdPayload,
+  validateProjectCreatePayload,
+  validateProjectUpdatePayload,
+  validateProjectMilestoneCreatePayload,
+  validateProjectMilestoneUpdatePayload,
+  validateProjectMilestoneIdPayload,
+  validateProjectItemQueryPayload,
+  validateProjectItemCandidatesPayload,
+  validateProjectItemAssignPayload,
+  validateProjectItemUpdatePayload,
+  validateProjectItemUnassignPayload,
+  validatePublicProjectKey
 };
