@@ -21,10 +21,23 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 ### 当前环境基线记录（2026-08-28）
 
 - Node.js：`v24.19.0`；npm：`12.0.2`；当前运行时模块 ABI：`137`，N-API：`10`。
-- 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`。
+- 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`；`package.json` 通过
+  `overrides.qs=6.16.0` 固定 Express 4 依赖链的安全版本，不升级 Express 主版本。
 - 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
   干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
-  当前完整测试为 `196/196`（2026-09-04，Node 24 / better-sqlite3 13.0.3）。
+  当前完整测试为 `204/204`（2026-09-06，Node 24 / better-sqlite3 13.0.3）。
+
+### 部署目标验证顺序（待实际发布时执行）
+
+以下顺序用于云服务器或其他部署目标，文档本身不将未执行的云端动作标记为已完成：
+
+1. 备份数据库并保留上一版本、配置摘要和备份 checksum。
+2. 在 Git 工作树中同步已审核提交；保留生产 `.env`、数据库、备份、日志和 PM2 实际 cwd，不用示例配置覆盖它们。
+3. 执行 `npm ci --omit=dev --foreground-scripts`，运行 `better-sqlite3` 内存探针，必要时显式重建并核对 Node/ABI。
+4. 按实际进程管理器重启 PM2（或 systemd 二选一），并用 `pm2 show`/等价命令确认实际 cwd 和运行时版本。
+5. 访问 `http://127.0.0.1:3000/api/health`，再从反向代理入口确认 HTTPS、Host/Proto 转发和监听边界。
+6. 使用管理员会话打开项目详情，确认关系视图/Kanban 切换、两条独立泳道、空列和窄屏/键盘操作；在活跃项目中分别保存 Feedback/WorkTask 状态，验证成功重读、同值时间不变、归档禁写和错误提示。
+7. 访问公共项目列表/详情，确认只出现允许的公开投影，不出现工作项、关系记录或 Kanban 数据。
 
 ## 必须覆盖的行为
 
@@ -50,6 +63,8 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
   写入 `admin_audit`；需验证管理员权限、分页筛选、白名单元数据和审计写入失败降级。
 - 项目管理需验证项目创建/编辑/归档/恢复、里程碑完成/撤销/恢复、Feedback 与 WorkTask 单项目
   归属/换里程碑/解绑、冲突错误和写入后真实状态重读；归档项目不得新增里程碑或绑定。
+- 管理员 Kanban 需验证关系视图/Kanban 切换、Feedback/WorkTask 独立原生状态列、状态保存及项目更新时间
+  语义；状态非法、来源跨项目、来源未绑定和归档项目必须分别得到受控错误，公共页面不得出现 Kanban。
 - 公共项目列表/详情只能通过随机 `publicKey` 访问；基础信息、里程碑、更新时间和完成度按独立开关
   投影，归档/未公开/不存在统一 404，响应不得出现内部 ID、来源正文、联系方式或管理员字段。
 
@@ -63,6 +78,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |
 | 项目管理 API/UI | 项目 CRUD、里程碑、来源归属冲突、hash 详情、公共开关和窄屏/主题冒烟 | 自动回归已覆盖；部署环境需执行一次管理员与公共页面冒烟 |
+| 管理员 Kanban API/UI | 项目范围状态 API、两条原生状态泳道、同值时间语义、归档禁写、审计和公共隐私投影 | 自动回归已覆盖；部署目标的备份、Git 同步、依赖探针、PM2、health 和管理员 Kanban 冒烟待执行 |
 | AI Copilot 边界 | AI profile/API/Provider/Copilot 回归与状态降级 | 本地 stub 与隔离 HTTP 已覆盖；真实 Provider 按运维手册受控验证 |
 | AI Provider 真实诊断 | 对当前部署目标点击一次指定 profile 的固定 sentinel；记录脱敏 status/协议/模型摘要/耗时/usage/错误码且 active 不变 | `<PASS_OR_BLOCKER>` |
 | AI 请求指标 | 生成一次建议/问答或诊断后读取 24h 汇总，确认三类 operation、状态、耗时、未知 usage 和自动清理边界 | `<PASS_OR_BLOCKER>` |

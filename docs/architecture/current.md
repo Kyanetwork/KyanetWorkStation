@@ -74,17 +74,43 @@ Feedback 或 WorkTask 只能归属一个项目；里程碑关联由服务端校�
 管理端请求流为：
 
 ```text
-管理员项目列表/来源详情
+管理员项目列表/来源详情及 Kanban 状态保存
   -> validation.js（ID、枚举、Unicode 长度、日期、公开开关）
   -> app.js（管理员会话 + 同源/JSON）
   -> db.js（项目/里程碑/多态关系 CRUD 与孤儿清理）
   -> 脱敏 admin DTO + 审计 metadata
 ```
 
+项目详情与 Kanban 复用同一条安全数据流，不新增 Kanban 查询接口：
+
+```text
+GET /api/admin/project/:id
+  -> 安全项目详情 DTO（项目、里程碑、有效来源摘要）
+  -> public/admin/project-model.js
+  -> normalizeProjectDetail/buildKanbanLanes
+  -> Feedback 泳道 + WorkTask 泳道（各自原生状态列）
+
+Kanban 状态保存
+  -> POST /api/admin/project/item/status
+  -> validateProjectItemStatusPayload
+  -> updateProjectItemStatus
+  -> 项目 active/关系归属/来源存在性检查
+  -> updateFeedbackStatus 或 updateWorktaskStatus
+  -> 来源 updated_at（发生变化时）+ 项目 updated_at
+  -> project.item.status 脱敏审计
+  -> 前端重新读取项目详情并保留 Kanban 视图
+```
+
+Kanban 列内按来源摘要的 `updatedAt DESC`、项目关系记录 `id DESC` 排序；Feedback 与 WorkTask 不做状态映射，
+也不合并业务表。状态保存只改变对应来源的原生状态，并保留 `project_item` 的项目和里程碑关联。相同状态
+重复保存成功但不触碰项目 `updated_at`。该增量能力不改变现有三表 schema，不引入 ORM 或迁移 runner；当前
+三数据库 facade 只保证既有顺序下的兼容执行，不宣称跨驱动强事务。若来源更新成功而后续项目时间或审计写入
+失败，按现有 best-effort/回滚边界记录并交由独立可靠性任务处理。
+
 公共端只通过 `listPublicProjects`/`getPublicProjectByKey` 查询，使用创建时生成且不可变的随机
 `publicKey`。基础信息、里程碑、更新时间和完成度分别受项目级开关控制；公共投影只包含名称、说明、
-有效里程碑、安全日期/完成度，不包含来源 ID、正文、联系方式、管理员字段或数据库内部 ID。项目管理
-不驱动 AI、通知或 Account 联动。
+有效里程碑、安全日期/完成度，不包含来源 ID、工作项、Kanban 泳道、正文、联系方式、管理员字段或数据库内部 ID。
+项目管理和 Kanban 不驱动 AI、通知或 Account 联动。
 
 ## 认证边界（当前代码状态）
 

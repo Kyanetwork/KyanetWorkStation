@@ -1,6 +1,6 @@
 # API 参考
 
-本文档描述当前代码中的 HTTP 路由。旧 KyanetAccount 联动已移除；本文件不把计划中的新接口当作当前接口。
+本文档描述当前代码中的 HTTP 路由。旧 KyanetAccount 联动已移除；当前已实现的项目 Kanban 基础接口也在本文件中记录。
 
 ## 通用约定
 
@@ -58,12 +58,65 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/project/milestone/revoke` / `restore` | 软撤销或恢复里程碑；撤销会解除关联且不自动重绑 |
 | `POST /api/admin/project/item/assign` | 将 Feedback/WorkTask 绑定到活跃项目，可选同项目有效里程碑 |
 | `POST /api/admin/project/item/update` | 调整同项目内的里程碑关联 |
+| `POST /api/admin/project/item/status` | 在项目范围内更新已绑定 Feedback/WorkTask 的原生状态；供管理员 Kanban 使用 |
 | `POST /api/admin/project/item/unassign` | 解除来源项目归属 |
 
 项目创建/更新字段包括 `name`（1–120 个 Unicode 字符）、`description`（最多 2000）、四个独立公开
 开关 `publicBasic`/`publicMilestones`/`publicUpdatedAt`/`publicCompletion`，以及
 `completionMode`（`auto`/`custom`）和 0–100 的 `customCompletion`。自动完成度按有效里程碑的完成比例
 四舍五入；无有效里程碑时为“未设置”。归档项目可以整理元数据和已有关系，但不能新增里程碑或绑定。
+
+#### 项目工作项状态（Kanban 基础）
+
+`POST /api/admin/project/item/status` 仅供管理员在项目详情的 Kanban 视图中使用。请求需要管理员会话、
+JSON 内容类型和同源来源检查，并沿用管理写接口的限流边界。请求体为：
+
+```json
+{
+  "projectId": 12,
+  "sourceType": "feedback",
+  "sourceId": 34,
+  "status": "reviewed"
+}
+```
+
+`sourceType` 只能是 `feedback` 或 `worktask`，且状态必须匹配来源类型：
+
+- Feedback：`new`、`reviewed`、`resolved`、`notplanned`
+- WorkTask：`new`、`scheduled`、`in_progress`、`completed`、`cancelled`
+
+成功返回 HTTP 200，数据只包含项目和来源标识、已保存状态及项目更新时间，不返回来源正文、联系方式、
+管理员备注、账号快照或内部关系 ID：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "projectId": 12,
+    "sourceType": "feedback",
+    "sourceId": 34,
+    "status": "reviewed",
+    "projectUpdatedAt": "2030-01-01T00:00:00.000Z"
+  }
+}
+```
+
+服务端会再次确认项目存在、项目为 `active`、来源关系属于当前项目且来源记录存在，然后复用对应来源的
+状态更新函数。状态实际变化时同步更新项目 `updatedAt`；保存相同状态仍成功但不更新时间。成功和失败均
+写入管理员审计，动作固定为 `project.item.status`，失败 metadata 只保留稳定错误码及必要的项目/来源字段。
+
+该接口的主要错误为：
+
+| HTTP | 错误码 | 触发条件 |
+|---|---|---|
+| 400 | `INVALID_PAYLOAD` | 项目 ID、来源类型/ID 或来源专属状态不合法 |
+| 404 | `NOT_FOUND` | 项目、来源关系或来源记录不存在 |
+| 409 | `PROJECT_ITEM_CONFLICT` | 来源关系属于其他项目，或与请求项目不匹配 |
+| 409 | `PROJECT_STATE_CONFLICT` | 项目已归档，不能更新工作项状态 |
+
+管理员项目详情 `GET /api/admin/project/:id` 仍是 Kanban 的读取数据源；浏览器按 Feedback/WorkTask 及其原生
+状态分成两条独立泳道。公共项目列表和详情继续只返回各自公开开关允许的项目投影，不返回工作项、关系数据
+或任何 Kanban 泳道。
 
 公共项目接口不需要认证：
 
@@ -72,7 +125,7 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `GET /api/public/projects` | 返回基础信息公开且未归档项目的 `publicKey`、名称和说明 |
 | `GET /api/public/projects/:publicKey` | 按不可猜测的随机 key 返回公共详情；里程碑、更新时间、完成度按独立开关省略或返回 |
 
-公共投影不返回内部 ID、来源关联、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
+公共投影不返回内部 ID、来源关联、Kanban 工作项/泳道、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
 不存在或 key 不合法时统一返回 404。项目关系冲突返回 `PROJECT_ITEM_CONFLICT`，跨项目/撤销里程碑关联返回
 `PROJECT_MILESTONE_CONFLICT`，归档项目新增操作返回 `PROJECT_STATE_CONFLICT`。
 

@@ -36,7 +36,8 @@ node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqli
 
 项目管理是纯增量数据库能力。新版首次启动会在现有数据库上幂等创建 `project`、
 `project_milestone`、`project_item` 及索引，不回填或修改 Feedback/WorkTask 原表；发布前仍应
-备份并确认数据库可读，启动后用管理员/API 冒烟验证项目列表、归档/恢复、里程碑和来源归属。
+备份并确认数据库可读，启动后用管理员/API 冒烟验证项目列表、归档/恢复、里程碑、来源归属和 Kanban
+基础状态保存。Kanban 基础不新增数据库字段或迁移步骤。
 旧版本回滚时保留这三张新表即可，旧代码会忽略它们，不要为回滚执行 `DROP TABLE`。
 
 若当前目录是手动上传的、没有可信 Git 历史，先在旁边目录克隆并完成健康检查，
@@ -52,6 +53,7 @@ node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqli
 | `logs/`、`notification-handoff.jsonl` | 观测和人工补偿记录；按权限/轮转策略保留 |
 | 宝塔 Nginx 配置、证书和防火墙规则 | 由宝塔/系统单独管理，不从仓库模板直接覆盖 |
 | systemd unit | `/etc/systemd/system/kyanet-workstation.service`，由系统管理员管理 |
+| PM2 进程与 cwd | 保留生产 PM2 保存的进程列表和实际应用工作目录；同步代码不覆盖运行时 cwd，更新后用 `pm2 show` 核对并按实际目录重启 |
 
 不要把生产 `.env`、数据库、备份或日志复制回 Git 工作树。若必须继续手动上传，
 也应只上传与提交对应的代码文件，并逐项排除上表内容；长期维护仍以 Git 提交作为
@@ -100,12 +102,19 @@ curl -fsS http://127.0.0.1:3000/api/health
 
 ```bash
 # 通过页面或等价 API 完成：创建项目 → 新增/完成/撤销/恢复里程碑
-# → 分别绑定 Feedback 与 WorkTask → 归档/恢复 → 设置公开开关
+# → 分别绑定 Feedback 与 WorkTask → 在关系视图/Kanban 间切换
+# → 在活跃项目中分别保存 Feedback/WorkTask 合法状态，确认详情重读后状态和里程碑关联保持
+# → 保存相同状态确认成功且项目更新时间不重复变化；归档后确认 Kanban 控件禁用且接口返回 409
+# → 归档/恢复 → 设置公开开关
 curl -fsS http://127.0.0.1:3000/api/public/projects
 ```
 
 公共项目详情只使用页面返回的 `publicKey` 访问 `/api/public/projects/<publicKey>`；归档、未公开和
-不存在项目应统一返回 404。来源详情中的绑定、里程碑调整和解绑必须在管理员页面重新读取详情后确认。
+不存在项目应统一返回 404，且响应不得出现工作项或 Kanban 数据。来源详情中的绑定、里程碑调整、解绑和
+Kanban 状态保存必须在管理员页面重新读取详情后确认。
+
+以上 Kanban 冒烟命令是发布时的待执行 runbook，不代表本文编写时已经在云服务器执行；实际结果、版本、
+备份 checksum 和回滚点请记录到[发布验证证据模板](./release-evidence-template.md)或部署系统。
 
 在维护窗口可用 `pm2 logs kyanet-workstation --lines 50` 查看最近日志。要验证开机恢复，
 先确认 `pm2 save` 已完成，再重启服务器；重新登录后检查 `pm2 status`、`pm2 show
