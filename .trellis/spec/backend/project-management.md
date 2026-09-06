@@ -88,3 +88,69 @@ const data = await getPublicProjectByKey(key.value);
 if (!data) return sendError(res, 404, "NOT_FOUND", "项目暂不可用");
 return res.json({ ok: true, data });
 ```
+
+## 8. 项目范围 Kanban 状态更新
+
+### 8.1 Scope / Trigger
+
+该契约适用于管理员项目详情的 Kanban 基础视图：它允许在一个已绑定项目项的
+范围内调整来源原生状态，但不把 Feedback 与 WorkTask 合并成新的业务状态，
+也不改变公共投影或关系/里程碑模型。
+
+### 8.2 Signatures
+
+- `validateProjectItemStatusPayload(payload) -> { valid, data?, message? }`
+- `updateProjectItemStatus({ projectId, sourceType, sourceId, status }) -> Promise<{ projectItemId, projectId, sourceType, sourceId, status, projectUpdatedAt }>`
+- `POST /api/admin/project/item/status`：管理员会话 + 同源 + JSON + 管理员限流
+
+### 8.3 Contracts
+
+- 请求字段：`projectId`、`sourceId` 必须为正整数；`sourceType` 只能为
+  `feedback` 或 `worktask`。
+- Feedback 状态只允许 `new`、`reviewed`、`resolved`、`notplanned`；WorkTask
+  状态只允许 `new`、`scheduled`、`in_progress`、`completed`、`cancelled`。
+- 数据层必须确认项目存在且为 `active`、来源关系当前属于该项目、来源记录仍存在，
+  然后复用 `updateFeedbackStatus` 或 `updateWorktaskStatus`。
+- 只有来源状态实际变化时才更新来源 `updated_at` 后触碰项目 `updated_at`；同值保存
+  返回成功且项目时间保持原值。`project_item` 的项目和里程碑关联不变。
+- 成功响应只返回项目/来源标识、保存后的状态和 `projectUpdatedAt`；不返回正文、联系方式、
+  管理员字段、账号快照或关系内部 ID。成功和失败都写入 `project.item.status` 脱敏审计。
+
+### 8.4 Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| 未登录、同源失败或非 JSON 管理写请求 | 现有 401/403/415 envelope；不进入业务写入 |
+| ID、来源类型或来源专属状态非法 | 400 `INVALID_PAYLOAD` |
+| 项目、关系或来源记录不存在 | 404 `NOT_FOUND` |
+| 关系属于其他项目 | 409 `PROJECT_ITEM_CONFLICT` |
+| 项目已归档 | 409 `PROJECT_STATE_CONFLICT`，提示“归档项目不能更新工作项状态” |
+
+### 8.5 Good / Base / Bad Cases
+
+- Good：路由先校验来源专属状态，数据层再次检查项目和关系归属，状态改变后更新项目时间并重读安全详情。
+- Base：无工作项项目和归档项目仍可读取管理员详情；归档 Kanban 只读，公共接口不增加工作项字段。
+- Bad：用统一 Kanban 状态覆盖来源原值、跳过 `project_item` 归属检查，或把正文/联系方式/密钥写进响应或审计。
+
+### 8.6 Tests Required
+
+- Validator：合法 Feedback/WorkTask payload、跨来源状态、非法来源类型和 ID。
+- DB：两类来源状态更新、项目时间变化、同值不变、里程碑保留、跨项目/归档/未绑定/来源缺失错误。
+- API：匿名 401、共享错误码、成功响应字段 allow-list、审计动作和 metadata 脱敏。
+- Admin UI/model：两条独立原生状态泳道、固定空列和排序、归档控件禁用、保存后详情重读和公共页面无 Kanban。
+
+### 8.7 Wrong vs Correct
+
+#### Wrong
+
+```js
+// 直接更新来源，无法确认它仍属于当前项目，也不会同步项目更新时间。
+await updateFeedbackStatus(sourceId, status);
+```
+
+#### Correct
+
+```js
+const result = await updateProjectItemStatus({ projectId, sourceType, sourceId, status });
+// helper 先做项目/关系/来源检查，并在实际变化时同步 project.updated_at。
+```

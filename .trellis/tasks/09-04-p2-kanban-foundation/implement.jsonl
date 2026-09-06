@@ -1,1 +1,14 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"确认 Node/Express 后端修改前置清单、API envelope、权限边界和质量门禁。"}
+{"file":".trellis/spec/backend/project-management.md","reason":"Kanban 复用项目、里程碑、project_item 关系及公共/admin DTO 合同。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"指导 db.js 三驱动参数化 SQL、row mapper、时间/布尔转换和无事务 facade 边界。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"确保新管理员状态接口沿用 sendError、异步传播和 400/404/409 错误语义。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"覆盖管理员会话、审计脱敏、node:test、Node 24 和完整验证要求。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"约束 project.item.status 审计/日志只记录有界稳定字段，不泄露来源正文或凭据。"}
+{"file":".trellis/spec/frontend/index.md","reason":"确认静态管理员页面修改前的 DOM、API、转义和主题质量要求。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"指导 Kanban 语义区块、render 函数、按钮 type、escapeHtml 和可访问性。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"约束 projectView 短生命周期状态、服务端刷新和失败时保留控件选择。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"指导项目详情 DTO 归一化、状态边界和缺省/未知值 fallback。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"覆盖静态页面 node --check、主题、窄屏、键盘和 mutation busy/恢复检查。"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"确认原生 HTML/CSS/JS 文件职责和现有 admin/project-model 入口，不引入框架。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 validator→app→db→DTO→模型→UI 的完整跨层数据流和错误边界。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"提醒复用现有来源状态更新、project detail DTO、splitProjectItems 和 withButtonBusy，避免重复逻辑。"}

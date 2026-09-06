@@ -1,1 +1,8 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/project-management.md","reason":"按项目关系、来源独立、归档写保护和公共字段边界复核 Kanban 实现。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核三驱动 SQL 参数化、时间更新、row mapper 和无强事务声明。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核新接口的共享错误 envelope、状态码和异步错误路径。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行后端测试、Node 24、审计脱敏和最终质量检查清单。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核 Kanban DOM 合同、转义、按钮 type 和可访问性。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核视图状态保留、成功刷新和失败不刷新语义。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核管理员 UI 主题/窄屏/键盘/busy 状态和静态安全测试。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"执行 API、数据库、模型和 UI 之间的字段/错误/刷新一致性复核。"}
