@@ -224,3 +224,27 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: P2 Kanban 基础能力
+
+**Date**: 2026-09-06
+**Task**: P2 Kanban 基础能力
+**Branch**: `main`
+
+### Summary
+
+完成管理员项目 Kanban 基础能力：Feedback/WorkTask 独立原生状态泳道、项目范围状态 API、归档只读、项目更新时间同步、审计脱敏、冷色直角响应式 UI 与自动回归；同步 API/架构/产品/部署文档，固定 qs 安全版本，完成本地门禁并归档 Trellis 任务。云服务器部署待按发布清单执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42bb1f7` | (see git log) |
+| `3800422` | (see git log) |
+| `2ee23d3` | (see git log) |
+| `dfb98d3` | (see git log) |
+
+### Status
+
+[OK] **Completed**

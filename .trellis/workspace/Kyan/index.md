@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-09-04
+- **Total Sessions**: 10
+- **Last Active**: 2026-09-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~226 | Active |
+| `journal-1.md` | ~250 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-09-06 | P2 Kanban 基础能力 | `42bb1f7`, `3800422`, `2ee23d3`, `dfb98d3` | `main` |
 | 9 | 2026-09-04 | P2 项目管理基础能力 | `46705fb`, `8869133` | `main` |
 | 8 | 2026-09-01 | P1-B Provider 诊断与 AI 指标 | `ed3ed01`, `6a319a1`, `2d98403` | `main` |
 | 7 | 2026-08-31 | P1 AI 知识助手与 WorkStation UI 收尾 | `9427f1d`, `2a81c30`, `6a25e3b`, `cc620bf`, `34f5745`, `9d42a64`, `fc572f4` | `main` |
