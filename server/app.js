@@ -56,6 +56,7 @@ const {
   assignProjectItem,
   updateProjectItemMilestone,
   unassignProjectItem,
+  updateProjectItemStatus,
   listPublicProjects,
   getPublicProjectByKey,
   getHomeHighlights,
@@ -157,6 +158,7 @@ const {
   validateProjectItemAssignPayload,
   validateProjectItemUpdatePayload,
   validateProjectItemUnassignPayload,
+  validateProjectItemStatusPayload,
   validatePublicProjectKey
 } = require("./validation");
 const {
@@ -332,12 +334,15 @@ function sendAiError(res, error) {
   throw error;
 }
 
-function sendProjectError(res, error) {
+function sendProjectError(res, error, options = {}) {
   const code = error && error.code;
   if (code === "INVALID_PAYLOAD") return sendError(res, 400, code, "项目请求参数不合法");
   if (code === "NOT_FOUND") return sendError(res, 404, code, "项目或关联资源不存在");
   if (code === "PROJECT_ITEM_CONFLICT") return sendError(res, 409, code, "该来源已归属其他项目或当前关联不匹配");
   if (code === "PROJECT_MILESTONE_CONFLICT") return sendError(res, 409, code, "里程碑不存在、已撤销或不属于当前项目");
+  if (code === "PROJECT_STATE_CONFLICT" && options.operation === "status") {
+    return sendError(res, 409, code, "归档项目不能更新工作项状态");
+  }
   if (code === "PROJECT_STATE_CONFLICT") return sendError(res, 409, code, "归档项目不能新增里程碑或工作项");
   throw error;
 }
@@ -945,6 +950,45 @@ app.post("/api/admin/project/item/update", requireAdminSession, asyncHandler(asy
       errorCode: error && error.code ? error.code : "PROJECT_ITEM_UPDATE_FAILED"
     });
     return sendProjectError(res, error);
+  }
+}));
+
+app.post("/api/admin/project/item/status", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemStatusPayload(req.body || {});
+  if (!validation.valid) {
+    await recordAdminAction(req, "project.item.status", "project_item", null, "failed", {
+      errorCode: "INVALID_PAYLOAD"
+    });
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const dataInput = validation.data;
+  try {
+    const data = await updateProjectItemStatus(dataInput);
+    await recordAdminAction(req, "project.item.status", "project_item", data.projectItemId, "success", {
+      projectId: data.projectId,
+      sourceType: data.sourceType,
+      sourceId: data.sourceId,
+      status: data.status
+    });
+    return res.json({
+      ok: true,
+      data: {
+        projectId: data.projectId,
+        sourceType: data.sourceType,
+        sourceId: data.sourceId,
+        status: data.status,
+        projectUpdatedAt: data.projectUpdatedAt
+      }
+    });
+  } catch (error) {
+    await recordAdminAction(req, "project.item.status", "project_item", null, auditResultForError(error), {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      status: dataInput.status,
+      errorCode: error && error.code ? error.code : "PROJECT_ITEM_STATUS_FAILED"
+    });
+    return sendProjectError(res, error, { operation: "status" });
   }
 }));
 

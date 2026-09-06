@@ -36,7 +36,18 @@
   const projectMsg = document.getElementById("projectMsg");
   const projectList = document.getElementById("projectList");
   const projectDetail = document.getElementById("projectDetail");
+  const projectRelationsView = document.getElementById("projectRelationsView");
+  const projectKanbanView = document.getElementById("projectKanbanView");
+  const projectRelationsViewBtn = document.getElementById("projectRelationsViewBtn");
+  const projectKanbanViewBtn = document.getElementById("projectKanbanViewBtn");
+  const projectKanbanBoard = document.getElementById("projectKanbanBoard");
   const projectModel = window.KwsProjectModel;
+
+  const projectKanbanSourceLabels = Object.freeze({ feedback: "Feedback", worktask: "WorkTask" });
+  const projectKanbanStatusLabels = Object.freeze({
+    feedback: Object.freeze({ new: "新建", reviewed: "已查看", resolved: "已解决", notplanned: "不计划" }),
+    worktask: Object.freeze({ new: "新建", scheduled: "已安排", in_progress: "进行中", completed: "已完成", cancelled: "已取消" })
+  });
 
   const tabInbox = document.getElementById("tabInbox");
   const tabFeedback = document.getElementById("tabFeedback");
@@ -74,6 +85,7 @@
       items: [],
       detail: null,
       detailId: null,
+      projectView: "relations",
       loading: false
     },
     statusSettings: {
@@ -1669,6 +1681,87 @@
     </article>`).join("");
   }
 
+  function projectKanbanStatusOptions(sourceType, selectedStatus) {
+    const statuses = projectModel && projectModel.KANBAN_STATUS_COLUMNS && Array.isArray(projectModel.KANBAN_STATUS_COLUMNS[sourceType])
+      ? projectModel.KANBAN_STATUS_COLUMNS[sourceType]
+      : [];
+    const knownStatus = statuses.includes(selectedStatus);
+    const placeholder = knownStatus || !statuses.length
+      ? ""
+      : '<option value="" selected disabled>未知状态（请选择）</option>';
+    return placeholder + statuses.map((status) => `<option value="${escapeHtml(status)}"${status === selectedStatus ? " selected" : ""}>${escapeHtml(projectKanbanStatusLabels[sourceType][status] || status)}</option>`).join("");
+  }
+
+  function renderProjectKanbanCard(item, archived) {
+    const sourceLabel = projectKanbanSourceLabels[item.sourceType] || "工作项";
+    const statusLabel = projectKanbanStatusLabels[item.sourceType] && projectKanbanStatusLabels[item.sourceType][item.status]
+      ? projectKanbanStatusLabels[item.sourceType][item.status]
+      : "未知状态";
+    const worktaskSummary = item.sourceType === "worktask"
+      ? `<div class="project-kanban-summary">
+          ${item.priority ? `<span>优先级：${escapeHtml(item.priority)}</span>` : ""}
+          ${item.assignee ? `<span>负责人：${escapeHtml(item.assignee)}</span>` : ""}
+          ${item.scheduledAt ? `<span>计划：${escapeHtml(formatDateTimeDisplay(item.scheduledAt))}</span>` : ""}
+          ${item.expectedAt ? `<span>期望：${escapeHtml(formatDateTimeDisplay(item.expectedAt))}</span>` : ""}
+        </div>`
+      : "";
+    return `<article class="project-kanban-card" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${escapeHtml(item.sourceId)}">
+      <div class="project-kanban-card-head"><span class="project-kanban-source">${escapeHtml(sourceLabel)}</span><span class="project-kanban-status-label">${escapeHtml(statusLabel)}</span></div>
+      <h6 class="project-kanban-card-title">${escapeHtml(item.title || "无标题")}</h6>
+      <div class="project-kanban-card-time">更新时间：${escapeHtml(formatDateTimeDisplay(item.updatedAt))}</div>
+      ${worktaskSummary}
+      <div class="project-kanban-card-actions">
+        <label>状态<select data-action-field="project-kanban-status" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${escapeHtml(item.sourceId)}" aria-label="${escapeHtml(sourceLabel)}状态"${archived ? " disabled" : ""}>${projectKanbanStatusOptions(item.sourceType, item.status)}</select></label>
+        <button type="button" class="primary" data-action="project-kanban-status-save" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${escapeHtml(item.sourceId)}"${archived ? " disabled" : ""}>保存状态</button>
+      </div>
+    </article>`;
+  }
+
+  function renderProjectKanban(detail) {
+    if (!projectKanbanBoard || !projectModel) return;
+    const project = detail && detail.project ? detail.project : {};
+    const archived = project.status === "archived";
+    const lanes = projectModel.buildKanbanLanes(detail && Array.isArray(detail.items) ? detail.items : []);
+    projectKanbanBoard.innerHTML = ["feedback", "worktask"].map((sourceType) => {
+      const lane = lanes[sourceType] || { columns: [], unknown: [] };
+      const columns = lane.columns.map((column) => `<section class="project-kanban-column">
+        <div class="project-kanban-column-head"><h6>${escapeHtml(projectKanbanStatusLabels[sourceType][column.status] || column.status)}</h6><span>${column.items.length}</span></div>
+        <div class="project-kanban-column-items">${column.items.length ? column.items.map((item) => renderProjectKanbanCard(item, archived)).join("") : '<p class="project-kanban-empty">此列暂无工作项。</p>'}</div>
+      </section>`);
+      columns.push(`<section class="project-kanban-column is-unknown">
+        <div class="project-kanban-column-head"><h6>未知状态</h6><span>${lane.unknown.length}</span></div>
+        <div class="project-kanban-column-items">${lane.unknown.length ? lane.unknown.map((item) => renderProjectKanbanCard(item, archived)).join("") : '<p class="project-kanban-empty">此列暂无工作项。</p>'}</div>
+      </section>`);
+      return `<section class="project-kanban-lane" aria-labelledby="project-kanban-${sourceType}-title">
+        <div class="project-kanban-lane-head"><h5 id="project-kanban-${sourceType}-title">${escapeHtml(projectKanbanSourceLabels[sourceType])} 泳道</h5><span>${lane.columns.reduce((count, column) => count + column.items.length, 0) + lane.unknown.length} 个工作项</span></div>
+        <div class="project-kanban-lane-scroll"><div class="project-kanban-lane-grid" data-source-type="${escapeHtml(sourceType)}">${columns.join("")}</div></div>
+      </section>`;
+    }).join("");
+  }
+
+  function setProjectView(view) {
+    const nextView = view === "kanban" ? "kanban" : "relations";
+    state.projects.projectView = nextView;
+    const isRelations = nextView === "relations";
+    if (projectRelationsView) {
+      projectRelationsView.hidden = !isRelations;
+      projectRelationsView.classList.toggle("hidden", !isRelations);
+    }
+    if (projectKanbanView) {
+      projectKanbanView.hidden = isRelations;
+      projectKanbanView.classList.toggle("hidden", isRelations);
+    }
+    if (projectRelationsViewBtn) {
+      projectRelationsViewBtn.classList.toggle("active", isRelations);
+      projectRelationsViewBtn.setAttribute("aria-pressed", String(isRelations));
+    }
+    if (projectKanbanViewBtn) {
+      projectKanbanViewBtn.classList.toggle("active", !isRelations);
+      projectKanbanViewBtn.setAttribute("aria-pressed", String(!isRelations));
+    }
+    if (!isRelations && state.projects.detail) renderProjectKanban(state.projects.detail);
+  }
+
   function renderProjectDetail(data) {
     const detail = projectModel.normalizeProjectDetail(data);
     state.projects.detail = detail;
@@ -1700,12 +1793,17 @@
     const lanes = projectModel.splitProjectItems(detail.items);
     renderProjectLane("projectFeedbackLane", lanes.feedback);
     renderProjectLane("projectWorktaskLane", lanes.worktask);
+    renderProjectKanban(detail);
     projectDetail.classList.remove("hidden");
+    setProjectView(state.projects.projectView);
   }
 
   async function loadProjectDetail(id) {
     const parsedId = Number(id);
     if (!Number.isSafeInteger(parsedId) || parsedId <= 0) return;
+    if (state.projects.detailId !== null && state.projects.detailId !== parsedId) {
+      state.projects.projectView = "relations";
+    }
     clearMessage(projectMsg);
     try {
       const data = await api(`/api/admin/project/${parsedId}`, null, { method: "GET" });
@@ -1714,6 +1812,8 @@
     } catch (error) {
       state.projects.detail = null;
       state.projects.detailId = null;
+      state.projects.projectView = "relations";
+      setProjectView("relations");
       projectDetail.classList.add("hidden");
       throw error;
     }
@@ -1725,8 +1825,8 @@
     await loadProjects();
   }
 
-  async function projectWrite(pathname, payload, message) {
-    const button = document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null;
+  async function projectWrite(pathname, payload, message, busyButton) {
+    const button = busyButton || (document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null);
     await withButtonBusy(button || document.getElementById("projectSearchBtn"), "保存中…", async () => {
       await api(pathname, payload);
       await reloadProjectDetail();
@@ -1776,6 +1876,16 @@
       await projectWrite("/api/admin/project/item/unassign", { projectId, sourceType: button.dataset.sourceType, sourceId: Number(button.dataset.sourceId) }, "工作项已解绑");
     } else if (action === "project-candidate-assign") {
       await projectWrite("/api/admin/project/item/assign", { projectId, sourceType: button.dataset.sourceType, sourceId: Number(button.dataset.sourceId) }, "工作项已绑定");
+    } else if (action === "project-kanban-status-save") {
+      const sourceType = button.dataset.sourceType;
+      const sourceId = Number(button.dataset.sourceId);
+      const select = button.closest(".project-kanban-card") && button.closest(".project-kanban-card").querySelector('[data-action-field="project-kanban-status"]');
+      const status = select ? select.value : "";
+      if (!status) {
+        notify(projectMsg, "error", "请先选择有效状态");
+        return;
+      }
+      await projectWrite("/api/admin/project/item/status", { projectId, sourceType, sourceId, status }, "工作项状态已保存", button);
     }
   }
 
@@ -1788,6 +1898,9 @@
     } else {
       projectDetail.classList.add("hidden");
       state.projects.detailId = null;
+      state.projects.detail = null;
+      state.projects.projectView = "relations";
+      setProjectView("relations");
     }
   }
 
@@ -1907,6 +2020,8 @@
       state.projects.items = [];
       state.projects.detail = null;
       state.projects.detailId = null;
+      state.projects.projectView = "relations";
+      setProjectView("relations");
       if (projectList) projectList.innerHTML = "";
       if (projectDetail) projectDetail.classList.add("hidden");
       resetWorktaskCreateForm();
@@ -2143,6 +2258,19 @@
     if (!button) return;
     try { await withButtonBusy(button, "处理中…", () => handleProjectAction(button)); } catch (error) { notify(projectMsg, "error", error.message); }
   });
+  if (projectRelationsViewBtn) projectRelationsViewBtn.addEventListener("click", () => setProjectView("relations"));
+  if (projectKanbanViewBtn) projectKanbanViewBtn.addEventListener("click", () => setProjectView("kanban"));
+  if (projectKanbanBoard) {
+    projectKanbanBoard.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest('button[data-action="project-kanban-status-save"]');
+      if (!actionButton) return;
+      try {
+        await handleProjectAction(actionButton);
+      } catch (error) {
+        notify(projectMsg, "error", error.message);
+      }
+    });
+  }
   for (const sourceType of ["feedback", "worktask"]) {
     const button = document.getElementById(sourceType === "feedback" ? "projectFeedbackCandidatesBtn" : "projectWorktaskCandidatesBtn");
     button.addEventListener("click", async () => {

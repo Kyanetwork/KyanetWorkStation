@@ -1234,6 +1234,27 @@ function validateProjectItemUnassignPayload(payload) {
   };
 }
 
+function validateProjectItemStatusPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const projectId = parseProjectId(body.projectId, "projectId");
+  if (!projectId.valid) return projectId;
+  const sourceType = normalizeString(body.sourceType);
+  if (!ALLOWED_PROJECT_SOURCE_TYPES.has(sourceType)) {
+    return { valid: false, message: "sourceType 不合法" };
+  }
+  const sourceId = parseProjectId(body.sourceId, "sourceId");
+  if (!sourceId.valid) return sourceId;
+  const status = normalizeString(body.status);
+  const allowed = sourceType === "feedback" ? ALLOWED_STATUS : ALLOWED_WORKTASK_STATUS;
+  if (!allowed.has(status)) {
+    return { valid: false, message: sourceType === "feedback" ? "feedback status 不合法" : "worktask status 不合法" };
+  }
+  return {
+    valid: true,
+    data: { projectId: projectId.value, sourceType, sourceId: sourceId.value, status }
+  };
+}
+
 function validatePublicProjectKey(value) {
   const key = typeof value === "string" ? value.trim() : "";
   return PROJECT_PUBLIC_KEY_PATTERN.test(key)
@@ -1298,5 +1319,6 @@ module.exports = {
   validateProjectItemAssignPayload,
   validateProjectItemUpdatePayload,
   validateProjectItemUnassignPayload,
+  validateProjectItemStatusPayload,
   validatePublicProjectKey
 };

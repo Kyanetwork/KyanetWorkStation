@@ -276,27 +276,38 @@
               <button id="projectRestoreBtn" type="button">恢复</button>
             </form>
 
-            <section class="project-subsection" aria-labelledby="projectMilestoneHeading">
-              <div class="subsection-head"><h4 id="projectMilestoneHeading">里程碑</h4><span id="projectCompletionText" class="state-pill">未设置</span></div>
-              <form id="projectMilestoneForm" class="project-inline-form">
-                <input id="projectMilestoneTitle" maxlength="160" aria-label="里程碑标题" placeholder="里程碑标题" required>
-                <textarea id="projectMilestoneDescription" maxlength="2000" rows="2" aria-label="里程碑说明" placeholder="里程碑说明"></textarea>
-                <input id="projectMilestoneTargetDate" type="date" aria-label="目标日期">
-                <input id="projectMilestoneSortOrder" type="number" min="0" max="100000" step="1" value="0" aria-label="排序">
-                <button class="primary" type="submit">新增里程碑</button>
-              </form>
-              <div id="projectMilestoneList" class="project-milestone-list" aria-live="polite"></div>
+            <div class="project-view-toggle" role="group" aria-label="项目详情视图">
+              <button id="projectRelationsViewBtn" class="project-view-btn active" type="button" aria-controls="projectRelationsView" aria-pressed="true">关系视图</button>
+              <button id="projectKanbanViewBtn" class="project-view-btn" type="button" aria-controls="projectKanbanView" aria-pressed="false">Kanban</button>
+            </div>
+
+            <section id="projectRelationsView" aria-labelledby="projectRelationsViewBtn">
+              <section class="project-subsection" aria-labelledby="projectMilestoneHeading">
+                <div class="subsection-head"><h4 id="projectMilestoneHeading">里程碑</h4><span id="projectCompletionText" class="state-pill">未设置</span></div>
+                <form id="projectMilestoneForm" class="project-inline-form">
+                  <input id="projectMilestoneTitle" maxlength="160" aria-label="里程碑标题" placeholder="里程碑标题" required>
+                  <textarea id="projectMilestoneDescription" maxlength="2000" rows="2" aria-label="里程碑说明" placeholder="里程碑说明"></textarea>
+                  <input id="projectMilestoneTargetDate" type="date" aria-label="目标日期">
+                  <input id="projectMilestoneSortOrder" type="number" min="0" max="100000" step="1" value="0" aria-label="排序">
+                  <button class="primary" type="submit">新增里程碑</button>
+                </form>
+                <div id="projectMilestoneList" class="project-milestone-list" aria-live="polite"></div>
+              </section>
+
+              <section class="project-subsection" aria-labelledby="projectFeedbackLaneTitle">
+                <div class="subsection-head"><h4 id="projectFeedbackLaneTitle">Feedback 泳道</h4><button id="projectFeedbackCandidatesBtn" type="button">添加 Feedback</button></div>
+                <div id="projectFeedbackLane" class="project-lane" aria-live="polite"></div>
+                <div id="projectFeedbackCandidates" class="project-candidates hidden"></div>
+              </section>
+              <section class="project-subsection" aria-labelledby="projectWorktaskLaneTitle">
+                <div class="subsection-head"><h4 id="projectWorktaskLaneTitle">WorkTask 泳道</h4><button id="projectWorktaskCandidatesBtn" type="button">添加 WorkTask</button></div>
+                <div id="projectWorktaskLane" class="project-lane" aria-live="polite"></div>
+                <div id="projectWorktaskCandidates" class="project-candidates hidden"></div>
+              </section>
             </section>
 
-            <section class="project-subsection" aria-labelledby="projectFeedbackLaneTitle">
-              <div class="subsection-head"><h4 id="projectFeedbackLaneTitle">Feedback 泳道</h4><button id="projectFeedbackCandidatesBtn" type="button">添加 Feedback</button></div>
-              <div id="projectFeedbackLane" class="project-lane" aria-live="polite"></div>
-              <div id="projectFeedbackCandidates" class="project-candidates hidden"></div>
-            </section>
-            <section class="project-subsection" aria-labelledby="projectWorktaskLaneTitle">
-              <div class="subsection-head"><h4 id="projectWorktaskLaneTitle">WorkTask 泳道</h4><button id="projectWorktaskCandidatesBtn" type="button">添加 WorkTask</button></div>
-              <div id="projectWorktaskLane" class="project-lane" aria-live="polite"></div>
-              <div id="projectWorktaskCandidates" class="project-candidates hidden"></div>
+            <section id="projectKanbanView" class="hidden" aria-labelledby="projectKanbanViewBtn" hidden>
+              <div id="projectKanbanBoard" class="project-kanban-board" aria-live="polite"></div>
             </section>
           </section>
         </section>

@@ -7,6 +7,10 @@
 
   const SOURCE_TYPES = new Set(["feedback", "worktask"]);
   const STATUSES = new Set(["active", "archived"]);
+  const KANBAN_STATUS_COLUMNS = Object.freeze({
+    feedback: Object.freeze(["new", "reviewed", "resolved", "notplanned"]),
+    worktask: Object.freeze(["new", "scheduled", "in_progress", "completed", "cancelled"])
+  });
 
   function text(value, maxLength) {
     return typeof value === "string" ? Array.from(value).slice(0, maxLength).join("") : "";
@@ -109,6 +113,33 @@
     return lanes;
   }
 
+  function compareKanbanItems(left, right) {
+    const leftTime = Date.parse(left.updatedAt);
+    const rightTime = Date.parse(right.updatedAt);
+    const safeLeftTime = Number.isFinite(leftTime) ? leftTime : 0;
+    const safeRightTime = Number.isFinite(rightTime) ? rightTime : 0;
+    return safeRightTime - safeLeftTime || right.id - left.id || right.sourceId - left.sourceId;
+  }
+
+  function buildKanbanLanes(items) {
+    const result = {};
+    for (const sourceType of ["feedback", "worktask"]) {
+      const columns = KANBAN_STATUS_COLUMNS[sourceType].map((status) => ({ status, items: [] }));
+      const byStatus = new Map(columns.map((column) => [column.status, column]));
+      const unknown = [];
+      for (const raw of Array.isArray(items) ? items : []) {
+        const item = normalizeItem(raw);
+        if (!item || item.sourceType !== sourceType) continue;
+        const target = byStatus.get(item.status);
+        (target ? target.items : unknown).push(item);
+      }
+      for (const column of columns) column.items.sort(compareKanbanItems);
+      unknown.sort(compareKanbanItems);
+      result[sourceType] = { sourceType, columns, unknown };
+    }
+    return result;
+  }
+
   function projectHash(id) {
     const parsed = integer(id, 0);
     return parsed > 0 ? `#projects/${parsed}` : "#projects";
@@ -129,6 +160,8 @@
     normalizeMilestone,
     normalizeItem,
     splitProjectItems,
+    KANBAN_STATUS_COLUMNS,
+    buildKanbanLanes,
     projectHash,
     parseProjectHash
   };

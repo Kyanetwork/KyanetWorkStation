@@ -1678,3 +1678,256 @@ textarea {
     width: 100%;
   }
 }
+
+/* Admin project Kanban keeps the two source types visible without merging
+   their native status semantics. The board intentionally uses square cards
+   and controls to match the workstation visual language. */
+.admin-page .project-view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ws-space-2);
+  margin-top: var(--ws-space-5);
+  border-bottom: 1px solid var(--ws-border);
+  padding-bottom: var(--ws-space-2);
+}
+
+.admin-page .project-view-btn {
+  min-height: 36px;
+  border: 1px solid var(--ws-border-strong);
+  padding: 7px 12px;
+  color: var(--ws-muted);
+  background: var(--ws-surface-alt);
+}
+
+.admin-page .project-view-btn.active {
+  border-color: var(--ws-accent-strong);
+  color: var(--ws-accent-strong);
+  background: var(--ws-accent-soft);
+}
+
+.admin-page .project-kanban-board {
+  display: grid;
+  gap: var(--ws-space-6);
+  margin-top: var(--ws-space-5);
+}
+
+.admin-page .project-kanban-lane {
+  min-width: 0;
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface-alt);
+}
+
+.admin-page .project-kanban-lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ws-space-3);
+  border-bottom: 2px solid var(--ws-accent);
+  padding: var(--ws-space-3) var(--ws-space-4);
+}
+
+.admin-page .project-kanban-lane-head h5,
+.admin-page .project-kanban-column-head h6,
+.admin-page .project-kanban-card-title {
+  margin: 0;
+}
+
+.admin-page .project-kanban-lane-head h5 {
+  color: var(--ws-accent-strong);
+  font-size: 15px;
+}
+
+.admin-page .project-kanban-lane-head > span,
+.admin-page .project-kanban-column-head > span {
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.admin-page .project-kanban-lane-scroll {
+  overflow-x: auto;
+  padding: var(--ws-space-3);
+}
+
+.admin-page .project-kanban-lane-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: var(--ws-space-2);
+  min-width: 920px;
+}
+
+.admin-page .project-kanban-lane-grid[data-source-type="feedback"] {
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  min-width: 740px;
+}
+
+.admin-page .project-kanban-column {
+  display: flex;
+  min-width: 0;
+  min-height: 180px;
+  flex-direction: column;
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface);
+}
+
+.admin-page .project-kanban-column.is-unknown {
+  border-style: dashed;
+}
+
+.admin-page .project-kanban-column-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ws-space-2);
+  border-bottom: 1px solid var(--ws-border);
+  padding: 8px 10px;
+  background: var(--ws-surface-alt);
+}
+
+.admin-page .project-kanban-column-head h6 {
+  color: var(--ws-text);
+  font-size: 13px;
+}
+
+.admin-page .project-kanban-column-items {
+  display: grid;
+  align-content: start;
+  gap: var(--ws-space-2);
+  min-height: 132px;
+  padding: var(--ws-space-2);
+}
+
+.admin-page .project-kanban-empty {
+  margin: auto 0;
+  color: var(--ws-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.admin-page .project-kanban-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--ws-border-strong);
+  border-left: 3px solid var(--ws-accent);
+  padding: var(--ws-space-3);
+  background: var(--ws-surface);
+}
+
+.admin-page .project-kanban-card-head,
+.admin-page .project-kanban-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ws-space-2);
+}
+
+.admin-page .project-kanban-source,
+.admin-page .project-kanban-status-label {
+  color: var(--ws-accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.admin-page .project-kanban-status-label {
+  color: var(--ws-muted);
+  font-weight: 600;
+}
+
+.admin-page .project-kanban-card-title {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.admin-page .project-kanban-card-time,
+.admin-page .project-kanban-summary {
+  color: var(--ws-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.admin-page .project-kanban-summary {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--ws-border);
+  padding-top: 5px;
+}
+
+.admin-page .project-kanban-card-actions {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: stretch;
+  border-top: 1px solid var(--ws-border);
+  padding-top: 7px;
+}
+
+.admin-page .project-kanban-card-actions label {
+  display: grid;
+  flex: 1 1 110px;
+  gap: 3px;
+  color: var(--ws-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-page .project-kanban-card-actions select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 0;
+  padding: 5px 7px;
+  color: var(--ws-text);
+  background: var(--ws-surface);
+  font-size: 12px;
+}
+
+.admin-page .project-kanban-card-actions button {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.admin-page .project-kanban-card-actions select:disabled,
+.admin-page .project-kanban-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 760px) {
+  /* Keep the native status columns readable on compact tablets/phones. The
+     lane scrolls horizontally until the narrow-phone breakpoint below, where
+     columns intentionally stack to avoid making the controls too small. */
+  .admin-page .project-kanban-lane-scroll {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-page .project-kanban-board {
+    gap: var(--ws-space-4);
+  }
+
+  .admin-page .project-kanban-lane-head,
+  .admin-page .project-kanban-card-head,
+  .admin-page .project-kanban-card-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-page .project-kanban-card-actions label,
+  .admin-page .project-kanban-card-actions button {
+    width: 100%;
+  }
+
+  .admin-page .project-kanban-lane-grid,
+  .admin-page .project-kanban-lane-grid[data-source-type="feedback"] {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .admin-page .project-kanban-lane-scroll {
+    overflow-x: visible;
+  }
+}

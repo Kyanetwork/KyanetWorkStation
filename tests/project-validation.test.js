@@ -73,6 +73,42 @@ test("项目来源校验只允许 feedback/worktask 和正整数 ID", () => {
   assert.equal(validation.validateProjectItemAssignPayload({ projectId: 1, sourceType: "worktask", sourceId: 2, milestoneId: "" }).valid, true);
 });
 
+test("项目范围状态校验按来源类型接受原生状态", () => {
+  assert.deepEqual(
+    validation.validateProjectItemStatusPayload({
+      projectId: "3", sourceType: "feedback", sourceId: "8", status: "reviewed"
+    }),
+    { valid: true, data: { projectId: 3, sourceType: "feedback", sourceId: 8, status: "reviewed" } }
+  );
+  assert.deepEqual(
+    validation.validateProjectItemStatusPayload({
+      projectId: 3, sourceType: "worktask", sourceId: 9, status: "in_progress"
+    }),
+    { valid: true, data: { projectId: 3, sourceType: "worktask", sourceId: 9, status: "in_progress" } }
+  );
+});
+
+test("项目范围状态校验拒绝跨来源状态和非法 ID", () => {
+  assert.equal(validation.validateProjectItemStatusPayload({
+    projectId: 3, sourceType: "feedback", sourceId: 8, status: "in_progress"
+  }).valid, false);
+  assert.equal(validation.validateProjectItemStatusPayload({
+    projectId: 3, sourceType: "worktask", sourceId: 9, status: "resolved"
+  }).valid, false);
+  assert.equal(validation.validateProjectItemStatusPayload({
+    projectId: 0, sourceType: "feedback", sourceId: 8, status: "new"
+  }).valid, false);
+  assert.equal(validation.validateProjectItemStatusPayload({
+    projectId: 3, sourceType: "other", sourceId: 8, status: "new"
+  }).valid, false);
+});
+
+test("项目范围状态校验拒绝非对象 payload", () => {
+  for (const payload of [null, undefined, "status", 0, true, []]) {
+    assert.equal(validation.validateProjectItemStatusPayload(payload).valid, false);
+  }
+});
+
 test("项目公开 key、列表分页和布尔字段安全校验", () => {
   assert.equal(validation.validatePublicProjectKey("550e8400-e29b-41d4-a716-446655440000").valid, true);
   assert.equal(validation.validatePublicProjectKey("../secret").valid, false);

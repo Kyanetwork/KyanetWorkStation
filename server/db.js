@@ -3319,6 +3319,70 @@ async function unassignProjectItem(input = {}) {
   return result.changes;
 }
 
+async function touchProjectUpdatedAt(projectId) {
+  const updatedAt = nowIso();
+  const p1 = placeholder(1);
+  const p2 = placeholder(2);
+  await execute(
+    `UPDATE project SET updated_at = ${p1} WHERE id = ${p2}`,
+    [updatedAt, projectId]
+  );
+  return updatedAt;
+}
+
+async function updateProjectItemStatus({ projectId, sourceType, sourceId, status } = {}) {
+  const normalizedProjectId = projectIdValue(projectId);
+  const normalizedSourceId = projectIdValue(sourceId);
+  if (!normalizedProjectId || !PROJECT_SOURCE_TYPES.has(sourceType) || !normalizedSourceId) {
+    throw projectError("INVALID_PAYLOAD", "项目来源状态参数不合法");
+  }
+  const project = await getProjectById(normalizedProjectId);
+  if (!project) throw projectError("NOT_FOUND", "项目不存在");
+  if (project.status !== "active") throw projectError("PROJECT_STATE_CONFLICT", "归档项目不能更新工作项状态");
+
+  const relation = await getProjectItemBySource({ sourceType, sourceId: normalizedSourceId });
+  if (!relation) throw projectError("NOT_FOUND", "项目关联不存在");
+  if (relation.projectId !== normalizedProjectId) {
+    throw projectError("PROJECT_ITEM_CONFLICT", "该来源不属于当前项目");
+  }
+
+  const source = sourceType === "feedback"
+    ? await getFeedbackById(normalizedSourceId)
+    : await getWorktaskById(normalizedSourceId);
+  if (!source) {
+    try {
+      await cleanupProjectItemsForSource({ sourceType, sourceId: normalizedSourceId });
+    } catch (error) {
+      logger.warn({
+        event: "project.item.orphan_cleanup.error",
+        sourceType,
+        sourceId: normalizedSourceId,
+        errorCode: error && error.code ? String(error.code).slice(0, 64) : "CLEANUP_FAILED"
+      }, "project item orphan cleanup failed during status update");
+    }
+    throw projectError("NOT_FOUND", "来源记录不存在");
+  }
+
+  const changed = source.status !== status;
+  if (changed) {
+    const changes = sourceType === "feedback"
+      ? await updateFeedbackStatus(normalizedSourceId, status)
+      : await updateWorktaskStatus(normalizedSourceId, status);
+    if (changes === 0) throw projectError("NOT_FOUND", "来源记录不存在");
+  }
+  const projectUpdatedAt = changed
+    ? await touchProjectUpdatedAt(normalizedProjectId)
+    : project.updatedAt;
+  return {
+    projectItemId: relation.id,
+    projectId: normalizedProjectId,
+    sourceType,
+    sourceId: normalizedSourceId,
+    status,
+    projectUpdatedAt
+  };
+}
+
 async function cleanupProjectItemsForSource(sourceOrType, sourceIdValue) {
   const input = sourceOrType && typeof sourceOrType === "object"
     ? sourceOrType
@@ -3494,6 +3558,7 @@ module.exports = {
   assignProjectItem,
   updateProjectItemMilestone,
   unassignProjectItem,
+  updateProjectItemStatus,
   listPublicProjects,
   getPublicProjectByKey,
   cleanupProjectItemsForSource,
