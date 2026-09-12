@@ -25,21 +25,21 @@ Browser
 2. 公共 health/config/highlights/MeowStatus 路由。
 3. 反馈与 WorkTask 提交路由。
 4. 管理员登录、列表、状态、安排、备注、服务端导出、审计查询和通知测试路由。
-5. 管理员 AI profile/Copilot 与知识助手状态、重建、问答、历史和清理路由。
+5. 管理员 AI 配置（内部 `profile`）/Copilot 与知识助手状态、重建、问答、历史和清理路由。
 6. 管理员 Provider 真实诊断和 AI 请求指标聚合路由。
 7. 统一错误响应和静态文件回退。
 
 `server/validation.js` 负责输入规范化和字段长度/枚举校验；`server/security.js` 负责管理写请求的来源和 JSON 类型边界；`server/errors.js` 负责统一错误形状。
 
 管理员 AI Copilot 由三个边界模块组成：`server/ai-profiles.js` 管理最多 8 个 profile、
-唯一 active profile 和 AES-256-GCM 密文；`server/ai-provider.js` 负责 OpenAI Chat/
+唯一当前 AI 配置和 AES-256-GCM 密文；`server/ai-provider.js` 负责 OpenAI Chat/
 Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小限制；
 `server/ai-copilot.js` 负责最小字段投影、相似条目、并发闸门、建议校验和短期候选审计。
 浏览器只收到掩码 profile 和建议 DTO，不接触 Provider Key。
 
 知识助手由 `server/knowledge-base.js` 与 `server/ai-knowledge.js` 组成：前者从
 `AI_KNOWLEDGE_BASE_DIRS` 读取受控根目录，执行 realpath/扩展名/大小边界、分块、确定性
-检索和版本化索引原子替换；后者复用 active profile，生成固定 `knowledge-v1` prompt、
+检索和版本化索引原子替换；后者复用当前 AI 配置，生成固定 `knowledge-v1` prompt、
 校验答案 JSON、映射本次请求引用并写入问答历史。浏览器只收到库名、POSIX 相对路径和
 有界摘录，不能提交任意路径。
 
@@ -51,7 +51,7 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 - 在各驱动上创建反馈、WorkTask、管理员、会话和设置表。
 - 通过兼容迁移补充主页展示、备注回复、Account 快照等列。
 - 提供分页、关键词、状态/优先级筛选和主页摘要查询。
-- `workstation_setting` 保存非敏感运行设置及 AI profile 元数据/密文；
+- `workstation_setting` 保存非敏感运行设置及 AI 配置（内部 `profile`）元数据/密文；
   `ai_copilot_suggestion` 保存短期建议、过期时间和人工决策审计。
 - `ai_knowledge_answer` 保存有界问题、回答、引用、依据、profile/模型、用量、prompt
   版本和过期时间；`ai_knowledge_settings` 通过设置 JSON 保存自动清理开关。
@@ -88,7 +88,7 @@ GET /api/admin/project/:id
   -> 安全项目详情 DTO（项目、里程碑、有效来源摘要）
   -> public/admin/project-model.js
   -> normalizeProjectDetail/buildKanbanLanes
-  -> Feedback 泳道 + WorkTask 泳道（各自原生状态列）
+  -> Feedback 分区 + WorkTask 分区（各自原生状态列）
 
 Kanban 状态保存
   -> POST /api/admin/project/item/status
@@ -109,7 +109,7 @@ Kanban 列内按来源摘要的 `updatedAt DESC`、项目关系记录 `id DESC` 
 
 公共端只通过 `listPublicProjects`/`getPublicProjectByKey` 查询，使用创建时生成且不可变的随机
 `publicKey`。基础信息、里程碑、更新时间和完成度分别受项目级开关控制；公共投影只包含名称、说明、
-有效里程碑、安全日期/完成度，不包含来源 ID、工作项、Kanban 泳道、正文、联系方式、管理员字段或数据库内部 ID。
+有效里程碑、安全日期/完成度，不包含来源 ID、工作项、Kanban 分区、正文、联系方式、管理员字段或数据库内部 ID。
 项目管理和 Kanban 不驱动 AI、通知或 Account 联动。
 
 ## 认证边界（当前代码状态）
@@ -125,8 +125,8 @@ Kanban 列内按来源摘要的 `updatedAt DESC`、项目关系记录 `id DESC` 
 - `server/meowstatus.js` 负责外部 Dashboard 请求、超时、响应体/MIME/字段边界和 favicon 规范化。
 - `server/ai-provider.js` 是唯一的 AI 外部 HTTP 出站边界；AI 失败只返回有界错误，不影响反馈、
   WorkTask、通知或状态卡片。
-- `server/ai-diagnostics.js` 复用 Provider 边界，以固定 sentinel 对任意已保存 profile 做显式
-  一次性真实诊断，不改变 active profile；`server/ai-metrics.js` 负责三类 AI 操作的有界指标、
+- `server/ai-diagnostics.js` 复用 Provider 边界，以固定 sentinel 对任意已保存 AI 配置做显式
+  一次性真实诊断，不改变当前 AI 配置；`server/ai-metrics.js` 负责三类 AI 操作的有界指标、
   汇总和保留期清理。
 - 知识库原始目录是只读输入，索引器不写入原目录、不监听变化；知识问答失败只影响管理员
   AI 区域，不影响普通业务。

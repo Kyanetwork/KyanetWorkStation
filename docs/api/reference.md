@@ -115,8 +115,8 @@ JSON 内容类型和同源来源检查，并沿用管理写接口的限流边界
 | 409 | `PROJECT_STATE_CONFLICT` | 项目已归档，不能更新工作项状态 |
 
 管理员项目详情 `GET /api/admin/project/:id` 仍是 Kanban 的读取数据源；浏览器按 Feedback/WorkTask 及其原生
-状态分成两条独立泳道。公共项目列表和详情继续只返回各自公开开关允许的项目投影，不返回工作项、关系数据
-或任何 Kanban 泳道。
+状态分成两个独立分区。公共项目列表和详情继续只返回各自公开开关允许的项目投影，不返回工作项、关系数据
+或任何 Kanban 分区。
 
 公共项目接口不需要认证：
 
@@ -125,7 +125,7 @@ JSON 内容类型和同源来源检查，并沿用管理写接口的限流边界
 | `GET /api/public/projects` | 返回基础信息公开且未归档项目的 `publicKey`、名称和说明 |
 | `GET /api/public/projects/:publicKey` | 按不可猜测的随机 key 返回公共详情；里程碑、更新时间、完成度按独立开关省略或返回 |
 
-公共投影不返回内部 ID、来源关联、Kanban 工作项/泳道、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
+公共投影不返回内部 ID、来源关联、Kanban 工作项/分区、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
 不存在或 key 不合法时统一返回 404。项目关系冲突返回 `PROJECT_ITEM_CONFLICT`，跨项目/撤销里程碑关联返回
 `PROJECT_MILESTONE_CONFLICT`，归档项目新增操作返回 `PROJECT_STATE_CONFLICT`。
 
@@ -133,11 +133,11 @@ JSON 内容类型和同源来源检查，并沿用管理写接口的限流边界
 
 | 方法与路径 | 用途 |
 |---|---|
-| `GET /api/admin/ai/status` | 读取 AI 开关、可用性、active profile 和掩码 profile 列表 |
-| `POST /api/admin/ai/profiles` | 新建或更新 Provider profile；更新时 `key` 为空表示保留原密文 |
-| `POST /api/admin/ai/profiles/active` | 设置或清空唯一 active profile |
-| `POST /api/admin/ai/profiles/delete` | 删除 profile；删除 active 后不会自动切换 |
-| `POST /api/admin/ai/profiles/diagnose` | 对指定已保存 profile 发起一次真实固定探针诊断；不切换 active profile，可能消耗少量 token |
+| `GET /api/admin/ai/status` | 读取 AI 开关、可用性、当前 AI 配置和掩码 AI 配置列表 |
+| `POST /api/admin/ai/profiles` | 新建或更新 Provider AI 配置；更新时 `key` 为空表示保留原密文 |
+| `POST /api/admin/ai/profiles/active` | 设置或清空唯一当前 AI 配置 |
+| `POST /api/admin/ai/profiles/delete` | 删除 AI 配置；删除当前配置后不会自动切换 |
+| `POST /api/admin/ai/profiles/diagnose` | 对指定已保存 AI 配置发起一次真实固定探针诊断；不切换当前配置，可能消耗少量 token |
 | `GET /api/admin/ai/metrics?hours=24` | 读取有界时间窗内的 AI 请求聚合指标，不返回逐请求内容 |
 | `POST /api/admin/ai/suggest` | 针对一条 `feedback` 或 `worktask` 生成短期建议 |
 | `GET /api/admin/ai/suggestions` | 按 `entityType`、`entityId` 查询未过期建议 |
@@ -175,7 +175,7 @@ Unicode 字符，只作为独立的风格补充，不能覆盖系统安全约束
 |---|---|
 | `GET /api/admin/ai/knowledge/status` | 返回索引是否可用、版本/构建时间、库名称、文件/片段统计、警告、保留期和自动清理开关 |
 | `POST /api/admin/ai/knowledge/reindex` | 按环境配置只读扫描 `.md`/`.txt` 根目录并原子替换索引；不接受请求体路径 |
-| `POST /api/admin/ai/knowledge/ask` | 提交 `{ question, rootId? }`，检索最多 6 个片段并调用当前 active profile |
+| `POST /api/admin/ai/knowledge/ask` | 提交 `{ question, rootId? }`，检索最多 6 个片段并调用当前 AI 配置 |
 | `GET /api/admin/ai/knowledge/history` | 分页读取问答历史；支持 `page`、`pageSize`、`keyword`、`rootId` 筛选 |
 | `POST /api/admin/ai/knowledge/history/delete` | 提交 `{ id }` 或 `{ answerId }` 删除一条历史 |
 | `POST /api/admin/ai/knowledge/history/cleanup` | 删除已过期历史；不受自动清理开关限制 |

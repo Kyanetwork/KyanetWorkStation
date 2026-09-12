@@ -61,3 +61,17 @@ test("首页和公共项目页有独立脚本、编码链接和不可用状态",
   assert.match(projectJs, /keepHeaderWithContent/);
   assert.doesNotMatch(projectJs, /innerHTML\s*=\s*[^;]*(?:name|description|title)/);
 });
+
+test("公开项目和项目关系视图使用分区与单一详情入口", () => {
+  const html = read("public/admin/index.html");
+  const homeJs = read("public/index/main.js");
+  const homeHtml = read("public/index.html");
+  assert.match(html, /反馈分区/u);
+  assert.match(html, /WorkTask 分区/u);
+  assert.doesNotMatch(html, /泳道/u);
+  assert.match(homeJs, /project-home-card-action/u);
+  assert.match(homeJs, /查看详情/u);
+  assert.doesNotMatch(homeJs, /const card = document\.createElement\("a"\)/u);
+  assert.match(homeHtml, /KWS Work Hub/u);
+  assert.doesNotMatch(homeHtml, /KWS Simple Entry/u);
+});

@@ -36,7 +36,7 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 3. 执行 `npm ci --omit=dev --foreground-scripts`，运行 `better-sqlite3` 内存探针，必要时显式重建并核对 Node/ABI。
 4. 按实际进程管理器重启 PM2（或 systemd 二选一），并用 `pm2 show`/等价命令确认实际 cwd 和运行时版本。
 5. 访问 `http://127.0.0.1:3000/api/health`，再从反向代理入口确认 HTTPS、Host/Proto 转发和监听边界。
-6. 使用管理员会话打开项目详情，确认关系视图/Kanban 切换、两条独立泳道、空列和窄屏/键盘操作；在活跃项目中分别保存 Feedback/WorkTask 状态，验证成功重读、同值时间不变、归档禁写和错误提示。
+6. 使用管理员会话打开项目详情，确认关系视图/Kanban 切换、两个独立分区、空列和窄屏/键盘操作；在活跃项目中分别保存 Feedback/WorkTask 状态，验证成功重读、同值时间不变、归档禁写和错误提示。
 7. 访问公共项目列表/详情，确认只出现允许的公开投影，不出现工作项、关系记录或 Kanban 数据。
 
 ## 必须覆盖的行为
@@ -48,10 +48,10 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - 备份脚本生成有效文件，并能在临时数据库完成 checksum、解压、schema 和关键表读取（`tests/backup-sqlite.test.js`）；本机真实 `.env` 数据库的脱敏隔离演练已记录，发布目标不同仍需重演。
 - SQLite 发布前可使用 `npm run verify-backup:sqlite -- --backup <PRIVATE_BACKUP_PATH>` 在隔离临时路径执行 checksum、`integrity_check` 和关键表摘要；该结果不能替代真实脱敏恢复记录。
 - MeowStatus 不可达、超时和关闭设置时，主页仍能给出可理解状态；上游 Dashboard/MIME/字段/favicon 超限不得阻塞提交。
-- 管理员 AI Copilot 默认关闭；启用时只能使用已配置的单 active profile，API Key 不出现在响应、日志、浏览器存储或备份明文中。
+- 管理员 AI Copilot 默认关闭；启用时只能使用已配置的单个当前 AI 配置，API Key 不出现在响应、日志、浏览器存储或备份明文中。
 - AI Provider 出站字段、认证头、超时、响应大小、并发和管理员限流有回归覆盖；AI 超时/不可用时普通提交、列表和通知仍可用。
-- AI profile 真实诊断必须由管理员显式点击；固定 sentinel 仅验证可达、HTTP、JSON、文本提取和响应大小，
-  不切换 active profile，页面提示可能产生少量 token，且不得展示 URL、Key、探针或 Provider 原文。
+- AI 配置真实诊断必须由管理员显式点击；固定 sentinel 仅验证可达、HTTP、JSON、文本提取和响应大小，
+  不切换当前 AI 配置，页面提示可能产生少量 token，且不得展示 URL、Key、探针或 Provider 原文。
 - AI 请求指标必须覆盖 Copilot、知识问答和诊断的成功/失败/超时、耗时、未知 usage、1–720 小时汇总和最多
   100 个分组；写入失败、清理关闭或清理异常不得改变主流程。
 - AI 建议只写入短期候选表；接受/拒绝和“填入”不直接改变业务状态、删除记录、发送回复或触发通知。
@@ -78,9 +78,9 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |
 | 项目管理 API/UI | 项目 CRUD、里程碑、来源归属冲突、hash 详情、公共开关和窄屏/主题冒烟 | 自动回归已覆盖；部署环境需执行一次管理员与公共页面冒烟 |
-| 管理员 Kanban API/UI | 项目范围状态 API、两条原生状态泳道、同值时间语义、归档禁写、审计和公共隐私投影 | 自动回归已覆盖；部署目标的备份、Git 同步、依赖探针、PM2、health 和管理员 Kanban 冒烟待执行 |
-| AI Copilot 边界 | AI profile/API/Provider/Copilot 回归与状态降级 | 本地 stub 与隔离 HTTP 已覆盖；真实 Provider 按运维手册受控验证 |
-| AI Provider 真实诊断 | 对当前部署目标点击一次指定 profile 的固定 sentinel；记录脱敏 status/协议/模型摘要/耗时/usage/错误码且 active 不变 | `<PASS_OR_BLOCKER>` |
+| 管理员 Kanban API/UI | 项目范围状态 API、两个原生状态分区、同值时间语义、归档禁写、审计和公共隐私投影 | 自动回归已覆盖；部署目标的备份、Git 同步、依赖探针、PM2、health 和管理员 Kanban 冒烟待执行 |
+| AI Copilot 边界 | AI 配置/API/Provider/Copilot 回归与状态降级 | 本地 stub 与隔离 HTTP 已覆盖；真实 Provider 按运维手册受控验证 |
+| AI Provider 真实诊断 | 对当前部署目标点击一次指定 AI 配置的固定 sentinel；记录脱敏 status/协议/模型摘要/耗时/usage/错误码且当前配置不变 | `<PASS_OR_BLOCKER>` |
 | AI 请求指标 | 生成一次建议/问答或诊断后读取 24h 汇总，确认三类 operation、状态、耗时、未知 usage 和自动清理边界 | `<PASS_OR_BLOCKER>` |
 | 备份恢复 | `tests/backup-sqlite.test.js` + 临时恢复记录和数据校验 | 本机真实脱敏副本已完成；发布目标不同需按模板重演 |
 | 通知链路 | SMTP/Webhook 测试结果、handoff journal（如触发） | 本机真实 SMTP/Feishu 与隔离重试已完成；目标变更需重新授权和验证 |

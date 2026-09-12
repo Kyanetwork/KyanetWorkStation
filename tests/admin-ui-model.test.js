@@ -40,6 +40,19 @@ test("admin page exposes the knowledge workspace and bounded profile controls", 
   assert.match(html, /id="aiProfilePromptInstruction"/u);
 });
 
+test("admin page groups settings and uses the approved Chinese display copy", () => {
+  const html = fs.readFileSync(ADMIN_HTML, "utf8");
+  const source = fs.readFileSync(ADMIN_SCRIPT, "utf8");
+  assert.match(html, /id="tabSettings"/u);
+  assert.match(html, /id="moduleSettings"/u);
+  assert.match(html, />设置</u);
+  assert.match(html, />保存配置</u);
+  assert.doesNotMatch(html, />保存 profile</u);
+  assert.match(html, /id="aiProfileName"[\s\S]*id="aiProfileProtocol"/u);
+  assert.match(source, /AI 配置/u);
+  assert.doesNotMatch(source, /active profile/u);
+});
+
 test("static admin buttons declare their intended type", () => {
   const html = fs.readFileSync(ADMIN_HTML, "utf8");
   const buttons = [...html.matchAll(/<button\b[^>]*>/giu)].map((match) => match[0]);

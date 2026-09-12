@@ -809,6 +809,138 @@ textarea {
   margin-top: var(--ws-space-2);
 }
 
+.admin-page .settings-shell,
+.admin-page .settings-section {
+  display: grid;
+  gap: var(--ws-space-4);
+}
+
+.admin-page .settings-header,
+.admin-page .settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ws-space-4);
+}
+
+.admin-page .settings-header h2,
+.admin-page .settings-header p,
+.admin-page .settings-section h3,
+.admin-page .settings-section h4,
+.admin-page .settings-section-head p {
+  margin: 0;
+}
+
+.admin-page .settings-header p,
+.admin-page .settings-label {
+  color: var(--ws-muted);
+  font-size: 13px;
+}
+
+.admin-page .settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ws-space-3);
+  margin-top: 0;
+}
+
+.admin-page .settings-control-row,
+.admin-page .settings-control-grid,
+.admin-page .ai-profile-form-actions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--ws-space-2);
+}
+
+.admin-page .settings-control-row > input,
+.admin-page .settings-control-row > label:first-child {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.admin-page .settings-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.admin-page .settings-control-grid label,
+.admin-page .ai-profile-form label,
+.admin-page .worktask-create-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--ws-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-page .settings-control-grid label > input,
+.admin-page .settings-control-grid label > select,
+.admin-page .ai-profile-form label > input,
+.admin-page .ai-profile-form label > select,
+.admin-page .ai-profile-form label > textarea,
+.admin-page .worktask-create-fields label > input,
+.admin-page .worktask-create-fields label > select,
+.admin-page .worktask-create-fields label > textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-page .ai-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ws-space-3);
+  padding: var(--ws-space-4);
+  border: 1px solid var(--ws-border);
+  background: var(--ws-surface-alt);
+}
+
+.admin-page .ai-profile-form .field-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-page .settings-subsection,
+.admin-page .ai-diagnostic-panel,
+.admin-page .ai-metrics-panel {
+  display: grid;
+  gap: var(--ws-space-2);
+}
+
+.admin-page .settings-subsection {
+  border-top: 1px solid var(--ws-border);
+  padding-top: var(--ws-space-4);
+}
+
+.admin-page .worktask-create-group {
+  display: grid;
+  gap: var(--ws-space-3);
+  margin-bottom: var(--ws-space-5);
+  border-top: 1px solid var(--ws-border);
+  padding-top: var(--ws-space-4);
+}
+
+.admin-page .worktask-create-group h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.admin-page .worktask-create-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ws-space-3);
+}
+
+.admin-page .worktask-create-fields .field-wide,
+.admin-page .worktask-create-fields label:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+.admin-page .worktask-create-actions {
+  margin-bottom: 0;
+}
+
 .admin-page .field-wide {
   flex-basis: 100%;
 }
@@ -1381,7 +1513,6 @@ textarea {
   padding: var(--ws-space-4);
   color: inherit;
   background: var(--ws-surface-alt);
-  text-decoration: none;
   transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
 }
 
@@ -1406,11 +1537,23 @@ textarea {
 }
 
 .project-home-card-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
   margin-top: var(--ws-space-4);
+  border: 1px solid var(--ws-border-strong);
+  padding: 6px 10px;
   color: var(--ws-accent-strong);
+  background: var(--ws-accent-soft);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.03em;
+  text-decoration: none;
+}
+
+.project-home-card-action:hover {
+  border-color: var(--ws-accent);
+  color: var(--ws-accent-strong);
 }
 
 .project-public-page {
@@ -1623,6 +1766,24 @@ textarea {
 }
 
 @media (max-width: 620px) {
+  .admin-page .settings-grid,
+  .admin-page .settings-control-grid,
+  .admin-page .ai-profile-form,
+  .admin-page .worktask-create-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-page .settings-header,
+  .admin-page .settings-section-head {
+    flex-direction: column;
+  }
+
+  .admin-page .ai-profile-form .field-wide,
+  .admin-page .worktask-create-fields .field-wide,
+  .admin-page .worktask-create-fields label:has(textarea) {
+    grid-column: auto;
+  }
+
   .project-header,
   .project-detail-head,
   .project-public-section-head,

@@ -94,6 +94,21 @@ label/disabled state in `finally`; a failed diagnostic must not replace the
 profile list or active-profile state. Metric refresh uses the bounded 24 h/7 d/
 30 d selectors and renders no individual request rows.
 
+## Admin settings and public project entries
+
+The admin page keeps cross-cutting configuration controls in the terminal
+`settings` tab (`#tabSettings` / `#moduleSettings`). SMTP/Webhook tests, status
+display controls, and AI configuration/diagnostics belong there; business tabs
+must not render a second copy of those controls. Switching tabs must toggle the
+module's `hidden` state while preserving the existing element IDs and event
+handlers.
+
+Public project lists use an `article.project-home-card` as the visual boundary.
+Project name and description are text nodes, not links; only the explicit
+"查看详情" link navigates to `/project/?key=<encoded public key>`. Keep
+`overflow-wrap: anywhere` (or an equivalent bounded rule) on the title and
+description so mixed-language content cannot widen the page.
+
 ## External icon boundary
 
 The MeowStatus adapter is the authoritative validator for Minecraft favicon

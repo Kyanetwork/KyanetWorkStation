@@ -122,7 +122,7 @@ Provider 点击一次诊断并记录脱敏结果。该任务不引入自动 fall
 ### P2-1b `p2-kanban-foundation`（已实现）
 
 管理员项目详情提供关系视图与 Kanban 切换，默认仍进入关系视图。Kanban 复用安全项目详情 DTO，按
-Feedback/WorkTask 划分两条独立泳道，并使用各自原生状态列；卡片在列内按最近更新时间和项目关系 ID
+Feedback/WorkTask 划分两个独立分区，并使用各自原生状态列；卡片在列内按最近更新时间和项目关系 ID
 稳定排序。状态通过 `POST /api/admin/project/item/status` 受控保存，服务端校验项目 active、来源归属和
 来源专属状态，实际变化同步项目更新时间并写入脱敏审计；相同状态保存不重复更新时间。公共项目列表/详情
 不返回工作项或 Kanban 数据，关系视图继续负责里程碑和绑定/解绑。

@@ -146,14 +146,17 @@
       const name = typeof project.name === "string" && project.name.trim()
         ? project.name.trim()
         : "未命名项目";
-      const card = document.createElement("a");
+      const card = document.createElement("article");
       card.className = "project-home-card";
-      card.href = `/project/?key=${encodeURIComponent(project.publicKey.trim())}`;
-      card.setAttribute("aria-label", `查看项目：${name}`);
       appendTextElement(card, "span", "project-kicker", "PUBLIC PROJECT");
       appendTextElement(card, "h3", "project-home-card-title", name);
       appendTextElement(card, "p", "project-home-card-description", project.description || "暂无项目说明。");
-      appendTextElement(card, "span", "project-home-card-action", "查看项目详情 →");
+      const action = document.createElement("a");
+      action.className = "project-home-card-action";
+      action.href = `/project/?key=${encodeURIComponent(project.publicKey.trim())}`;
+      action.setAttribute("aria-label", `查看项目详情：${name}`);
+      action.textContent = "查看详情";
+      card.appendChild(action);
       container.appendChild(card);
     }
   }

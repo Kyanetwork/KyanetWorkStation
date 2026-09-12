@@ -104,98 +104,6 @@
           <span id="globalLoadTime">最近加载：-</span>
         </div>
         <div id="globalMsg" class="msg" role="status" aria-live="polite"></div>
-        <div class="toolbar toolbar-spaced">
-          <input id="smtpTestTo" placeholder="SMTP 测试收件人（可选，支持中英文逗号/分号/换行/姓名<邮箱>，留空使用 SMTP_TO）" maxlength="1000">
-          <button id="smtpTestBtn" type="button">发送 SMTP 测试邮件</button>
-        </div>
-        <div id="smtpTestMsg" class="msg" role="status" aria-live="polite"></div>
-        <div class="toolbar toolbar-spaced">
-          <input id="webhookTestContent" placeholder="Webhook 测试附加内容（可选）" maxlength="300">
-          <button id="webhookTestBtn" type="button">发送 Webhook 测试消息</button>
-        </div>
-        <div id="webhookTestMsg" class="msg" role="status" aria-live="polite"></div>
-        <div class="settings-grid">
-          <section class="setting-block">
-            <h3>MeowStatus 状态展示</h3>
-            <div class="toolbar">
-              <select id="statusProfileEnabled">
-                <option value="1">状态展示：启用</option>
-                <option value="0">状态展示：关闭</option>
-              </select>
-              <input id="meowStatusApiBaseUrl" placeholder="MeowStatus API 地址，如 http://127.0.0.1:8080" maxlength="300">
-              <input id="meowStatusTimeoutMs" type="number" min="1000" max="15000" step="500" placeholder="超时 ms">
-              <button id="statusProfileSaveBtn" type="button">保存状态展示</button>
-            </div>
-          </section>
-          <section class="setting-block">
-            <h3>Minecraft 状态展示</h3>
-            <div class="toolbar">
-              <select id="statusMinecraftEnabled">
-                <option value="1">MC 展示：启用</option>
-                <option value="0">MC 展示：关闭</option>
-              </select>
-              <button id="statusMinecraftSaveBtn" type="button">保存 MC 展示</button>
-            </div>
-          </section>
-        </div>
-        <div id="statusSettingsMsg" class="msg" role="status" aria-live="polite"></div>
-        <section class="setting-block setting-block-spaced">
-          <h3>管理员 AI Copilot</h3>
-          <p id="aiStatusText" class="meta">状态：未加载</p>
-          <p class="ai-suggestion-note">AI 仅生成建议。点击生成前，请确认该条目的标题、正文和必要工作字段会发送到当前 Provider；联系方式、管理员备注和账号快照不会发送。</p>
-          <div class="toolbar toolbar-spaced">
-            <input id="aiProfileId" type="hidden">
-            <label for="aiProfileName">名称</label>
-            <input id="aiProfileName" placeholder="Provider profile 名称" maxlength="64">
-            <label for="aiProfileProtocol">协议</label>
-            <select id="aiProfileProtocol">
-              <option value="openai-chat">OpenAI Chat / 兼容中转站</option>
-              <option value="openai-responses">OpenAI Responses</option>
-              <option value="anthropic-messages">Anthropic Messages</option>
-            </select>
-            <label for="aiProfileBaseUrl">Base URL</label>
-            <input id="aiProfileBaseUrl" placeholder="https://api.example.com/v1" maxlength="300">
-            <label for="aiProfileModel">模型</label>
-            <input id="aiProfileModel" placeholder="模型名称" maxlength="120">
-            <label for="aiProfileReasoningEffort">推理强度</label>
-            <select id="aiProfileReasoningEffort">
-              <option value="">未设置</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="xhigh">xhigh</option>
-              <option value="max">max</option>
-            </select>
-            <label for="aiProfileApiKey">API Key</label>
-            <input id="aiProfileApiKey" type="password" autocomplete="new-password" placeholder="新建必填；更新留空表示保留" maxlength="512">
-            <label class="field-wide" for="aiProfilePromptInstruction">附加工作指令</label>
-            <textarea class="field-wide" id="aiProfilePromptInstruction" rows="3" maxlength="2000" placeholder="可选：只用于调整回答风格，系统安全约束不可覆盖"></textarea>
-            <p id="aiProfileProtocolHint" class="ai-suggestion-note field-wide">Responses 协议会应用推理强度；Chat 与 Anthropic 协议会安全忽略该字段。</p>
-            <button class="primary" id="aiProfileSaveBtn" type="button">保存 profile</button>
-            <button id="aiProfileResetBtn" type="button">清空表单</button>
-          </div>
-          <div id="aiProfilesList" class="ai-profile-list" aria-live="polite"></div>
-          <div id="aiStatusMsg" class="msg" role="status" aria-live="polite"></div>
-          <section class="ai-diagnostic-panel" aria-labelledby="aiDiagnosticTitle">
-            <h4 id="aiDiagnosticTitle">Provider 真实诊断</h4>
-            <p class="ai-diagnostic-note">诊断会向选定 Provider 发送一次固定探针，可能产生少量 token 消耗；不会切换 active profile，也不会创建建议或知识问答历史。</p>
-            <div id="aiDiagnosticsList" aria-live="polite"><span class="meta">选择 profile 后点击“诊断”</span></div>
-            <div id="aiDiagnosticMsg" class="msg" role="status" aria-live="polite"></div>
-          </section>
-          <section class="ai-metrics-panel" aria-labelledby="aiMetricsTitle">
-            <div class="toolbar">
-              <h4 id="aiMetricsTitle">AI 请求指标</h4>
-              <select id="aiMetricsHours" aria-label="指标时间范围">
-                <option value="24">最近 24 小时</option>
-                <option value="168">最近 7 天</option>
-                <option value="720">最近 30 天</option>
-              </select>
-              <button id="aiMetricsRefreshBtn" type="button">刷新指标</button>
-            </div>
-            <div id="aiMetricsSummary" aria-live="polite"><span class="meta">尚未加载指标</span></div>
-            <div id="aiMetricsMsg" class="msg" role="status" aria-live="polite"></div>
-          </section>
-        </section>
       </div>
 
       <div class="card">
@@ -206,7 +114,84 @@
           <button class="tab" id="tabWorktaskCreate" type="button" aria-controls="moduleWorktaskCreate" aria-selected="false">本人任务录入</button>
           <button class="tab" id="tabProjects" type="button" aria-controls="moduleProjects" aria-selected="false">项目</button>
           <button class="tab" id="tabKnowledge" type="button" aria-controls="moduleKnowledge" aria-selected="false">知识助手</button>
+          <button class="tab" id="tabSettings" type="button" aria-controls="moduleSettings" aria-selected="false">设置</button>
         </div>
+
+        <section id="moduleSettings" class="hidden settings-shell" aria-labelledby="settingsTitle">
+          <div class="settings-header">
+            <h2 id="settingsTitle">系统设置</h2>
+            <p>配置通知、状态展示和 AI 辅助。设置仅在本选项卡中显示。</p>
+          </div>
+          <section class="settings-section" aria-labelledby="notificationSettingsTitle">
+            <h3 id="notificationSettingsTitle">通知测试</h3>
+            <div class="settings-grid">
+              <div class="setting-block">
+                <label for="smtpTestTo">SMTP 测试收件人</label>
+                <div class="settings-control-row">
+                  <input id="smtpTestTo" placeholder="可选，留空使用 SMTP_TO" maxlength="1000">
+                  <button id="smtpTestBtn" type="button">发送 SMTP 测试邮件</button>
+                </div>
+                <p class="meta">支持中英文逗号、分号、换行和姓名&lt;邮箱&gt;格式。</p>
+                <div id="smtpTestMsg" class="msg" role="status" aria-live="polite"></div>
+              </div>
+              <div class="setting-block">
+                <label for="webhookTestContent">Webhook 测试附加内容</label>
+                <div class="settings-control-row">
+                  <input id="webhookTestContent" placeholder="可选" maxlength="300">
+                  <button id="webhookTestBtn" type="button">发送 Webhook 测试消息</button>
+                </div>
+                <div id="webhookTestMsg" class="msg" role="status" aria-live="polite"></div>
+              </div>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="statusSettingsTitle">
+            <h3 id="statusSettingsTitle">状态展示</h3>
+            <div class="settings-grid">
+              <section class="setting-block">
+                <h4>MeowStatus 状态展示</h4>
+                <div class="settings-control-grid">
+                  <label for="statusProfileEnabled">展示状态<select id="statusProfileEnabled"><option value="1">启用</option><option value="0">关闭</option></select></label>
+                  <label for="meowStatusApiBaseUrl">API 地址<input id="meowStatusApiBaseUrl" placeholder="如 http://127.0.0.1:8080" maxlength="300"></label>
+                  <label for="meowStatusTimeoutMs">超时（ms）<input id="meowStatusTimeoutMs" type="number" min="1000" max="15000" step="500" placeholder="5000"></label>
+                  <button id="statusProfileSaveBtn" type="button">保存状态展示</button>
+                </div>
+              </section>
+              <section class="setting-block">
+                <h4>Minecraft 状态展示</h4>
+                <div class="settings-control-row">
+                  <label for="statusMinecraftEnabled">展示状态<select id="statusMinecraftEnabled"><option value="1">启用</option><option value="0">关闭</option></select></label>
+                  <button id="statusMinecraftSaveBtn" type="button">保存 MC 展示</button>
+                </div>
+              </section>
+            </div>
+            <div id="statusSettingsMsg" class="msg" role="status" aria-live="polite"></div>
+          </section>
+          <section class="settings-section" aria-labelledby="aiSettingsTitle">
+            <div class="settings-section-head">
+              <div>
+                <h3 id="aiSettingsTitle">AI 辅助配置</h3>
+                <p id="aiStatusText" class="meta">状态：未加载</p>
+              </div>
+              <span class="settings-label">多配置 · 单次请求使用当前配置</span>
+            </div>
+            <p class="ai-suggestion-note">AI 仅生成建议。点击生成前，请确认该条目的标题、正文和必要工作字段会发送到当前 Provider；联系方式、管理员备注和账号快照不会发送。</p>
+            <div class="ai-profile-form">
+              <input id="aiProfileId" type="hidden">
+              <label for="aiProfileName">名称<input id="aiProfileName" placeholder="AI 配置名称" maxlength="64"></label>
+              <label for="aiProfileProtocol">协议<select id="aiProfileProtocol"><option value="openai-chat">OpenAI Chat / 兼容中转站</option><option value="openai-responses">OpenAI Responses</option><option value="anthropic-messages">Anthropic Messages</option></select></label>
+              <label for="aiProfileBaseUrl">Base URL<input id="aiProfileBaseUrl" placeholder="https://api.example.com/v1" maxlength="300"></label>
+              <label for="aiProfileModel">模型<input id="aiProfileModel" placeholder="模型名称" maxlength="120"></label>
+              <label for="aiProfileReasoningEffort">推理强度<select id="aiProfileReasoningEffort"><option value="">未设置</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></label>
+              <label for="aiProfileApiKey">API Key<input id="aiProfileApiKey" type="password" autocomplete="new-password" placeholder="新建必填；更新留空表示保留" maxlength="512"></label>
+              <label class="field-wide" for="aiProfilePromptInstruction">附加工作指令<textarea id="aiProfilePromptInstruction" rows="3" maxlength="2000" placeholder="可选：只用于调整回答风格，系统安全约束不可覆盖"></textarea></label>
+              <p id="aiProfileProtocolHint" class="ai-suggestion-note field-wide">Responses 协议会应用推理强度；Chat 与 Anthropic 协议会安全忽略该字段。</p>
+              <div class="ai-profile-form-actions field-wide"><button class="primary" id="aiProfileSaveBtn" type="button">保存配置</button><button id="aiProfileResetBtn" type="button">清空表单</button></div>
+            </div>
+            <div class="settings-subsection"><h4>已保存的 AI 配置</h4><div id="aiProfilesList" class="ai-profile-list" aria-live="polite"></div><div id="aiStatusMsg" class="msg" role="status" aria-live="polite"></div></div>
+            <section class="ai-diagnostic-panel" aria-labelledby="aiDiagnosticTitle"><h4 id="aiDiagnosticTitle">Provider 真实诊断</h4><p class="ai-diagnostic-note">诊断会向选定 Provider 发送一次固定探针，可能产生少量 token 消耗；不会切换当前 AI 配置，也不会创建建议或知识问答历史。</p><div id="aiDiagnosticsList" aria-live="polite"><span class="meta">选择 AI 配置后点击“诊断”</span></div><div id="aiDiagnosticMsg" class="msg" role="status" aria-live="polite"></div></section>
+            <section class="ai-metrics-panel" aria-labelledby="aiMetricsTitle"><div class="settings-section-head"><h4 id="aiMetricsTitle">AI 请求指标</h4><div class="settings-control-row"><select id="aiMetricsHours" aria-label="指标时间范围"><option value="24">最近 24 小时</option><option value="168">最近 7 天</option><option value="720">最近 30 天</option></select><button id="aiMetricsRefreshBtn" type="button">刷新指标</button></div></div><div id="aiMetricsSummary" aria-live="polite"><span class="meta">尚未加载指标</span></div><div id="aiMetricsMsg" class="msg" role="status" aria-live="polite"></div></section>
+          </section>
+        </section>
 
         <section id="moduleProjects" class="hidden project-shell" aria-labelledby="projectsTitle">
           <div class="project-header">
@@ -295,12 +280,12 @@
               </section>
 
               <section class="project-subsection" aria-labelledby="projectFeedbackLaneTitle">
-                <div class="subsection-head"><h4 id="projectFeedbackLaneTitle">Feedback 泳道</h4><button id="projectFeedbackCandidatesBtn" type="button">添加 Feedback</button></div>
+                <div class="subsection-head"><h4 id="projectFeedbackLaneTitle">反馈分区</h4><button id="projectFeedbackCandidatesBtn" type="button">添加反馈</button></div>
                 <div id="projectFeedbackLane" class="project-lane" aria-live="polite"></div>
                 <div id="projectFeedbackCandidates" class="project-candidates hidden"></div>
               </section>
               <section class="project-subsection" aria-labelledby="projectWorktaskLaneTitle">
-                <div class="subsection-head"><h4 id="projectWorktaskLaneTitle">WorkTask 泳道</h4><button id="projectWorktaskCandidatesBtn" type="button">添加 WorkTask</button></div>
+                <div class="subsection-head"><h4 id="projectWorktaskLaneTitle">WorkTask 分区</h4><button id="projectWorktaskCandidatesBtn" type="button">添加 WorkTask</button></div>
                 <div id="projectWorktaskLane" class="project-lane" aria-live="polite"></div>
                 <div id="projectWorktaskCandidates" class="project-candidates hidden"></div>
               </section>
@@ -408,52 +393,45 @@
 
         <section id="moduleWorktaskCreate" class="hidden" aria-labelledby="worktaskCreateModuleTitle">
           <h2 id="worktaskCreateModuleTitle" class="visually-hidden">本人任务录入</h2>
-          <div class="toolbar">
-            <select id="createType">
-              <option value="任务安排">任务安排</option>
-              <option value="协作请求">协作请求</option>
-              <option value="WorkTask提交">WorkTask提交</option>
-              <option value="其他">其他</option>
-            </select>
-            <select id="createPriority">
-              <option value="medium">优先级：中</option>
-              <option value="low">优先级：低</option>
-              <option value="high">优先级：高</option>
-              <option value="urgent">优先级：紧急</option>
-            </select>
-            <select id="createStatus">
-              <option value="">状态：自动</option>
-              <option value="new">新工单</option>
-              <option value="scheduled">已安排</option>
-              <option value="in_progress">进行中</option>
-              <option value="completed">已完成</option>
-              <option value="cancelled">已取消</option>
-            </select>
-            <select id="createShowOnHome">
-              <option value="0">主页展示：否</option>
-              <option value="1">主页展示：是</option>
-            </select>
-          </div>
-          <div class="toolbar">
-            <input id="createTitle" placeholder="任务标题（必填）" maxlength="100">
-            <input id="createAssignee" placeholder="负责人（可选）" maxlength="100">
-            <input id="createExpectedAt" type="datetime-local" placeholder="期望时间">
-            <input id="createScheduledAt" type="datetime-local" placeholder="计划时间">
-          </div>
-          <div class="toolbar">
-            <input id="createTags" placeholder="标签（可选，如：系统维护,文档）" maxlength="200">
-          </div>
-          <div class="toolbar">
-            <textarea id="createContent" rows="4" placeholder="任务详细说明（必填）" maxlength="3000"></textarea>
-          </div>
-          <div class="toolbar">
-            <textarea id="createPublicReply" rows="2" placeholder="对外回复（可选，主页展示时可见）" maxlength="2000"></textarea>
-            <textarea id="createAdminNote" rows="2" placeholder="管理员备注（仅后台可见）" maxlength="2000"></textarea>
-          </div>
-          <div class="toolbar">
-            <button class="primary" id="createWorktaskBtn" type="button">创建本人任务</button>
-            <button id="createWorktaskResetBtn" type="button">重置表单</button>
-          </div>
+          <section class="worktask-create-group">
+            <h3>基本信息</h3>
+            <div class="worktask-create-fields">
+              <label for="createTitle">任务标题<input id="createTitle" placeholder="必填" maxlength="100"></label>
+              <label for="createType">任务类型<select id="createType"><option value="任务安排">任务安排</option><option value="协作请求">协作请求</option><option value="WorkTask提交">WorkTask提交</option><option value="其他">其他</option></select></label>
+              <label for="createPriority">优先级<select id="createPriority"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="urgent">紧急</option></select></label>
+              <label for="createStatus">状态<select id="createStatus"><option value="">自动</option><option value="new">新工单</option><option value="scheduled">已安排</option><option value="in_progress">进行中</option><option value="completed">已完成</option><option value="cancelled">已取消</option></select></label>
+            </div>
+          </section>
+          <section class="worktask-create-group">
+            <h3>负责人和时间</h3>
+            <div class="worktask-create-fields">
+              <label for="createAssignee">负责人<input id="createAssignee" placeholder="可选" maxlength="100"></label>
+              <label for="createExpectedAt">期望时间<input id="createExpectedAt" type="datetime-local"></label>
+              <label for="createScheduledAt">计划时间<input id="createScheduledAt" type="datetime-local"></label>
+            </div>
+          </section>
+          <section class="worktask-create-group">
+            <h3>标签与说明</h3>
+            <div class="worktask-create-fields">
+              <label for="createTags">标签<input id="createTags" placeholder="可选，如：系统维护,文档" maxlength="200"></label>
+              <label class="field-wide" for="createContent">任务说明<textarea id="createContent" rows="4" placeholder="必填" maxlength="3000"></textarea></label>
+            </div>
+          </section>
+          <section class="worktask-create-group">
+            <h3>公开与内部</h3>
+            <div class="worktask-create-fields">
+              <label for="createShowOnHome">主页展示<select id="createShowOnHome"><option value="0">否</option><option value="1">是</option></select></label>
+              <label for="createPublicReply">对外回复<textarea id="createPublicReply" rows="2" placeholder="可选，主页展示时可见" maxlength="2000"></textarea></label>
+              <label for="createAdminNote">管理员备注<textarea id="createAdminNote" rows="2" placeholder="可选，仅后台可见" maxlength="2000"></textarea></label>
+            </div>
+          </section>
+          <section class="worktask-create-group worktask-create-actions">
+            <h3>提交操作</h3>
+            <div class="toolbar">
+              <button class="primary" id="createWorktaskBtn" type="button">创建本人任务</button>
+              <button id="createWorktaskResetBtn" type="button">重置表单</button>
+            </div>
+          </section>
           <div id="worktaskCreateMsg" class="msg" role="status" aria-live="polite"></div>
         </section>
 
@@ -486,7 +464,7 @@
           <form id="knowledgeAskForm" class="knowledge-ask-form">
             <div class="knowledge-form-field knowledge-question-field">
               <label for="knowledgeQuestion">问题</label>
-              <textarea id="knowledgeQuestion" rows="4" maxlength="4000" required placeholder="例如：TYUTland 的登录流程是什么？"></textarea>
+              <textarea id="knowledgeQuestion" rows="4" maxlength="4000" required placeholder="请输入希望从知识库查找的问题"></textarea>
             </div>
             <div class="knowledge-form-field">
               <label for="knowledgeRootFilter">资料范围</label>

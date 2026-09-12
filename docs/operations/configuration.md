@@ -74,10 +74,10 @@ MeowStatus 由 `MEOWSTATUS_ENABLED=false` 全局关闭时不会发起外部请�
 | `AI_METRICS_RETENTION_DAYS` | `30` | AI 请求指标保留天数，仅接受 1–3650 的整数 |
 | `AI_METRICS_AUTO_CLEANUP` | `true` | 是否在启动及每小时自动删除过期 AI 指标；关闭不影响手动/汇总功能 |
 
-Provider profile（名称、协议、Base URL、模型和 API Key）在管理员面板保存。API Key 使用
+Provider AI 配置（内部字段 `profile`，包含名称、协议、Base URL、模型和 API Key）在管理员面板的“设置”选项卡保存。API Key 使用
 AES-256-GCM 加密写入 `workstation_setting`，列表只显示掩码；OpenAI-compatible 使用
-Bearer，Anthropic 使用 `x-api-key` 和固定版本头。最多保存 8 个 profile，但只有一个
-active profile。profile 可选配置 `reasoningEffort`（空值或 `low`/`medium`/`high`/`xhigh`/
+Bearer，Anthropic 使用 `x-api-key` 和固定版本头。最多保存 8 个 AI 配置，但只有一个
+当前 AI 配置。AI 配置可选 `reasoningEffort`（空值或 `low`/`medium`/`high`/`xhigh`/
 `max`）和最多 2000 个 Unicode 字符的 `promptInstruction`；只有 OpenAI Responses 发送
 推理强度，Chat/Anthropic 会省略。完整启停、备份和轮换流程见 [AI Copilot 运维手册](ai-copilot.md)。
 
@@ -126,8 +126,8 @@ npm run reindex-knowledge
 回滚证据。若 Provider 或索引异常，可先关闭 `AI_COPILOT_ENABLED`；普通反馈、WorkTask、
 通知和导出不依赖知识助手。
 
-管理员 AI 面板中的“Provider 真实诊断”只在点击后对指定 profile 发送一次固定探针，
-不会切换 active profile、创建建议或知识历史，但可能消耗少量 token。诊断结果只显示
+管理员 AI 面板中的“Provider 真实诊断”只在点击后对指定 AI 配置发送一次固定探针，
+不会切换当前 AI 配置、创建建议或知识历史，但可能消耗少量 token。诊断结果只显示
 网络/HTTP、JSON、文本和 sentinel 检查的安全摘要，不转发上游响应正文。AI 请求指标只保存
 操作、协议、模型摘要、状态、耗时和 token 汇总字段，不保存 prompt、响应、密钥、完整 URL
 或业务内容；指标默认保留 30 天，可由上述两个环境变量调整。

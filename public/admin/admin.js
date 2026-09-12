@@ -55,12 +55,14 @@
   const tabWorktaskCreate = document.getElementById("tabWorktaskCreate");
   const tabProjects = document.getElementById("tabProjects");
   const tabKnowledge = document.getElementById("tabKnowledge");
+  const tabSettings = document.getElementById("tabSettings");
   const moduleInbox = document.getElementById("moduleInbox");
   const moduleFeedback = document.getElementById("moduleFeedback");
   const moduleWorktask = document.getElementById("moduleWorktask");
   const moduleWorktaskCreate = document.getElementById("moduleWorktaskCreate");
   const moduleProjects = document.getElementById("moduleProjects");
   const moduleKnowledge = document.getElementById("moduleKnowledge");
+  const moduleSettings = document.getElementById("moduleSettings");
   const inboxModel = window.KwsInboxModel;
   const aiModel = window.KwsAiModel;
 
@@ -300,16 +302,16 @@
     if (!enabled) return "已关闭（AI_COPILOT_ENABLED=false）";
     if (available) return "可用";
     return ({
-      no_active_profile: "未选择 active profile",
+      no_active_profile: "未选择当前 AI 配置",
       encryption_key_unavailable: "主密钥不可用",
-      profile_key_unavailable: "active profile 不可用"
+      profile_key_unavailable: "当前 AI 配置不可用"
     }[reason]) || "暂不可用";
   }
 
   function renderAiProfiles(profiles) {
     if (!aiProfilesList) return;
     if (!profiles.length) {
-      aiProfilesList.innerHTML = `<p class="meta">尚未保存 profile。保存后可在这里切换 active profile。</p>`;
+      aiProfilesList.innerHTML = `<p class="meta">尚未保存 AI 配置。保存后可在这里切换当前 AI 配置。</p>`;
       return;
     }
     aiProfilesList.innerHTML = profiles.map((profile) => {
@@ -321,7 +323,7 @@
       }[profile.protocol]) || profile.protocol || "未知协议";
       return `<div class="ai-profile-row">
         <div>
-          <strong>${escapeHtml(profile.name || "未命名 profile")}${active ? " · active" : ""}</strong>
+          <strong>${escapeHtml(profile.name || "未命名 AI 配置")}${active ? " · 当前配置" : ""}</strong>
           <div class="ai-profile-meta">${escapeHtml(protocolLabel)} · ${escapeHtml(profile.model || "未设置模型")} · ${escapeHtml(profile.baseUrl || "未设置地址")}</div>
           <div class="ai-profile-meta">推理强度：${escapeHtml(profile.reasoningEffort || "未设置")} · 附加指令：${profile.promptInstruction ? "已配置" : "未配置"}</div>
           <div class="ai-profile-meta">API Key：${profile.keyConfigured ? escapeHtml(profile.keyMask || "••••••••") : "未配置"}</div>
@@ -329,7 +331,7 @@
         <div class="ai-profile-actions">
           <button type="button" class="secondary" data-action="ai-edit-profile" data-id="${escapeHtml(profile.id)}">编辑</button>
           <button type="button" class="secondary" data-action="ai-diagnose-profile" data-id="${escapeHtml(profile.id)}">诊断</button>
-          ${active ? "" : `<button type="button" class="primary" data-action="ai-activate-profile" data-id="${escapeHtml(profile.id)}">设为 active</button>`}
+          ${active ? "" : `<button type="button" class="primary" data-action="ai-activate-profile" data-id="${escapeHtml(profile.id)}">设为当前配置</button>`}
           <button type="button" class="danger" data-action="ai-delete-profile" data-id="${escapeHtml(profile.id)}">删除</button>
         </div>
       </div>`;
@@ -385,7 +387,7 @@
     if (!aiDiagnosticsList) return;
     const entries = Object.entries(state.ai.diagnostics || {});
     if (!entries.length) {
-      aiDiagnosticsList.innerHTML = '<span class="meta">选择 profile 后点击“诊断”</span>';
+      aiDiagnosticsList.innerHTML = '<span class="meta">选择 AI 配置后点击“诊断”</span>';
       return;
     }
     aiDiagnosticsList.innerHTML = entries.map(([profileId, raw]) => {
@@ -700,7 +702,7 @@
       await api("/api/admin/ai/profiles", payload);
       await loadAiStatus();
       resetAiProfileForm();
-      notify(aiStatusMsg, "ok", "AI profile 已保存");
+      notify(aiStatusMsg, "ok", "AI 配置已保存");
     });
   }
 
@@ -710,7 +712,7 @@
     const run = async () => {
       await api("/api/admin/ai/profiles/active", { id });
       await loadAiStatus();
-      notify(aiStatusMsg, "ok", "active profile 已切换，新请求将使用该 profile");
+      notify(aiStatusMsg, "ok", "当前 AI 配置已切换，新请求将使用该配置");
     };
     if (btn) await withButtonBusy(btn, "切换中...", run);
     else await run();
@@ -718,14 +720,14 @@
 
   async function deleteAiProfile(id) {
     const profile = state.ai.profiles.find((item) => item.id === id);
-    if (!profile || !confirm(`确认删除 AI profile“${profile.name || id}”吗？`)) return;
+    if (!profile || !confirm(`确认删除 AI 配置“${profile.name || id}”吗？`)) return;
     const btn = Array.from(document.querySelectorAll('button[data-action="ai-delete-profile"]'))
       .find((candidate) => candidate.dataset.id === id);
     const run = async () => {
       await api("/api/admin/ai/profiles/delete", { id });
       await loadAiStatus();
       if (document.getElementById("aiProfileId").value === id) resetAiProfileForm();
-      notify(aiStatusMsg, "ok", "AI profile 已删除");
+      notify(aiStatusMsg, "ok", "AI 配置已删除");
     };
     if (btn) await withButtonBusy(btn, "删除中...", run);
     else await run();
@@ -855,7 +857,7 @@
     if (options.loading) {
       return `<section class="ai-suggestion-panel" data-ai-key="${escapeHtml(key)}">
         <div class="ai-suggestion-head"><strong>AI Copilot</strong>${generateButton}</div>
-        <p class="ai-suggestion-note" role="status" aria-live="polite">正在请求当前 active profile，请稍候……</p>
+        <p class="ai-suggestion-note" role="status" aria-live="polite">正在请求当前 AI 配置，请稍候……</p>
       </section>`;
     }
     if (options.error) {
@@ -1733,7 +1735,7 @@
         <div class="project-kanban-column-items">${lane.unknown.length ? lane.unknown.map((item) => renderProjectKanbanCard(item, archived)).join("") : '<p class="project-kanban-empty">此列暂无工作项。</p>'}</div>
       </section>`);
       return `<section class="project-kanban-lane" aria-labelledby="project-kanban-${sourceType}-title">
-        <div class="project-kanban-lane-head"><h5 id="project-kanban-${sourceType}-title">${escapeHtml(projectKanbanSourceLabels[sourceType])} 泳道</h5><span>${lane.columns.reduce((count, column) => count + column.items.length, 0) + lane.unknown.length} 个工作项</span></div>
+        <div class="project-kanban-lane-head"><h5 id="project-kanban-${sourceType}-title">${escapeHtml(sourceType === "feedback" ? "反馈" : "WorkTask")} 分区</h5><span>${lane.columns.reduce((count, column) => count + column.items.length, 0) + lane.unknown.length} 个工作项</span></div>
         <div class="project-kanban-lane-scroll"><div class="project-kanban-lane-grid" data-source-type="${escapeHtml(sourceType)}">${columns.join("")}</div></div>
       </section>`;
     }).join("");
@@ -1912,24 +1914,28 @@
     const isWorktaskCreate = module === "worktaskCreate";
     const isProjects = module === "projects";
     const isKnowledge = module === "knowledge";
+    const isSettings = module === "settings";
     tabInbox.classList.toggle("active", isInbox);
     tabFeedback.classList.toggle("active", isFeedback);
     tabWorktask.classList.toggle("active", isWorktask);
     tabWorktaskCreate.classList.toggle("active", isWorktaskCreate);
     tabProjects.classList.toggle("active", isProjects);
     tabKnowledge.classList.toggle("active", isKnowledge);
+    tabSettings.classList.toggle("active", isSettings);
     tabInbox.setAttribute("aria-selected", String(isInbox));
     tabFeedback.setAttribute("aria-selected", String(isFeedback));
     tabWorktask.setAttribute("aria-selected", String(isWorktask));
     tabWorktaskCreate.setAttribute("aria-selected", String(isWorktaskCreate));
     tabProjects.setAttribute("aria-selected", String(isProjects));
     tabKnowledge.setAttribute("aria-selected", String(isKnowledge));
+    tabSettings.setAttribute("aria-selected", String(isSettings));
     moduleInbox.classList.toggle("hidden", !isInbox);
     moduleFeedback.classList.toggle("hidden", !isFeedback);
     moduleWorktask.classList.toggle("hidden", !isWorktask);
     moduleWorktaskCreate.classList.toggle("hidden", !isWorktaskCreate);
     moduleProjects.classList.toggle("hidden", !isProjects);
     moduleKnowledge.classList.toggle("hidden", !isKnowledge);
+    moduleSettings.classList.toggle("hidden", !isSettings);
 
     if (isInbox && !state.inbox.loaded && !state.inbox.loading) {
       loadInbox().catch((err) => showMessage(inboxMsg, "error", err.message));
@@ -2040,7 +2046,7 @@
       state.ai.suggestions = {};
       state.ai.diagnostics = {};
       state.ai.metrics = null;
-      if (aiDiagnosticsList) aiDiagnosticsList.innerHTML = '<span class="meta">选择 profile 后点击“诊断”</span>';
+      if (aiDiagnosticsList) aiDiagnosticsList.innerHTML = '<span class="meta">选择 AI 配置后点击“诊断”</span>';
       if (aiMetricsSummary) aiMetricsSummary.innerHTML = '<span class="meta">尚未加载指标</span>';
       resetAiProfileForm();
       state.knowledge.loaded = false;
@@ -2160,6 +2166,7 @@
     switchModule("projects");
   });
   tabKnowledge.addEventListener("click", () => switchModule("knowledge"));
+  tabSettings.addEventListener("click", () => switchModule("settings"));
 
   document.getElementById("projectCreateBtn").addEventListener("click", () => {
     document.getElementById("projectCreateForm").classList.toggle("hidden");
