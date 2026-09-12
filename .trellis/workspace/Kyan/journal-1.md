@@ -248,3 +248,25 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: KWS UI与文案整理
+
+**Date**: 2026-09-12
+**Task**: KWS UI与文案整理
+**Branch**: `main`
+
+### Summary
+
+完成设置选项卡、AI配置与项目展示布局整理；统一分区和中文文案，完成206项测试及本地桌面/窄屏冒烟验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a01c5a6` | (see git log) |
+| `503546d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
