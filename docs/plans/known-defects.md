@@ -9,9 +9,9 @@
 | D-001 | 已修复 | 公开主页 highlights 不再选择或返回 content 等内部字段 | `server/db.js:1640-1663`、`server/app.js:295-301` | 公共响应断言不含 content/contact/adminNote/账号快照 |
 | D-002 | 已修复/历史路由移除 | 旧 Account 列表已从活动路由移除；历史 mapper 仅作迁移保留，不再作为活动响应 | `server/app.js:322-355`、`server/db.js:1422-1550` | 路由 404 与匿名 API 冒烟 |
 | D-003 | 已缓解 | 旧 Account 回调和会话入口已移除；未来新协议仍需 state/nonce | `server/app.js:322-355` | 路由缺失回归；未来新协议做 state 重放测试 |
-| D-004 | 已验证 | `TRUST_PROXY>0` 时仅在实际反向代理边界内采纳转发头；云服务器应用仅监听回环，源站 `:3000` 公网连接被阻断，Nginx 负责 Host/Proto 转发 | `server/security.js:14-67`、内部发布证据 | 部署拓扑或代理 hop 变化时重新执行源站端口阻断、Host/Proto 观察和直连伪造测试 |
+| D-004 | 已验证 | `TRUST_PROXY>0` 时仅在实际反向代理边界内采纳转发头；云服务器应用仅监听回环，部署 `.env` 的 `PORT`（默认 `3000`）不应被公网直连，Nginx 负责 Host/Proto 转发 | `server/security.js:14-67`、内部发布证据 | 部署拓扑、端口或代理 hop 变化时重新执行源站端口阻断、Host/Proto 观察和直连伪造测试 |
 | D-005 | 已修复 | Node 24 下 `better-sqlite3 12.11.1` 在 Express JSON 管理员登录请求中触发原生环境清理断言；已升级到 13.0.3（N-API）并加入运行时回归 | `package.json:18-24`、`package-lock.json`、`tests/runtime-compatibility.test.js`、`tests/account-submission.test.js` | Node 24 干净安装、SQLite 加载、管理员登录和 `npm test` |
-| D-006 | 部分修复/待依赖升级 | Express/body-parser/Nodemailer 已升级，但 Express 4 依赖链当前仍带 `qs@6.15.3` 的 3 个 moderate 审计项；`npm audit fix --force` 会升级到 Express 5，属于破坏性变更，本任务不直接执行 | `package.json:25-31`、`package-lock.json`、2026-09-04 canonical audit 输出 | 单独设计并验证 Express 5/替代依赖升级；在升级前继续执行 `npm audit --omit=dev --registry=https://registry.npmjs.org` |
+| D-006 | 已修复（Nodemailer）/Express 4 主版本保留 | 历史审计曾报告 Nodemailer `<=9.1.0` 的 high 风险；现已从 `9.0.5` 升级到 `9.1.1`，2026-09-12 canonical registry 生产依赖审计为 0 vulnerabilities。Express 4 主版本暂不升级，以保持兼容性边界。 | `package.json`、`package-lock.json`、2026-09-12 canonical audit 输出 | 后续如需评估 Express 5 或替代依赖，另行设计兼容性任务；每次发布继续执行 `npm audit --omit=dev --registry=https://registry.npmjs.org` |
 | D-007 | 已修复/待实链路验证 | MeowStatus Dashboard 现在限制 JSON MIME/响应体/字段/挂件数量，favicon 仅接受有界 raster data URL；异常仍只影响状态卡片 | `server/meowstatus.js`、`public/index/main.js`、`tests/meowstatus.test.js` | 本地边界回归已覆盖；发布环境继续观察上游契约 |
 | D-008 | 已实现/待实链路验证 | 通知改为数据库 outbox、有限重试和管理员重试；真实 provider 仍需部署验证 | `server/app.js:161-255,508-524`、`server/db.js:1194-1333` | 持久化投递、失败状态和重启后重试测试 |
 | D-009 | 已修复 | WorkTask arrange 支持显式清空负责人/计划时间 | `server/validation.js:293-338`、`server/db.js:1584-1626` | clear/unassign 语义测试 |

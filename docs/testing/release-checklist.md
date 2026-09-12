@@ -18,18 +18,25 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 还要执行管理员登录回归，因为旧的 12.11.1 在 Express JSON 请求上下文中曾触发
 原生环境清理断言。
 
-### 当前环境基线记录（2026-08-28）
+### 当前环境基线记录（2026-09-12）
 
 - Node.js：`v24.19.0`；npm：`12.0.2`；当前运行时模块 ABI：`137`，N-API：`10`。
-- 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.0.5`；`package.json` 通过
+- 依赖目标：`better-sqlite3 ^13.0.3`、`express ^4.22.2`、`nodemailer ^9.1.1`；`package.json` 通过
   `overrides.qs=6.16.0` 固定 Express 4 依赖链的安全版本，不升级 Express 主版本。
 - 已在当前工作区以 canonical npm registry 执行 `npm ci --foreground-scripts`，
   干净安装后原生模块加载成功（ABI 137）；管理员登录/API 冒烟和新增回归通过，
-  当前完整测试为 `204/204`（2026-09-06，Node 24 / better-sqlite3 13.0.3）。
+  当前完整测试为 `210/210`（Node 24 / better-sqlite3 13.0.3 / Nodemailer 9.1.1）。
+
+本轮依赖安全升级的验证结果：`npm ci --foreground-scripts` 成功，
+`node -e "require('better-sqlite3')(':memory:').close()"` 成功，
+`npm audit --omit=dev --registry=https://registry.npmjs.org` 返回 `found 0 vulnerabilities`。
 
 ### 部署目标验证顺序（待实际发布时执行）
 
 以下顺序用于云服务器或其他部署目标，文档本身不将未执行的云端动作标记为已完成：
+
+> 命令中的 `127.0.0.1:3000` 是默认值；请按部署 `.env` 的 `PORT` 替换，
+> 不要把示例端口误当成公网入口。
 
 1. 备份数据库并保留上一版本、配置摘要和备份 checksum。
 2. 在 Git 工作树中同步已审核提交；保留生产 `.env`、数据库、备份、日志和 PM2 实际 cwd，不用示例配置覆盖它们。
@@ -75,8 +82,8 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 | 门禁 | 证据 | 状态 |
 |---|---|---|
 | 依赖安装和 Node ABI 匹配 | Node 版本、安装日志、启动结果 | Node 24 / ABI 137 已验证 |
-| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3：196/196（2026-09-04） |
-| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | 阻塞：2026-09-04 canonical registry 报告 `qs@6.15.3` 依赖链 3 个 moderate；强制修复会升级 Express 5，需独立兼容性任务，不在本次发布中直接执行 |
+| 单元/集成测试 | `npm test` 输出和退出码 | Node 24 / better-sqlite3 13.0.3 / Nodemailer 9.1.1：210/210（2026-09-12） |
+| 依赖漏洞 | `npm audit` 报告及升级/缓解结论 | 通过：2026-09-12 canonical registry 报告 `found 0 vulnerabilities`；Nodemailer 已升级至 9.1.1，Express 4 主版本保持不变 |
 | API 冒烟 | health → 提交 → 管理登录 → 列表 | 已在临时数据库验证 |
 | 隐私投影 | 接口响应断言 | 已有回归覆盖 |
 | 项目管理 API/UI | 项目 CRUD、里程碑、来源归属冲突、hash 详情、公共开关和窄屏/主题冒烟 | 自动回归已覆盖；部署环境需执行一次管理员与公共页面冒烟 |
