@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~272 | Active |
+| `journal-1.md` | ~294 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-09-12 | 公开项目工作项展示 | `c33d975`, `a8bdb0c` | `main` |
 | 11 | 2026-09-12 | KWS UI与文案整理 | `a01c5a6`, `503546d` | `main` |
 | 10 | 2026-09-06 | P2 Kanban 基础能力 | `42bb1f7`, `3800422`, `2ee23d3`, `dfb98d3` | `main` |
 | 9 | 2026-09-04 | P2 项目管理基础能力 | `46705fb`, `8869133` | `main` |

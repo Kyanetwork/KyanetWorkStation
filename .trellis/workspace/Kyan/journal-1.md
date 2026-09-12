@@ -270,3 +270,25 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: 公开项目工作项展示
+
+**Date**: 2026-09-12
+**Task**: 公开项目工作项展示
+**Branch**: `main`
+
+### Summary
+
+完成公开项目工作项展示：新增项目级与关系级公开开关、三数据库兼容迁移、管理员逐条控制、公共 Feedback/WorkTask 安全摘要分区、测试与文档；node --check、npm test（210/210）和 git diff --check 均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c33d975` | (see git log) |
+| `a8bdb0c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
