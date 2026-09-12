@@ -292,3 +292,25 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: Nodemailer 依赖安全与发布收尾
+
+**Date**: 2026-09-12
+**Task**: Nodemailer 依赖安全与发布收尾
+**Branch**: `main`
+
+### Summary
+
+将 Nodemailer 升级至 9.1.1，canonical registry 依赖审计为 0 vulnerabilities；完成 Node 24 原生安装、better-sqlite3 加载、210 项测试、语法检查和差异检查，并同步已知缺陷、发布门禁与端口可替换的部署文档。云服务器未由本次会话直接操作。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cad8427` | (see git log) |
+| `16de552` | (see git log) |
+
+### Status
+
+[OK] **Completed**
