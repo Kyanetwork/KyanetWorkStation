@@ -8,6 +8,11 @@
     formatter: null
   };
 
+  const PUBLIC_ITEM_STATUS_LABELS = Object.freeze({
+    feedback: Object.freeze({ new: "新建", reviewed: "已查看", resolved: "已解决", notplanned: "暂不处理" }),
+    worktask: Object.freeze({ new: "新建", scheduled: "已安排", in_progress: "进行中", completed: "已完成", cancelled: "已取消" })
+  });
+
   function getElement(id) {
     return document.getElementById(id);
   }
@@ -88,6 +93,21 @@
     return Object.prototype.hasOwnProperty.call(object, key) && object[key] !== null && object[key] !== undefined;
   }
 
+  function normalizePublicItem(value, sourceType) {
+    const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : "未命名工作项";
+    const status = typeof raw.status === "string" && raw.status.trim() ? raw.status.trim() : "";
+    const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : "";
+    const publicReply = typeof raw.publicReply === "string" ? raw.publicReply.trim() : "";
+    return { sourceType, title, status, updatedAt, publicReply };
+  }
+
+  function publicItemStatusLabel(sourceType, status) {
+    return PUBLIC_ITEM_STATUS_LABELS[sourceType] && PUBLIC_ITEM_STATUS_LABELS[sourceType][status]
+      ? PUBLIC_ITEM_STATUS_LABELS[sourceType][status]
+      : "状态未知";
+  }
+
   function renderMilestones(milestones) {
     const section = getElement("projectMilestonesSection");
     const list = getElement("projectMilestoneList");
@@ -114,6 +134,47 @@
       list.appendChild(item);
     }
     if (!list.children.length) appendTextElement(list, "p", "empty", "暂无公开里程碑。");
+  }
+
+  function renderPublicItemList(listId, sourceType, values) {
+    const list = getElement(listId);
+    if (!list) return;
+    list.replaceChildren();
+    const items = Array.isArray(values) ? values : [];
+    if (!items.length) {
+      appendTextElement(list, "p", "empty", sourceType === "feedback" ? "暂无公开反馈。" : "暂无公开 WorkTask。");
+      return;
+    }
+    for (const value of items) {
+      const item = normalizePublicItem(value, sourceType);
+      const article = document.createElement("article");
+      article.className = "project-public-item";
+      const head = document.createElement("div");
+      head.className = "project-public-item-head";
+      appendTextElement(head, "span", "project-public-item-type", sourceType === "feedback" ? "Feedback" : "WorkTask");
+      appendTextElement(head, "span", "state-pill", publicItemStatusLabel(sourceType, item.status));
+      article.appendChild(head);
+      appendTextElement(article, "h4", "project-public-item-title", item.title);
+      appendTextElement(article, "div", "project-public-item-time", `更新时间：${formatDateTime(item.updatedAt)}`);
+      if (item.publicReply) appendTextElement(article, "p", "project-public-item-reply", `公开回复：${item.publicReply}`);
+      list.appendChild(article);
+    }
+  }
+
+  function renderPublicItems(items) {
+    const section = getElement("projectItemsSection");
+    const feedbackList = getElement("projectPublicFeedbackList");
+    const worktaskList = getElement("projectPublicWorktaskList");
+    if (!section || !feedbackList || !worktaskList) return;
+    if (!items || typeof items !== "object" || Array.isArray(items)) {
+      section.classList.add("hidden");
+      feedbackList.replaceChildren();
+      worktaskList.replaceChildren();
+      return;
+    }
+    section.classList.remove("hidden");
+    renderPublicItemList("projectPublicFeedbackList", "feedback", items.feedback);
+    renderPublicItemList("projectPublicWorktaskList", "worktask", items.worktask);
   }
 
   function renderProject(project) {
@@ -155,6 +216,8 @@
       milestonesSection.classList.add("hidden");
       getElement("projectMilestoneList").replaceChildren();
     }
+
+    renderPublicItems(data.items);
 
     showOnly("projectContent");
   }

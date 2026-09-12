@@ -1013,7 +1013,7 @@ function validateProjectIdPayload(payload) {
 
 function parseProjectPublicFields(body) {
   const fields = {};
-  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion"]) {
+  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "publicItems"]) {
     const result = parseProjectBoolean(body[fieldName], fieldName, false);
     if (!result.valid) return result;
     fields[fieldName] = result.value;
@@ -1081,7 +1081,7 @@ function validateProjectUpdatePayload(payload) {
     data.description = result.value;
     provided = true;
   }
-  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion"]) {
+  for (const fieldName of ["publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "publicItems"]) {
     if (!hasOwn(body, fieldName)) continue;
     const result = parseProjectBoolean(body[fieldName], fieldName);
     if (!result.valid) return result;
@@ -1255,6 +1255,23 @@ function validateProjectItemStatusPayload(payload) {
   };
 }
 
+function validateProjectItemVisibilityPayload(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const projectId = parseProjectId(body.projectId, "projectId");
+  if (!projectId.valid) return projectId;
+  const source = validateProjectSourceFields(body);
+  if (!source.valid) return source;
+  if (body.publicVisible === undefined || body.publicVisible === null || body.publicVisible === "") {
+    return { valid: false, message: "publicVisible 不合法" };
+  }
+  const publicVisible = parseProjectBoolean(body.publicVisible, "publicVisible");
+  if (!publicVisible.valid) return publicVisible;
+  return {
+    valid: true,
+    data: { projectId: projectId.value, ...source.data, publicVisible: publicVisible.value }
+  };
+}
+
 function validatePublicProjectKey(value) {
   const key = typeof value === "string" ? value.trim() : "";
   return PROJECT_PUBLIC_KEY_PATTERN.test(key)
@@ -1320,5 +1337,6 @@ module.exports = {
   validateProjectItemUpdatePayload,
   validateProjectItemUnassignPayload,
   validateProjectItemStatusPayload,
+  validateProjectItemVisibilityPayload,
   validatePublicProjectKey
 };

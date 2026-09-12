@@ -9,6 +9,7 @@ test("项目模型为缺省字段提供安全默认值并按泳道分离来源",
   assert.equal(summary.name, "项目");
   assert.equal(summary.description, "");
   assert.equal(summary.completion, null);
+  assert.equal(summary.publicItems, false);
   const detail = model.normalizeProjectDetail({
     project: summary,
     milestones: [{ id: 2, title: "后", sortOrder: 2 }, { id: 1, title: "前", sortOrder: 1 }],
@@ -22,6 +23,7 @@ test("项目模型为缺省字段提供安全默认值并按泳道分离来源",
   const lanes = model.splitProjectItems(detail.items);
   assert.deepEqual(lanes.feedback.map((item) => item.sourceId), [1]);
   assert.deepEqual(lanes.worktask.map((item) => item.sourceId), [2]);
+  assert.equal(detail.items[0].publicVisible, false);
 });
 
 test("项目 hash 只包含正整数 ID并可安全解析", () => {

@@ -109,6 +109,15 @@ Project name and description are text nodes, not links; only the explicit
 `overflow-wrap: anywhere` (or an equivalent bounded rule) on the title and
 description so mixed-language content cannot widen the page.
 
+Public project details keep work items in two independent sections:
+`#projectItemsSection` contains `#projectPublicFeedbackList` and
+`#projectPublicWorktaskList`. Render only the server allow-list fields
+(`sourceType`, title, native status, optional `publicReply`, and `updatedAt`)
+with `textContent`/`createElement`; do not infer or display internal IDs,
+relationship IDs, source content, contacts, administrator notes, or Kanban
+state. When the API omits `items`, hide the whole section; when a section is
+present but empty, show its safe empty state.
+
 ## External icon boundary
 
 The MeowStatus adapter is the authoritative validator for Minecraft favicon

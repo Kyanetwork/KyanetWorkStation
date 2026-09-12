@@ -19,24 +19,29 @@ KyanetAccount、AI 自动写操作、成员权限和复杂 Kanban 关系不属�
   `revokeProjectMilestone(id)`、`restoreProjectMilestone(id)`。
 - `assignProjectItem(input)`、`updateProjectItemMilestone(input)`、
   `unassignProjectItem(input)`：一个来源最多保留一条归属。
+- `updateProjectItemVisibility(input)`：确认项目/来源关系归属后更新 `public_visible`；值发生
+  变化时同步触碰项目 `updated_at`，同值保存保持原时间。
 - `GET /api/public/projects`、`GET /api/public/projects/:publicKey`：只返回公共 allow-list。
 - `POST /api/admin/project/*`、`GET /api/admin/project/:id`：全部受管理员会话保护；写请求
   继续经过同源和 JSON 中间件。
 
 ## 3. Contracts
 
-- `project` 保存不可变随机 `publicKey`、名称、说明、`active/archived` 状态、四个独立
+- `project` 保存不可变随机 `publicKey`、名称、说明、`active/archived` 状态、五个独立
   公开开关、`auto/custom` 完成度配置和时间戳。
 - `project_milestone` 保存项目内标题、说明、可空目标日期、完成标记、排序和
   `active/revoked` 状态。撤销先标记再解除关联；恢复不自动重绑。撤销清理必须在每次
   请求执行，即使数据库驱动把重复状态更新报告为 0 行，以便重试此前失败的清理。
 - `project_item` 使用 `(source_type, source_id)` 唯一约束，来源类型只允许 `feedback`/
-  `worktask`，里程碑必须属于同一项目且有效。
+  `worktask`，里程碑必须属于同一项目且有效；`public_visible` 默认关闭，只作用于当前
+  项目关系，不复用来源的 `show_on_home`。
 - 完成度仅统计有效里程碑；无有效里程碑返回空值。自定义模式接受 0–100 整数，关闭
   自定义后恢复自动计算。
 - 公共列表只返回 `publicKey`、名称和说明。公共详情以基础信息公开且项目未归档为前提，
-  仅按开关返回 `milestones`、`updatedAt`、`completion`；不得返回内部 ID、来源、正文、
-  联系方式、管理员字段、密钥或 URL。
+  仅按开关返回 `milestones`、`updatedAt`、`completion`；`public_items` 开启时增加
+  `items.feedback` 与 `items.worktask` 两个独立来源分区，每条只包含 `sourceType`、标题、
+  原生状态、可选 `publicReply` 和 `updatedAt`。不得返回内部 ID、项目/里程碑关系、正文、
+  联系方式、管理员字段、密钥或 URL；`public_items` 关闭时省略 `items`。
 
 ## 4. Validation & Error Matrix
 
@@ -47,6 +52,7 @@ KyanetAccount、AI 自动写操作、成员权限和复杂 Kanban 关系不属�
 | 来源已有其他项目归属，或解绑时项目不匹配 | 409 `PROJECT_ITEM_CONFLICT` |
 | 里程碑跨项目、已撤销或不存在 | 409 `PROJECT_MILESTONE_CONFLICT` |
 | 归档项目新增里程碑或绑定来源 | 409 `PROJECT_STATE_CONFLICT` |
+| 逐条公开请求的来源未绑定当前项目 | 404 `NOT_FOUND` 或 409 `PROJECT_ITEM_CONFLICT` |
 | 公共 key 无效、项目未公开、已归档或不存在 | 统一 404 `NOT_FOUND`，不泄露原因 |
 
 ## 5. Good / Base / Bad Cases
@@ -64,6 +70,8 @@ KyanetAccount、AI 自动写操作、成员权限和复杂 Kanban 关系不属�
 - SQLite 初始化两次后断言三表、索引和历史数据仍在；静态检查三驱动表名、唯一约束和索引。
 - 数据层覆盖完成度、排序、撤销/恢复、单来源冲突、跨项目里程碑和来源删除清理。
 - API 覆盖匿名 401、输入 400、资源 404、归属/状态 409、同源/JSON 中间件和公共字段缺失。
+- 公开工作项覆盖总开关关闭时省略 `items`、逐条可见项分区、排序、回复字段 allow-list 和
+  旧 SQLite 缺列迁移默认关闭；管理员 visibility API 覆盖会话保护、同值更新时间和审计脱敏。
 - 管理模型/静态页面覆盖缺省值、hash、两个来源分区、按钮 `type`、转义、亮暗主题和窄屏。
 - 发布前执行 `node --check`、`npm test`、`git diff --check` 和真实部署目标的管理员/公共冒烟；
   不将本地自动测试描述为云端证据。

@@ -422,3 +422,102 @@ test("项目工作项状态 API 按来源校验、同步项目时间并脱敏审
     await server.stop();
   }
 });
+
+test("管理员可逐条公开项目工作项，公共接口只返回安全摘要", async () => {
+  const server = await startServer();
+  try {
+    const login = await jsonRequest(server.baseUrl, "/api/admin/login", {
+      method: "POST",
+      body: { username: "admin", password: "admin-password" }
+    });
+    assert.equal(login.response.status, 200);
+    const headers = { cookie: cookie(login.response) };
+
+    const created = await jsonRequest(server.baseUrl, "/api/admin/project/create", {
+      method: "POST",
+      headers,
+      body: { name: "公开工作项 API", publicBasic: true, publicItems: true }
+    });
+    assert.equal(created.response.status, 201);
+    const projectId = created.data.data.id;
+    const publicKey = created.data.data.publicKey;
+
+    const feedback = await jsonRequest(server.baseUrl, "/api/feedback", {
+      method: "POST",
+      body: { type: "Bug", title: "API 公开反馈", content: "私密正文", contact: "private@example.com", images: [] }
+    });
+    assert.equal(feedback.response.status, 201);
+    const feedbackId = feedback.data.data.id;
+    const worktask = await jsonRequest(server.baseUrl, "/api/worktask", {
+      method: "POST",
+      body: { type: "任务安排", title: "API 公开任务", content: "任务正文", contact: "task@example.com", priority: "medium", expectedAt: "" }
+    });
+    assert.equal(worktask.response.status, 201);
+    const worktaskId = worktask.data.data.id;
+    for (const body of [
+      { projectId, sourceType: "feedback", sourceId: feedbackId },
+      { projectId, sourceType: "worktask", sourceId: worktaskId }
+    ]) {
+      const assigned = await jsonRequest(server.baseUrl, "/api/admin/project/item/assign", { method: "POST", headers, body });
+      assert.equal(assigned.response.status, 201);
+    }
+
+    const anonymous = await jsonRequest(server.baseUrl, "/api/admin/project/item/visibility", {
+      method: "POST",
+      body: { projectId, sourceType: "feedback", sourceId: feedbackId, publicVisible: true }
+    });
+    assert.equal(anonymous.response.status, 401);
+
+    const initiallyHidden = await jsonRequest(server.baseUrl, `/api/public/projects/${publicKey}`);
+    assert.deepEqual(initiallyHidden.data.data.items, { feedback: [], worktask: [] });
+
+    const invalid = await jsonRequest(server.baseUrl, "/api/admin/project/item/visibility", {
+      method: "POST",
+      headers,
+      body: { projectId, sourceType: "feedback", sourceId: feedbackId, publicVisible: "yes" }
+    });
+    assert.equal(invalid.response.status, 400);
+    assert.equal(invalid.data.error.code, "INVALID_PAYLOAD");
+
+    const visible = await jsonRequest(server.baseUrl, "/api/admin/project/item/visibility", {
+      method: "POST",
+      headers,
+      body: { projectId, sourceType: "feedback", sourceId: feedbackId, publicVisible: true }
+    });
+    assert.equal(visible.response.status, 200);
+    assert.equal(visible.data.data.publicVisible, true);
+    const publicDetail = await jsonRequest(server.baseUrl, `/api/public/projects/${publicKey}`);
+    assert.equal(publicDetail.response.status, 200);
+    assert.equal(publicDetail.data.data.items.feedback.length, 1);
+    assert.deepEqual(Object.keys(publicDetail.data.data.items.feedback[0]).sort(), [
+      "sourceType", "status", "title", "updatedAt"
+    ].sort());
+    assert.equal(publicDetail.data.data.items.feedback[0].title, "API 公开反馈");
+    assert.equal(publicDetail.data.data.items.worktask.length, 0);
+
+    const worktaskVisible = await jsonRequest(server.baseUrl, "/api/admin/project/item/visibility", {
+      method: "POST",
+      headers,
+      body: { projectId, sourceType: "worktask", sourceId: worktaskId, publicVisible: true }
+    });
+    assert.equal(worktaskVisible.response.status, 200);
+    const bothVisible = await jsonRequest(server.baseUrl, `/api/public/projects/${publicKey}`);
+    assert.equal(bothVisible.data.data.items.worktask[0].title, "API 公开任务");
+    assert.equal(bothVisible.data.data.items.worktask[0].priority, undefined);
+    assert.equal(bothVisible.data.data.items.worktask[0].content, undefined);
+
+    const audits = await jsonRequest(server.baseUrl, "/api/admin/audit/list", {
+      method: "POST",
+      headers,
+      body: { action: "project.item.visibility", entityType: "project_item", page: 1, pageSize: 20 }
+    });
+    assert.equal(audits.response.status, 200);
+    const audit = audits.data.data.items.find((item) => item.action === "project.item.visibility" && item.result === "success");
+    assert.ok(audit);
+    assert.ok(Object.keys(audit.metadata).every((key) => ["projectId", "sourceType", "sourceId", "publicVisible", "errorCode"].includes(key)));
+    assert.equal(audit.metadata.content, undefined);
+    assert.equal(audit.metadata.contact, undefined);
+  } finally {
+    await server.stop();
+  }
+});

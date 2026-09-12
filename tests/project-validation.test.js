@@ -23,6 +23,7 @@ test("项目创建校验保留 Unicode 长度并规范化公开与完成度设�
     publicMilestones: false,
     publicUpdatedAt: true,
     publicCompletion: false,
+    publicItems: false,
     completionMode: "custom",
     customCompletion: 75
   });
@@ -42,6 +43,36 @@ test("项目更新要求至少一个字段，并且 auto 模式清空自定义�
   assert.equal(result.data.id, 2);
   assert.equal(result.data.completionMode, "auto");
   assert.equal(result.data.customCompletion, null);
+});
+
+test("项目公开工作项和逐条可见状态严格校验", () => {
+  const create = validation.validateProjectCreatePayload({
+    name: "公开工作项项目",
+    publicItems: true
+  });
+  assert.equal(create.valid, true);
+  assert.equal(create.data.publicItems, true);
+
+  const update = validation.validateProjectUpdatePayload({ id: "2", publicItems: false });
+  assert.deepEqual(update, { valid: true, data: { id: 2, publicItems: false } });
+  assert.equal(validation.validateProjectCreatePayload({ name: "项目", publicItems: "yes" }).valid, false);
+  assert.equal(validation.validateProjectUpdatePayload({ id: 2, publicItems: "yes" }).valid, false);
+
+  assert.deepEqual(
+    validation.validateProjectItemVisibilityPayload({
+      projectId: "3", sourceType: "feedback", sourceId: "8", publicVisible: true
+    }),
+    { valid: true, data: { projectId: 3, sourceType: "feedback", sourceId: 8, publicVisible: true } }
+  );
+  assert.equal(validation.validateProjectItemVisibilityPayload({
+    projectId: 3, sourceType: "worktask", sourceId: 9, publicVisible: "on"
+  }).valid, false);
+  assert.equal(validation.validateProjectItemVisibilityPayload({
+    projectId: 3, sourceType: "worktask", sourceId: 9
+  }).valid, false);
+  assert.equal(validation.validateProjectItemVisibilityPayload({
+    projectId: 0, sourceType: "feedback", sourceId: 8, publicVisible: true
+  }).valid, false);
 });
 
 test("里程碑校验严格接受 ISO 日期、排序和完成标记", () => {

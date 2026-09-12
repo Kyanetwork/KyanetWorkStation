@@ -4,7 +4,7 @@ const ALLOWED_AUDIT_FIELDS = new Set([
   "adminNote", "publicReply", "expectedAt", "scheduledAt", "assignee", "showOnHome"
 ]);
 const PROJECT_CHANGED_FIELDS = new Set([
-  "name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion",
+  "name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "publicItems",
   "completionMode", "customCompletion", "title", "targetDate", "isCompleted", "sortOrder", "status"
 ]);
 const PROJECT_SOURCE_TYPES = new Set(["feedback", "worktask"]);
@@ -78,7 +78,9 @@ const METADATA_RULES = Object.freeze({
   publicBasic: "boolean",
   publicMilestones: "boolean",
   publicUpdatedAt: "boolean",
-  publicCompletion: "boolean"
+  publicCompletion: "boolean",
+  publicItems: "boolean",
+  publicVisible: "boolean"
 });
 
 function boundedString(value, maxLength) {

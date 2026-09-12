@@ -55,6 +55,7 @@ const {
   listProjectItemCandidates,
   assignProjectItem,
   updateProjectItemMilestone,
+  updateProjectItemVisibility,
   unassignProjectItem,
   updateProjectItemStatus,
   listPublicProjects,
@@ -159,6 +160,7 @@ const {
   validateProjectItemUpdatePayload,
   validateProjectItemUnassignPayload,
   validateProjectItemStatusPayload,
+  validateProjectItemVisibilityPayload,
   validatePublicProjectKey
 } = require("./validation");
 const {
@@ -751,8 +753,9 @@ app.post("/api/admin/project/create", requireAdminSession, asyncHandler(async (r
       publicMilestones: validation.data.publicMilestones,
       publicUpdatedAt: validation.data.publicUpdatedAt,
       publicCompletion: validation.data.publicCompletion,
+      publicItems: validation.data.publicItems,
       completionMode: validation.data.completionMode,
-      changedFields: ["name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "completionMode"]
+      changedFields: ["name", "description", "publicBasic", "publicMilestones", "publicUpdatedAt", "publicCompletion", "publicItems", "completionMode"]
     });
     return res.status(201).json({ ok: true, data });
   } catch (error) {
@@ -780,6 +783,7 @@ app.post("/api/admin/project/update", requireAdminSession, asyncHandler(async (r
       publicMilestones: data.publicMilestones,
       publicUpdatedAt: data.publicUpdatedAt,
       publicCompletion: data.publicCompletion,
+      publicItems: data.publicItems,
       completionMode: data.completionMode
     });
     return res.json({ ok: true, data });
@@ -989,6 +993,45 @@ app.post("/api/admin/project/item/status", requireAdminSession, asyncHandler(asy
       errorCode: error && error.code ? error.code : "PROJECT_ITEM_STATUS_FAILED"
     });
     return sendProjectError(res, error, { operation: "status" });
+  }
+}));
+
+app.post("/api/admin/project/item/visibility", requireAdminSession, asyncHandler(async (req, res) => {
+  const validation = validateProjectItemVisibilityPayload(req.body || {});
+  if (!validation.valid) {
+    await recordAdminAction(req, "project.item.visibility", "project_item", null, "failed", {
+      errorCode: "INVALID_PAYLOAD"
+    });
+    return sendError(res, 400, "INVALID_PAYLOAD", validation.message);
+  }
+  const dataInput = validation.data;
+  try {
+    const data = await updateProjectItemVisibility(dataInput);
+    await recordAdminAction(req, "project.item.visibility", "project_item", data.projectItemId, "success", {
+      projectId: data.projectId,
+      sourceType: data.sourceType,
+      sourceId: data.sourceId,
+      publicVisible: data.publicVisible
+    });
+    return res.json({
+      ok: true,
+      data: {
+        projectId: data.projectId,
+        sourceType: data.sourceType,
+        sourceId: data.sourceId,
+        publicVisible: data.publicVisible,
+        projectUpdatedAt: data.projectUpdatedAt
+      }
+    });
+  } catch (error) {
+    await recordAdminAction(req, "project.item.visibility", "project_item", null, auditResultForError(error), {
+      projectId: dataInput.projectId,
+      sourceType: dataInput.sourceType,
+      sourceId: dataInput.sourceId,
+      publicVisible: dataInput.publicVisible,
+      errorCode: error && error.code ? error.code : "PROJECT_ITEM_VISIBILITY_FAILED"
+    });
+    return sendProjectError(res, error);
   }
 }));
 

@@ -37,8 +37,9 @@ node -e "require('better-sqlite3')(':memory:').close(); console.log('better-sqli
 项目管理是纯增量数据库能力。新版首次启动会在现有数据库上幂等创建 `project`、
 `project_milestone`、`project_item` 及索引，不回填或修改 Feedback/WorkTask 原表；发布前仍应
 备份并确认数据库可读，启动后用管理员/API 冒烟验证项目列表、归档/恢复、里程碑、来源归属和 Kanban
-基础状态保存。Kanban 基础不新增数据库字段或迁移步骤。
-旧版本回滚时保留这三张新表即可，旧代码会忽略它们，不要为回滚执行 `DROP TABLE`。
+基础状态保存，以及项目公开工作项总开关和逐条公开状态。此次版本会为既有 `project`/`project_item`
+表幂等补充 `public_items`/`public_visible` 字段；Kanban 本身仍不新增其他数据库字段或迁移步骤。
+旧版本回滚时保留这些新增列和三张项目表即可，旧代码会忽略它们，不要为回滚执行 `DROP TABLE`。
 
 若当前目录是手动上传的、没有可信 Git 历史，先在旁边目录克隆并完成健康检查，
 再切换服务目录；不要在未备份时对现有目录执行 `git init` 或强制覆盖。Git 更新
@@ -110,8 +111,9 @@ curl -fsS http://127.0.0.1:3000/api/public/projects
 ```
 
 公共项目详情只使用页面返回的 `publicKey` 访问 `/api/public/projects/<publicKey>`；归档、未公开和
-不存在项目应统一返回 404，且响应不得出现工作项或 Kanban 数据。来源详情中的绑定、里程碑调整、解绑和
-Kanban 状态保存必须在管理员页面重新读取详情后确认。
+不存在项目应统一返回 404。开启工作项公开后，确认页面只显示逐条公开的 Feedback/WorkTask 安全摘要，
+不显示正文、联系方式、关系 ID 或 Kanban 数据。来源详情中的绑定、里程碑调整、解绑、逐条公开和 Kanban
+状态保存必须在管理员页面重新读取详情后确认。
 
 以上 Kanban 冒烟命令是发布时的待执行 runbook，不代表本文编写时已经在云服务器执行；实际结果、版本、
 备份 checksum 和回滚点请记录到[发布验证证据模板](./release-evidence-template.md)或部署系统。

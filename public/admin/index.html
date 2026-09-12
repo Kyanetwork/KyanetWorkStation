@@ -216,7 +216,11 @@
             <input id="projectCreateName" maxlength="120" required>
             <label for="projectCreateDescription">说明</label>
             <textarea id="projectCreateDescription" maxlength="2000" rows="2"></textarea>
-            <label><input id="projectCreatePublicBasic" type="checkbox"> 公开基础信息</label>
+            <fieldset class="project-public-options field-wide">
+              <legend>公开设置</legend>
+              <label><input id="projectCreatePublicBasic" type="checkbox"> 基础信息</label>
+              <label><input id="projectCreatePublicItems" type="checkbox"> 工作项</label>
+            </fieldset>
             <button class="primary" type="submit">创建</button>
             <button id="projectCreateCancelBtn" type="button">取消</button>
           </form>
@@ -248,6 +252,7 @@
                 <label><input id="projectPublicMilestones" type="checkbox"> 里程碑</label>
                 <label><input id="projectPublicUpdatedAt" type="checkbox"> 更新时间</label>
                 <label><input id="projectPublicCompletion" type="checkbox"> 完成度</label>
+                <label><input id="projectPublicItems" type="checkbox"> 工作项</label>
               </fieldset>
               <label for="projectCompletionMode">完成度</label>
               <select id="projectCompletionMode">

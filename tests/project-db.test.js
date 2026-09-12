@@ -43,6 +43,8 @@ test("三驱动 schema 声明包含相同项目表、唯一来源约束和查询
       for (const table of ["project", "project_milestone", "project_item"]) {
         assert.match(sql, new RegExp(`create table if not exists ${table}`));
       }
+      assert.match(sql, /public_items/);
+      assert.match(sql, /public_visible/);
       assert.match(sql, /source_type[\s\S]{0,200}source_id/);
       assert.match(sql, /idx_project_status_updated/);
       assert.match(sql, /idx_project_milestone_project/);
@@ -50,6 +52,136 @@ test("三驱动 schema 声明包含相同项目表、唯一来源约束和查询
     }
   } finally {
     fs.rmSync(path.join(os.tmpdir(), "kws-project-schema-unused.db"), { force: true });
+  }
+});
+
+test("旧 SQLite 项目表初始化时幂等补充公开字段并保持默认关闭", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-project-migration-"));
+  const file = path.join(tempDir, "legacy.db");
+  const legacy = new BetterSqlite3(file);
+  legacy.exec(`
+    CREATE TABLE project (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      public_key TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      public_basic INTEGER NOT NULL DEFAULT 0,
+      public_milestones INTEGER NOT NULL DEFAULT 0,
+      public_updated_at INTEGER NOT NULL DEFAULT 0,
+      public_completion INTEGER NOT NULL DEFAULT 0,
+      completion_mode TEXT NOT NULL DEFAULT 'auto',
+      custom_completion INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE project_item (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      source_type TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      milestone_id INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(source_type, source_id)
+    );
+    INSERT INTO project (public_key, name, description, created_at, updated_at)
+      VALUES ('legacy-project-key', '旧项目', '', '2030-01-01T00:00:00.000Z', '2030-01-01T00:00:00.000Z');
+    INSERT INTO project_item (project_id, source_type, source_id, created_at, updated_at)
+      VALUES (1, 'feedback', 99, '2030-01-01T00:00:00.000Z', '2030-01-01T00:00:00.000Z');
+  `);
+  legacy.close();
+  const db = loadDb(file);
+  try {
+    await db.initializeDatabase();
+    await db.initializeDatabase();
+    const sqlite = new BetterSqlite3(file, { readonly: true });
+    const projectColumns = sqlite.prepare("PRAGMA table_info(project)").all().map((row) => row.name);
+    const itemColumns = sqlite.prepare("PRAGMA table_info(project_item)").all().map((row) => row.name);
+    assert.ok(projectColumns.includes("public_items"));
+    assert.ok(itemColumns.includes("public_visible"));
+    assert.equal(sqlite.prepare("SELECT public_items FROM project WHERE public_key = 'legacy-project-key'").get().public_items, 0);
+    assert.equal(sqlite.prepare("SELECT public_visible FROM project_item WHERE project_id = 1 AND source_id = 99").get().public_visible, 0);
+    sqlite.close();
+  } finally {
+    await restoreDb(db);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("项目公开工作项按总开关和逐条状态返回脱敏更新时间投影", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kws-public-project-items-"));
+  const file = path.join(tempDir, "workstation.db");
+  const db = loadDb(file);
+  try {
+    await db.initializeDatabase();
+    const projectId = await db.createProject({
+      name: "公开工作项项目",
+      description: "公开说明",
+      publicBasic: true,
+      publicItems: false
+    });
+    const project = await db.getProjectById(projectId);
+    const feedbackId = await db.createFeedback(sourcePayload("公开反馈"));
+    const worktaskId = await db.createWorktask({
+      ...sourcePayload("公开任务"),
+      type: "WorkTask提交",
+      priority: "high",
+      expectedAt: "",
+      tags: ""
+    });
+    await db.assignProjectItem({ projectId, sourceType: "feedback", sourceId: feedbackId });
+    await db.assignProjectItem({ projectId, sourceType: "worktask", sourceId: worktaskId });
+
+    const hiddenByProject = await db.getPublicProjectByKey(project.publicKey);
+    assert.equal(hiddenByProject.items, undefined);
+
+    const visibleAt = (await db.getProjectById(projectId)).updatedAt;
+    const hiddenRelation = await db.updateProjectItemVisibility({
+      projectId, sourceType: "feedback", sourceId: feedbackId, publicVisible: false
+    });
+    assert.equal(hiddenRelation.publicVisible, false);
+    assert.equal(hiddenRelation.projectUpdatedAt, visibleAt);
+
+    await db.updateFeedbackNoteReply(feedbackId, "管理员备注", "已公开回复");
+    await db.updateWorktaskNoteReply(worktaskId, "任务备注", "任务公开回复");
+    await db.updateProject({ id: projectId, publicItems: true });
+    const feedbackVisible = await db.updateProjectItemVisibility({
+      projectId, sourceType: "feedback", sourceId: feedbackId, publicVisible: true
+    });
+    assert.equal(feedbackVisible.publicVisible, true);
+    assert.notEqual(feedbackVisible.projectUpdatedAt, visibleAt);
+
+    const publicDetail = await db.getPublicProjectByKey(project.publicKey);
+    assert.deepEqual(publicDetail.items.worktask, []);
+    assert.equal(publicDetail.items.feedback.length, 1);
+    assert.deepEqual(publicDetail.items.feedback[0], {
+      sourceType: "feedback",
+      title: "公开反馈",
+      status: "new",
+      publicReply: "已公开回复",
+      updatedAt: publicDetail.items.feedback[0].updatedAt
+    });
+    assert.equal(publicDetail.items.feedback[0].id, undefined);
+    assert.equal(publicDetail.items.feedback[0].content, undefined);
+    assert.equal(publicDetail.items.feedback[0].contact, undefined);
+    assert.equal(publicDetail.items.feedback[0].adminNote, undefined);
+
+    const worktaskVisible = await db.updateProjectItemVisibility({
+      projectId, sourceType: "worktask", sourceId: worktaskId, publicVisible: true
+    });
+    assert.equal(worktaskVisible.publicVisible, true);
+    const bothVisible = await db.getPublicProjectByKey(project.publicKey);
+    assert.equal(bothVisible.items.worktask[0].sourceType, "worktask");
+    assert.equal(bothVisible.items.worktask[0].title, "公开任务");
+    assert.equal(bothVisible.items.worktask[0].publicReply, "任务公开回复");
+    assert.equal(bothVisible.items.worktask[0].priority, undefined);
+
+    await db.updateProject({ id: projectId, publicItems: false });
+    assert.equal((await db.getPublicProjectByKey(project.publicKey)).items, undefined);
+  } finally {
+    await restoreDb(db);
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 

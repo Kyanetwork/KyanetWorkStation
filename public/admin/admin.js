@@ -1675,6 +1675,10 @@
     container.innerHTML = items.map((item) => `<article class="project-lane-item">
       <div><strong>${escapeHtml(item.title || "无标题")}</strong><span class="meta"> · ${escapeHtml(item.status || "未知状态")}${item.priority ? ` · 优先级 ${escapeHtml(item.priority)}` : ""}</span></div>
       <div class="meta">来源 #${escapeHtml(item.sourceId)} · 更新于 ${escapeHtml(formatDateTimeDisplay(item.updatedAt))}</div>
+      <div class="project-item-visibility">
+        <label><input data-action-field="public-visible" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}" type="checkbox"${item.publicVisible ? " checked" : ""}> 公开此项</label>
+        <button type="button" data-action="project-item-visibility-save" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}">保存公开状态</button>
+      </div>
       <div class="ops">
         <select data-action-field="milestone" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}" aria-label="选择里程碑">${milestoneOptions(item.milestoneId)}</select>
         <button type="button" class="primary" data-action="project-item-save" data-source-type="${escapeHtml(item.sourceType)}" data-source-id="${item.sourceId}">保存里程碑</button>
@@ -1776,6 +1780,7 @@
     document.getElementById("projectPublicMilestones").checked = project.publicMilestones;
     document.getElementById("projectPublicUpdatedAt").checked = project.publicUpdatedAt;
     document.getElementById("projectPublicCompletion").checked = project.publicCompletion;
+    document.getElementById("projectPublicItems").checked = project.publicItems;
     document.getElementById("projectCompletionMode").value = project.completionMode;
     document.getElementById("projectCustomCompletion").value = project.customCompletion === null ? "" : String(project.customCompletion);
     document.getElementById("projectCompletionText").textContent = projectCompletionLabel(project.completion);
@@ -1873,6 +1878,17 @@
       const sourceId = Number(button.dataset.sourceId);
       const select = projectDetail.querySelector(`[data-action-field="milestone"][data-source-type="${sourceType}"][data-source-id="${sourceId}"]`);
       await projectWrite("/api/admin/project/item/update", { projectId, sourceType, sourceId, milestoneId: select && select.value ? Number(select.value) : null }, "工作项里程碑已保存");
+    } else if (action === "project-item-visibility-save") {
+      const sourceType = button.dataset.sourceType;
+      const sourceId = Number(button.dataset.sourceId);
+      const row = button.closest(".project-lane-item");
+      const checkbox = row && row.querySelector('[data-action-field="public-visible"]');
+      await projectWrite("/api/admin/project/item/visibility", {
+        projectId,
+        sourceType,
+        sourceId,
+        publicVisible: Boolean(checkbox && checkbox.checked)
+      }, "工作项公开状态已保存", button);
     } else if (action === "project-item-unassign") {
       if (!confirm("确认解绑该工作项吗？")) return;
       await projectWrite("/api/admin/project/item/unassign", { projectId, sourceType: button.dataset.sourceType, sourceId: Number(button.dataset.sourceId) }, "工作项已解绑");
@@ -2185,7 +2201,8 @@
         const data = await api("/api/admin/project/create", {
           name: document.getElementById("projectCreateName").value.trim(),
           description: document.getElementById("projectCreateDescription").value.trim(),
-          publicBasic: document.getElementById("projectCreatePublicBasic").checked
+          publicBasic: document.getElementById("projectCreatePublicBasic").checked,
+          publicItems: document.getElementById("projectCreatePublicItems").checked
         });
         form.reset();
         form.classList.add("hidden");
@@ -2232,6 +2249,7 @@
         publicMilestones: document.getElementById("projectPublicMilestones").checked,
         publicUpdatedAt: document.getElementById("projectPublicUpdatedAt").checked,
         publicCompletion: document.getElementById("projectPublicCompletion").checked,
+        publicItems: document.getElementById("projectPublicItems").checked,
         completionMode: document.getElementById("projectCompletionMode").value,
         customCompletion: document.getElementById("projectCustomCompletion").value === "" ? null : Number(document.getElementById("projectCustomCompletion").value)
       }, "项目设置已保存");

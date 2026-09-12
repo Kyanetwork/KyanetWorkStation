@@ -17,11 +17,14 @@ test("管理员页面包含项目标签、详情容器、公开设置和直角�
   assert.match(html, /id=["']projectPublicMilestones["']/);
   assert.match(html, /id=["']projectPublicUpdatedAt["']/);
   assert.match(html, /id=["']projectPublicCompletion["']/);
+  assert.match(html, /id=["']projectPublicItems["']/);
   assert.match(html, /id=["']projectMilestoneDescription["']/);
   assert.match(html, /<option value=["']active["'][^>]*selected/);
   assert.match(html, /project-model\.js/);
   assert.match(adminJs, /project-source-load/);
   assert.match(adminJs, /api\/admin\/project\/item/);
+  assert.match(adminJs, /project\/item\/visibility/);
+  assert.match(adminJs, /project-item-visibility-save/);
 });
 
 test("管理员项目详情包含关系/Kanban视图切换和状态保存契约", () => {
@@ -60,6 +63,12 @@ test("首页和公共项目页有独立脚本、编码链接和不可用状态",
   assert.match(projectJs, /textContent/);
   assert.match(projectJs, /keepHeaderWithContent/);
   assert.doesNotMatch(projectJs, /innerHTML\s*=\s*[^;]*(?:name|description|title)/);
+  for (const id of ["projectItemsSection", "projectPublicFeedbackList", "projectPublicWorktaskList"]) {
+    assert.match(projectHtml, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(projectJs, /公开反馈/);
+  assert.match(projectJs, /公开 WorkTask/);
+  assert.match(projectJs, /更新时间/);
 });
 
 test("公开项目和项目关系视图使用分区与单一详情入口", () => {

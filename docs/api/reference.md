@@ -59,12 +59,29 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 | `POST /api/admin/project/item/assign` | 将 Feedback/WorkTask 绑定到活跃项目，可选同项目有效里程碑 |
 | `POST /api/admin/project/item/update` | 调整同项目内的里程碑关联 |
 | `POST /api/admin/project/item/status` | 在项目范围内更新已绑定 Feedback/WorkTask 的原生状态；供管理员 Kanban 使用 |
+| `POST /api/admin/project/item/visibility` | 保存单个项目工作项的公开状态；只影响当前项目关系 |
 | `POST /api/admin/project/item/unassign` | 解除来源项目归属 |
 
-项目创建/更新字段包括 `name`（1–120 个 Unicode 字符）、`description`（最多 2000）、四个独立公开
-开关 `publicBasic`/`publicMilestones`/`publicUpdatedAt`/`publicCompletion`，以及
+项目创建/更新字段包括 `name`（1–120 个 Unicode 字符）、`description`（最多 2000）、五个独立公开
+开关 `publicBasic`/`publicMilestones`/`publicUpdatedAt`/`publicCompletion`/`publicItems`，以及
 `completionMode`（`auto`/`custom`）和 0–100 的 `customCompletion`。自动完成度按有效里程碑的完成比例
 四舍五入；无有效里程碑时为“未设置”。归档项目可以整理元数据和已有关系，但不能新增里程碑或绑定。
+
+`publicItems` 仅允许在项目基础信息公开且项目处于活跃状态时产生公共工作项投影；默认值为关闭，
+旧数据库补列后的历史项目也保持关闭。新绑定关系的 `publicVisible` 默认关闭，管理员可通过
+`POST /api/admin/project/item/visibility` 单独开启或关闭。请求体为：
+
+```json
+{
+  "projectId": 12,
+  "sourceType": "feedback",
+  "sourceId": 34,
+  "publicVisible": true
+}
+```
+
+该接口成功返回项目/来源标识、保存后的公开状态和 `projectUpdatedAt`；保存相同状态不会触碰项目时间。
+审计动作固定为 `project.item.visibility`，metadata 只保留项目/来源标识、公开布尔值和稳定错误码。
 
 #### 项目工作项状态（Kanban 基础）
 
@@ -115,17 +132,18 @@ JSON 内容类型和同源来源检查，并沿用管理写接口的限流边界
 | 409 | `PROJECT_STATE_CONFLICT` | 项目已归档，不能更新工作项状态 |
 
 管理员项目详情 `GET /api/admin/project/:id` 仍是 Kanban 的读取数据源；浏览器按 Feedback/WorkTask 及其原生
-状态分成两个独立分区。公共项目列表和详情继续只返回各自公开开关允许的项目投影，不返回工作项、关系数据
-或任何 Kanban 分区。
+状态分成两个独立分区。公共项目列表仍只返回基础信息；公共详情在 `publicItems=true` 时增加独立的
+`items.feedback` 与 `items.worktask` 分区，只包含来源类型、标题、原生状态、可选公开回复和 `updatedAt`。
+工作项按来源更新时间降序、来源 ID 降序排列；关闭总开关时响应中省略 `items` 字段。
 
 公共项目接口不需要认证：
 
 | 方法与路径 | 用途 |
 |---|---|
 | `GET /api/public/projects` | 返回基础信息公开且未归档项目的 `publicKey`、名称和说明 |
-| `GET /api/public/projects/:publicKey` | 按不可猜测的随机 key 返回公共详情；里程碑、更新时间、完成度按独立开关省略或返回 |
+| `GET /api/public/projects/:publicKey` | 按不可猜测的随机 key 返回公共详情；里程碑、更新时间、完成度、工作项按独立开关省略或返回 |
 
-公共投影不返回内部 ID、来源关联、Kanban 工作项/分区、正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
+公共投影不返回内部 ID、项目关系 ID、里程碑关系 ID、Kanban 数据、工作项正文、联系方式、管理员字段或 provider 数据。基础信息未公开、项目归档、
 不存在或 key 不合法时统一返回 404。项目关系冲突返回 `PROJECT_ITEM_CONFLICT`，跨项目/撤销里程碑关联返回
 `PROJECT_MILESTONE_CONFLICT`，归档项目新增操作返回 `PROJECT_STATE_CONFLICT`。
 

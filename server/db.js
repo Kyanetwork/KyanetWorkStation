@@ -346,6 +346,7 @@ function sqliteSchemaStatements() {
       public_milestones INTEGER NOT NULL DEFAULT 0,
       public_updated_at INTEGER NOT NULL DEFAULT 0,
       public_completion INTEGER NOT NULL DEFAULT 0,
+      public_items INTEGER NOT NULL DEFAULT 0,
       completion_mode TEXT NOT NULL DEFAULT 'auto',
       custom_completion INTEGER,
       created_at TEXT NOT NULL,
@@ -372,6 +373,7 @@ function sqliteSchemaStatements() {
       source_type TEXT NOT NULL,
       source_id INTEGER NOT NULL,
       milestone_id INTEGER,
+      public_visible INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(source_type, source_id),
@@ -562,6 +564,7 @@ function mysqlSchemaStatements() {
       public_milestones TINYINT(1) NOT NULL DEFAULT 0,
       public_updated_at TINYINT(1) NOT NULL DEFAULT 0,
       public_completion TINYINT(1) NOT NULL DEFAULT 0,
+      public_items TINYINT(1) NOT NULL DEFAULT 0,
       completion_mode VARCHAR(16) NOT NULL DEFAULT 'auto',
       custom_completion INT NULL,
       created_at VARCHAR(40) NOT NULL,
@@ -588,6 +591,7 @@ function mysqlSchemaStatements() {
       source_type VARCHAR(32) NOT NULL,
       source_id BIGINT NOT NULL,
       milestone_id BIGINT NULL,
+      public_visible TINYINT(1) NOT NULL DEFAULT 0,
       created_at VARCHAR(40) NOT NULL,
       updated_at VARCHAR(40) NOT NULL,
       UNIQUE KEY uq_project_item_source (source_type, source_id),
@@ -775,6 +779,7 @@ function postgresSchemaStatements() {
       public_milestones BOOLEAN NOT NULL DEFAULT FALSE,
       public_updated_at BOOLEAN NOT NULL DEFAULT FALSE,
       public_completion BOOLEAN NOT NULL DEFAULT FALSE,
+      public_items BOOLEAN NOT NULL DEFAULT FALSE,
       completion_mode TEXT NOT NULL DEFAULT 'auto',
       custom_completion INTEGER,
       created_at TEXT NOT NULL,
@@ -800,6 +805,7 @@ function postgresSchemaStatements() {
       source_type TEXT NOT NULL,
       source_id BIGINT NOT NULL,
       milestone_id BIGINT REFERENCES project_milestone(id) ON DELETE SET NULL,
+      public_visible BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(source_type, source_id)
@@ -838,6 +844,26 @@ async function ensureProjectSchema() {
     return normalized.includes("project") || normalized.includes("idx_project");
   });
   await executeMany(projectStatements);
+  await ensureProjectCompatibilityColumns();
+}
+
+async function addProjectColumn(tableName, columnName, columnDefinition) {
+  if (await columnExists(tableName, columnName)) return;
+  try {
+    await execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  } catch (error) {
+    if (!(await columnExists(tableName, columnName))) throw error;
+  }
+}
+
+async function ensureProjectCompatibilityColumns() {
+  const booleanType = client === "sqlite"
+    ? "INTEGER NOT NULL DEFAULT 0"
+    : client === "mysql"
+      ? "TINYINT(1) NOT NULL DEFAULT 0"
+      : "BOOLEAN NOT NULL DEFAULT FALSE";
+  await addProjectColumn("project", "public_items", booleanType);
+  await addProjectColumn("project_item", "public_visible", booleanType);
 }
 
 async function columnExists(tableName, columnName) {
@@ -2798,9 +2824,22 @@ function mapProjectItemRow(row) {
     sourceType: PROJECT_SOURCE_TYPES.has(row.source_type) ? row.source_type : "",
     sourceId: toNumber(row.source_id),
     milestoneId: row.milestone_id == null ? null : toNumber(row.milestone_id),
+    publicVisible: toBoolean(row.public_visible),
     createdAt: row.created_at || "",
     updatedAt: row.updated_at || ""
   };
+}
+
+function mapPublicProjectItemRow(row, sourceType) {
+  const item = {
+    sourceType,
+    title: normalizeProjectText(row.title, 255),
+    status: normalizeProjectText(row.status, 32),
+    updatedAt: normalizeProjectText(row.updated_at, 40)
+  };
+  const publicReply = normalizeProjectText(row.public_reply, 2000);
+  if (publicReply) item.publicReply = publicReply;
+  return item;
 }
 
 function projectCompletion(activeTotal, activeCompleted, completionMode, customCompletion) {
@@ -2827,6 +2866,7 @@ function mapProjectRow(row, stats = {}) {
     publicMilestones: toBoolean(row.public_milestones),
     publicUpdatedAt: toBoolean(row.public_updated_at),
     publicCompletion: toBoolean(row.public_completion),
+    publicItems: toBoolean(row.public_items),
     completionMode,
     customCompletion: completionMode === "custom" && Number.isSafeInteger(custom) ? custom : null,
     completion,
@@ -2863,7 +2903,7 @@ async function getProjectById(id) {
   const p1 = placeholder(1);
   const row = await queryOne(
     `SELECT id, public_key, name, description, status, public_basic, public_milestones,
-            public_updated_at, public_completion, completion_mode, custom_completion,
+            public_updated_at, public_completion, public_items, completion_mode, custom_completion,
             created_at, updated_at
      FROM project WHERE id = ${p1} LIMIT 1`,
     [projectId]
@@ -2894,7 +2934,7 @@ async function listProjects({ status = "active", keyword = "", page = 1, pageSiz
   const offset = (safePage - 1) * safePageSize;
   const rows = await queryAll(
     `SELECT id, public_key, name, description, status, public_basic, public_milestones,
-            public_updated_at, public_completion, completion_mode, custom_completion,
+            public_updated_at, public_completion, public_items, completion_mode, custom_completion,
             created_at, updated_at
      FROM project ${whereClause}
      ORDER BY updated_at DESC, id DESC
@@ -2930,13 +2970,14 @@ async function createProject(input = {}) {
     toDbBoolean(input.publicMilestones === true),
     toDbBoolean(input.publicUpdatedAt === true),
     toDbBoolean(input.publicCompletion === true),
+    toDbBoolean(input.publicItems === true),
     completionMode, customCompletion, now, now
   ];
   const marks = params.map((_, index) => placeholder(index + 1));
   const sql = client === "postgres"
-    ? `INSERT INTO project (public_key, name, description, status, public_basic, public_milestones, public_updated_at, public_completion, completion_mode, custom_completion, created_at, updated_at)
+    ? `INSERT INTO project (public_key, name, description, status, public_basic, public_milestones, public_updated_at, public_completion, public_items, completion_mode, custom_completion, created_at, updated_at)
        VALUES (${marks.join(", ")}) RETURNING id`
-    : `INSERT INTO project (public_key, name, description, status, public_basic, public_milestones, public_updated_at, public_completion, completion_mode, custom_completion, created_at, updated_at)
+    : `INSERT INTO project (public_key, name, description, status, public_basic, public_milestones, public_updated_at, public_completion, public_items, completion_mode, custom_completion, created_at, updated_at)
        VALUES (${marks.join(", ")})`;
   const result = await execute(sql, params);
   return result.lastInsertId;
@@ -2961,7 +3002,7 @@ async function updateProject(idOrInput, patch = {}) {
     add("name", name);
   }
   if (Object.prototype.hasOwnProperty.call(input, "description")) add("description", normalizeProjectText(input.description, 2000));
-  for (const [field, column] of [["publicBasic", "public_basic"], ["publicMilestones", "public_milestones"], ["publicUpdatedAt", "public_updated_at"], ["publicCompletion", "public_completion"]]) {
+  for (const [field, column] of [["publicBasic", "public_basic"], ["publicMilestones", "public_milestones"], ["publicUpdatedAt", "public_updated_at"], ["publicCompletion", "public_completion"], ["publicItems", "public_items"]]) {
     if (Object.prototype.hasOwnProperty.call(input, field)) add(column, toDbBoolean(input[field] === true));
   }
   if (Object.prototype.hasOwnProperty.call(input, "completionMode") || Object.prototype.hasOwnProperty.call(input, "customCompletion")) {
@@ -3112,7 +3153,7 @@ async function getProjectItemBySource(sourceOrType, sourceIdValue) {
   const p1 = placeholder(1);
   const p2 = placeholder(2);
   const row = await queryOne(
-    `SELECT id, project_id, source_type, source_id, milestone_id, created_at, updated_at
+    `SELECT id, project_id, source_type, source_id, milestone_id, public_visible, created_at, updated_at
      FROM project_item WHERE source_type = ${p1} AND source_id = ${p2} LIMIT 1`,
     [sourceType, sourceId]
   );
@@ -3150,7 +3191,7 @@ async function getProjectDetail(id) {
     [projectId]
   );
   const itemRows = await queryAll(
-    `SELECT id, project_id, source_type, source_id, milestone_id, created_at, updated_at
+    `SELECT id, project_id, source_type, source_id, milestone_id, public_visible, created_at, updated_at
      FROM project_item WHERE project_id = ${p1} ORDER BY created_at DESC, id DESC`,
     [projectId]
   );
@@ -3271,14 +3312,14 @@ async function assignProjectItem(input = {}) {
   if (existing) throw projectError("PROJECT_ITEM_CONFLICT", "该来源已归属其他项目");
   const milestone = await getProjectMilestoneForAssignment(projectId, input.milestoneId);
   const now = nowIso();
-  const params = [projectId, sourceType, sourceId, milestone ? milestone.id : null, now, now];
+  const params = [projectId, sourceType, sourceId, milestone ? milestone.id : null, toDbBoolean(false), now, now];
   const marks = params.map((_, index) => placeholder(index + 1));
   const sql = client === "postgres"
-    ? `INSERT INTO project_item (project_id, source_type, source_id, milestone_id, created_at, updated_at) VALUES (${marks.join(", ")}) RETURNING id`
-    : `INSERT INTO project_item (project_id, source_type, source_id, milestone_id, created_at, updated_at) VALUES (${marks.join(", ")})`;
+    ? `INSERT INTO project_item (project_id, source_type, source_id, milestone_id, public_visible, created_at, updated_at) VALUES (${marks.join(", ")}) RETURNING id`
+    : `INSERT INTO project_item (project_id, source_type, source_id, milestone_id, public_visible, created_at, updated_at) VALUES (${marks.join(", ")})`;
   try {
     const result = await execute(sql, params);
-    return await getProjectItemBySource({ sourceType, sourceId }) || { id: result.lastInsertId, projectId, sourceType, sourceId, milestoneId: milestone ? milestone.id : null, createdAt: now, updatedAt: now };
+    return await getProjectItemBySource({ sourceType, sourceId }) || { id: result.lastInsertId, projectId, sourceType, sourceId, milestoneId: milestone ? milestone.id : null, publicVisible: false, createdAt: now, updatedAt: now };
   } catch (error) {
     const errorMessage = String(error && error.message || "").toLowerCase();
     const isUniqueViolation = errorMessage.includes("unique")
@@ -3305,6 +3346,40 @@ async function updateProjectItemMilestone(input = {}) {
   const p3 = placeholder(3);
   await execute(`UPDATE project_item SET milestone_id = ${p1}, updated_at = ${p2} WHERE id = ${p3}`, [milestone ? milestone.id : null, nowIso(), current.id]);
   return getProjectItemBySource({ sourceType, sourceId });
+}
+
+async function updateProjectItemVisibility(input = {}) {
+  const projectId = projectIdValue(input.projectId);
+  const sourceType = String(input.sourceType || "").trim();
+  const sourceId = projectIdValue(input.sourceId === undefined ? input.entityId : input.sourceId);
+  if (!projectId || !PROJECT_SOURCE_TYPES.has(sourceType) || !sourceId || typeof input.publicVisible !== "boolean") {
+    throw projectError("INVALID_PAYLOAD", "项目工作项公开参数不合法");
+  }
+  const project = await getProjectById(projectId);
+  if (!project) throw projectError("NOT_FOUND", "项目不存在");
+  const relation = await getProjectItemBySource({ sourceType, sourceId });
+  if (!relation) throw projectError("NOT_FOUND", "项目关联不存在");
+  if (relation.projectId !== projectId) throw projectError("PROJECT_ITEM_CONFLICT", "该来源不属于当前项目");
+
+  const changed = relation.publicVisible !== input.publicVisible;
+  if (changed) {
+    const p1 = placeholder(1);
+    const p2 = placeholder(2);
+    const p3 = placeholder(3);
+    await execute(
+      `UPDATE project_item SET public_visible = ${p1}, updated_at = ${p2} WHERE id = ${p3}`,
+      [toDbBoolean(input.publicVisible), nowIso(), relation.id]
+    );
+  }
+  const projectUpdatedAt = changed ? await touchProjectUpdatedAt(projectId) : project.updatedAt;
+  return {
+    projectItemId: relation.id,
+    projectId,
+    sourceType,
+    sourceId,
+    publicVisible: input.publicVisible,
+    projectUpdatedAt
+  };
 }
 
 async function unassignProjectItem(input = {}) {
@@ -3412,12 +3487,30 @@ async function listPublicProjects() {
   };
 }
 
+async function listPublicProjectItems(projectId) {
+  const result = { feedback: [], worktask: [] };
+  for (const [sourceType, tableName] of [["feedback", "feedback"], ["worktask", "worktask"]]) {
+    const sourceTypePlaceholder = placeholder(1);
+    const projectIdPlaceholder = placeholder(2);
+    const rows = await queryAll(
+      `SELECT s.title, s.status, s.public_reply, s.updated_at
+       FROM ${tableName} s
+       INNER JOIN project_item pi ON pi.source_type = ${sourceTypePlaceholder} AND pi.source_id = s.id
+       WHERE pi.project_id = ${projectIdPlaceholder} AND ${projectBoolCondition("pi.public_visible")}
+       ORDER BY s.updated_at DESC, s.id DESC`,
+      [sourceType, projectId]
+    );
+    result[sourceType] = rows.map((row) => mapPublicProjectItemRow(row, sourceType));
+  }
+  return result;
+}
+
 async function getPublicProjectByKey(publicKey) {
   const key = normalizeProjectText(publicKey, 64);
   if (!key) return null;
   const p1 = placeholder(1);
   const row = await queryOne(
-    `SELECT id, public_key, name, description, public_milestones, public_updated_at, public_completion, completion_mode, custom_completion, created_at, updated_at
+    `SELECT id, public_key, name, description, public_milestones, public_updated_at, public_completion, public_items, completion_mode, custom_completion, created_at, updated_at
      FROM project WHERE public_key = ${p1} AND status = 'active' AND ${projectBoolCondition("public_basic")} LIMIT 1`,
     [key]
   );
@@ -3446,6 +3539,9 @@ async function getPublicProjectByKey(publicKey) {
     const custom = row.custom_completion == null ? null : toNumber(row.custom_completion);
     const completion = projectCompletion(stats.activeTotal, stats.activeCompleted, completionMode, custom);
     if (completion !== null) result.completion = { value: completion };
+  }
+  if (toBoolean(row.public_items)) {
+    result.items = await listPublicProjectItems(projectId);
   }
   return result;
 }
@@ -3557,6 +3653,7 @@ module.exports = {
   listProjectItemCandidates,
   assignProjectItem,
   updateProjectItemMilestone,
+  updateProjectItemVisibility,
   unassignProjectItem,
   updateProjectItemStatus,
   listPublicProjects,
