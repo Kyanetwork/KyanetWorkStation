@@ -118,6 +118,67 @@ relationship IDs, source content, contacts, administrator notes, or Kanban
 state. When the API omits `items`, hide the whole section; when a section is
 present but empty, show its safe empty state.
 
+## Admin Work Hub module
+
+### 1. Scope / Trigger
+
+本规范适用于管理员页的 Work Hub 总览标签、四个摘要分区和既有详情跳转。它触发于
+跨来源聚合展示或管理员列表精确定位，不创建第二套编辑/状态操作界面。
+
+### 2. Signatures
+
+- `loadWorkHub() -> Promise<void>`：通过 `GET /api/admin/work-hub/overview` 读取一次安全投影。
+- `renderWorkHub(data)`、`renderWorkHubSection(config, section)`：仅写入 Work Hub 自身 DOM。
+- `data-action="work-hub-open-item|work-hub-open-project|work-hub-retry"`：事件代理入口。
+
+### 3. Contracts
+
+- `#tabWorkHub` 与 `#moduleWorkHub` 独立存在；登录后仍默认进入工作收件箱。
+- 四个分区固定为逾期、近期计划、未分配、最近更新，各自含数量、列表和 `aria-live` 状态节点；
+  请求使用递增 request ID，登出时清空，不写 localStorage、不启动定时刷新。
+- 标题、类型、状态、优先级、负责人、项目名和时间进入 `innerHTML` 前必须 `escapeHtml`；
+  摘要标题不是链接，按钮统一显式 `type="button"`。
+- 单来源错误显示分区级失败/重试；两来源均失败显示整页重试；不展示后端异常原文或上次缓存。
+  条目按钮切换到现有 Feedback/WorkTask 列表并携带 `id`，项目按钮复用现有 `#projects/<id>` hash。
+- 共享样式沿用冷色、亮暗主题、直角控件、`focus-visible` 和窄屏规则，不添加圆角或新框架。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| 加载中 | 四区 `aria-busy="true"`，显示短加载状态，刷新按钮进入忙碌态 |
+| 空分区 | 数量为 0，显示“当前没有符合条件的记录” |
+| 分区 `error`/`partial` | 显示可理解状态和“重试 Work Hub”按钮，保留可用摘要 |
+| 请求失败 | 四区显示安全失败占位，页面状态提示检查登录后重试 |
+| 用户点击条目/项目 | 进入既有列表或项目详情，不新增写入逻辑 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：键盘可聚焦刷新、重试和跳转按钮，长中文/混合标题换行不撑宽，亮暗主题均保持对比度。
+- Base：工作项无项目时显示“未归属”，缺失字段使用短安全占位。
+- Bad：把摘要标题渲染成未经转义的链接、把完整正文/联系方式插入卡片，或让 Work Hub 自己保存状态。
+
+### 6. Tests Required
+
+- 静态 DOM：tab/module、四个分区、`aria-live`、动态按钮 `type`、操作 data-action 和 `escapeHtml`。
+- 状态渲染：加载、空、单来源失败、部分成功、全失败重试和过期响应不覆盖新状态。
+- 手工浏览器：管理员登录、摘要跳转、项目 hash、Tab 键焦点、亮暗主题、约 620px 窄屏及长标题。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```js
+list.innerHTML = `<a href="/admin/${item.sourceId}">${item.title}</a>`;
+```
+
+#### Correct
+
+```js
+list.innerHTML = `<h4>${escapeHtml(item.title)}</h4>
+  <button type="button" data-action="work-hub-open-item">查看条目</button>`;
+```
+
 ## External icon boundary
 
 The MeowStatus adapter is the authoritative validator for Minecraft favicon

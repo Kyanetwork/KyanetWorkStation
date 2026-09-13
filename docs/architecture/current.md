@@ -25,9 +25,10 @@ Browser
 2. 公共 health/config/highlights/MeowStatus 路由。
 3. 反馈与 WorkTask 提交路由。
 4. 管理员登录、列表、状态、安排、备注、服务端导出、审计查询和通知测试路由。
-5. 管理员 AI 配置（内部 `profile`）/Copilot 与知识助手状态、重建、问答、历史和清理路由。
-6. 管理员 Provider 真实诊断和 AI 请求指标聚合路由。
-7. 统一错误响应和静态文件回退。
+5. 管理员 Work Hub 只读总览路由，聚合 Feedback/WorkTask 关注分区并复用既有条目详情入口。
+6. 管理员 AI 配置（内部 `profile`）/Copilot 与知识助手状态、重建、问答、历史和清理路由。
+7. 管理员 Provider 真实诊断和 AI 请求指标聚合路由。
+8. 统一错误响应和静态文件回退。
 
 `server/validation.js` 负责输入规范化和字段长度/枚举校验；`server/security.js` 负责管理写请求的来源和 JSON 类型边界；`server/errors.js` 负责统一错误形状。
 
@@ -62,7 +63,20 @@ Responses 与 Anthropic Messages 的固定协议适配、超时和响应大小�
 - `admin_audit` 保存管理员动作级审计；反馈/WorkTask 导出通过固定 250 行批次查询，
   不构造全量结果数组。
 
-反馈和 WorkTask 保持独立业务表。未来工作台通过聚合读取层和安全 DTO 组合展示，不直接改变两张表的业务语义。
+反馈和 WorkTask 保持独立业务表。Work Hub 通过 `getWorkHubOverview` 聚合读取层和安全 DTO 组合展示，
+以一次请求计算 7 天时间窗口；不直接改变两张表的业务语义，也不写入缓存或新增 schema。
+
+Work Hub 数据流为：
+
+```text
+GET /api/admin/work-hub/overview
+  -> requireAdminSession
+  -> db.js 分别读取 Feedback 最近更新与 WorkTask 四个分区
+  -> 参数化 SQL + project_item/project LEFT JOIN
+  -> allow-list 摘要 DTO（来源失败按分区降级）
+  -> admin.js Work Hub 四区渲染
+  -> 既有 Feedback/WorkTask 列表 id 定位或项目 hash 详情
+```
 
 ### 项目组织层
 

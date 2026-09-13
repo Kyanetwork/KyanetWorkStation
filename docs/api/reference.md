@@ -32,6 +32,7 @@ WorkTask 请求字段：`type`（`WorkTask提交`、`工单提交`、`任务安�
 |---|---|
 | `POST /api/admin/login` | JSON 用户名/密码登录并设置 HttpOnly 会话 Cookie |
 | `GET /api/admin/me` | 检查管理员会话 |
+| `GET /api/admin/work-hub/overview` | 读取管理员 Work Hub 四个关注分区的安全摘要 |
 | `POST /api/admin/logout` | 注销管理员会话 |
 | `GET /api/admin/status/settings` | 读取 MeowStatus 设置 |
 | `POST /api/admin/status/profile` | 更新个人状态 API 地址、超时和启用状态 |
@@ -214,9 +215,44 @@ Unicode 字符，只作为独立的风格补充，不能覆盖系统安全约束
 
 ## 反馈管理
 
+### Work Hub 总览
+
+`GET /api/admin/work-hub/overview` 需要管理员会话，返回一次生成的四个分区：`overdue`（逾期）、
+`upcoming`（未来 7 天计划）、`unassigned`（未分配 WorkTask）和 `recent`（最近 7 天更新的
+Feedback/WorkTask）。逾期、近期计划和未分配排除 `completed`/`cancelled` WorkTask；缺失或无效
+时间不会被推断为当前时间。每个分区最多 10 条；`sources.feedback/worktask.status` 为
+`ok` 或 `error`，分区 `status` 为 `ok`、`partial` 或 `error`（只有合并两类来源的 `recent`
+可能为 `partial`）。单来源失败使用稳定错误码 `WORK_HUB_SOURCE_UNAVAILABLE`，不返回数据库
+错误原文，也不使用上次缓存。
+
+摘要只包含 `sourceType`、`sourceId`、标题、类型、原生状态、WorkTask 的优先级/负责人/计划时间、
+更新时间和 `{ id, name }` 项目上下文；没有项目时项目为 `null`。正文、联系方式、图片、管理员
+备注、Account 快照、通知载荷和 Provider 凭据均不在该 DTO 中。Work Hub 的“查看条目”使用下面
+两个列表接口的可选正整数 `id` 精确定位，未传 `id` 时保持原有分页筛选语义。
+
+示例响应形状：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "generatedAt": "2026-09-12T20:00:00.000Z",
+    "windowDays": 7,
+    "limit": 10,
+    "sources": { "feedback": { "status": "ok" }, "worktask": { "status": "ok" } },
+    "sections": {
+      "overdue": { "status": "ok", "items": [] },
+      "upcoming": { "status": "ok", "items": [] },
+      "unassigned": { "status": "ok", "items": [] },
+      "recent": { "status": "ok", "items": [] }
+    }
+  }
+}
+```
+
 | 方法与路径 | 用途 |
 |---|---|
-| `POST /api/admin/feedback/list` | 按状态/关键词分页查询，返回 items、summary、totalPages |
+| `POST /api/admin/feedback/list` | 按状态/关键词分页查询；可选正整数 `id` 精确定位，返回 items、summary、totalPages |
 | `POST /api/admin/feedback/status` | 更新 `new/reviewed/resolved/notplanned` |
 | `POST /api/admin/feedback/delete` | 删除反馈 |
 | `POST /api/admin/feedback/home-display` | 更新主页展示开关 |
@@ -227,7 +263,7 @@ Unicode 字符，只作为独立的风格补充，不能覆盖系统安全约束
 
 | 方法与路径 | 用途 |
 |---|---|
-| `POST /api/admin/worktask/list` | 按状态/优先级/关键词分页查询 |
+| `POST /api/admin/worktask/list` | 按状态/优先级/关键词分页查询；可选正整数 `id` 精确定位 |
 | `POST /api/admin/worktask/create` | 管理员创建本人任务 |
 | `POST /api/admin/worktask/status` | 更新 `new/scheduled/in_progress/completed/cancelled` |
 | `POST /api/admin/worktask/arrange` | 更新负责人、计划时间和可选状态；字段显式传 `null`/空字符串可清空 |

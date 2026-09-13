@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend layer routing, validation, DTO and database boundary for the Work Hub aggregate endpoint."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Parameterized cross-driver SQL, row mapping, no schema change, and bounded read requirements."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Admin API envelope, authentication, async errors, and safe failure handling."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Static admin page conventions and shared frontend boundaries."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Semantic Work Hub markup, escaping, button types and accessibility contracts."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Page-local state, server refresh and navigation behavior."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Required syntax, browser, theme and narrow viewport checks."}

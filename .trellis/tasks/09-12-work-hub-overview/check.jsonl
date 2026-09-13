@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend test, security, regression and diff quality checks."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify SQL compatibility, parameterization, DTO mapping and no schema regression."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify safe API envelope and isolated failure behavior."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify DOM contracts, escaping, accessibility and square-control style."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify static syntax, browser smoke, themes and responsive behavior."}

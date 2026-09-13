@@ -236,6 +236,83 @@ npm test
 Reference files: `package.json`, `server/app.js`, `server/db.js`,
 `server/validation.js`, `server/security.js`, and `tests/*.test.js`.
 
+## Work Hub aggregate contract
+
+### 1. Scope / Trigger
+
+本规范适用于管理员 Work Hub 只读总览及其跨层摘要接口。它触发于新增
+Feedback/WorkTask 聚合读取、项目上下文投影或列表精确定位过滤；不改变两类来源
+的表结构、状态机或公共数据。
+
+### 2. Signatures
+
+- `getWorkHubOverview({ now? }) -> Promise<WorkHubOverview>`：测试可传入可解析的
+  ISO 时间，生产调用使用一次生成的当前时间。
+- `GET /api/admin/work-hub/overview`：管理员会话保护，成功和来源级失败均返回
+  `{ ok: true, data }`。
+- `POST /api/admin/feedback/list`、`POST /api/admin/worktask/list`：可选正整数
+  `id` 精确定位；未传时保持原分页筛选语义。
+
+### 3. Contracts
+
+- `overdue`、`upcoming`、`unassigned` 只读取非 `completed`/`cancelled` 的
+  WorkTask；`recent` 合并两类来源最近 7 天的有效 `updatedAt`，每区最多 10 条。
+- 逾期使用 `scheduledAt < generatedAt`；近期计划使用
+  `[generatedAt, generatedAt + 7d)`；缺失或无法解析的时间不得被推断为当前时间。
+- 摘要只允许来源类型/ID、标题、类型、原生状态、WorkTask 优先级/负责人/计划时间、
+  更新时间和 `{ id, name }` 项目上下文；无项目或失效项目关系返回 `project: null`。
+- SQL 值全部通过 `placeholder()` 绑定，查询使用固定列、`LEFT JOIN` 和有限 `LIMIT`；
+  不读取正文、联系方式、图片、管理员备注、Account 快照、通知载荷或凭据。
+- Feedback/WorkTask 读取使用来源隔离：失败来源返回稳定错误码
+  `WORK_HUB_SOURCE_UNAVAILABLE`；`recent` 可为 `partial`，所有来源失败仍返回安全
+  200 数据包，不能把 SQL 或异常文本传给浏览器。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| 未登录访问 Work Hub | 401 `UNAUTHORIZED` envelope |
+| 列表 `id` 缺失 | 原有分页/筛选行为和响应形状 |
+| 列表 `id` 非正安全整数 | 400 `INVALID_PAYLOAD` |
+| 单来源查询失败 | 对应来源 `error`，相关分区空列表并带稳定错误码，其他来源继续展示 |
+| 两个来源查询失败 | 四区 `error`，前端显示整页重试；不暴露数据库错误 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：一次生成时间窗口，四区按对应时间倒序并用来源类型/ID 稳定打破并列，项目
+  关系不存在时显示“未归属”。
+- Base：只读聚合不写缓存、不增加表或索引，摘要按钮复用既有列表 `id` 过滤和项目 hash。
+- Bad：`SELECT *`、在路由拼接筛选值、把完整 Feedback/WorkTask 行返回 Work Hub，
+  或在单来源失败时把另一来源数据一并清空。
+
+### 6. Tests Required
+
+- 时间边界：当前时刻进入近期、7 天终点排除、终止状态排除、缺失/无效时间排除。
+- 排序/上限：对应时间倒序、并列按来源类型和 ID 稳定、每区最多 10 条。
+- 数据边界：空白负责人、未归属/失效项目关系、Feedback 不适用字段及禁止字段缺失。
+- API：匿名 401、成功 envelope、四区数据、摘要脱敏、`id` 精确定位和非法 `id` 400。
+- 降级：单来源和全来源失败的安全状态、错误码、可用来源保留及无异常文本泄露。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```js
+app.get("/api/admin/work-hub/overview", async (req, res) => {
+  const rows = await db.query("SELECT * FROM worktask");
+  res.json({ ok: true, data: rows });
+});
+```
+
+#### Correct
+
+```js
+app.get("/api/admin/work-hub/overview", requireAdminSession, asyncHandler(async (req, res) => {
+  const data = await getWorkHubOverview();
+  return res.json({ ok: true, data });
+}));
+```
+
 ## Production process management contract
 
 ### 1. Scope / Trigger
