@@ -336,3 +336,34 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: Work Hub 空状态与失败恢复验收
+
+**Date**: 2026-09-13
+**Task**: Work Hub 空状态与失败恢复验收
+**Branch**: `main`
+
+### Summary
+
+用户完成 Work Hub 最后一轮浏览器状态验收：空状态显示符合预期；阻断 GET /api/admin/work-hub/overview 后页面提示请求失败；解除阻断并刷新后数据恢复。亮暗主题、窄屏和键盘焦点也已由用户确认。
+
+### Main Changes
+
+- 补充 Work Hub 空状态与请求失败/恢复的真实部署验收证据。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 用户手工验证空分区、请求阻断失败提示、解除阻断后的刷新恢复；此前已验证亮暗主题、窄屏和键盘焦点。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 进入下一项独立规划；建议先收口生产发布证据，再评估 P2 Kanban 高级能力。
