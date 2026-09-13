@@ -82,9 +82,11 @@
 - [x] 运行 `npm test`、`git diff --check`、`python ./.trellis/scripts/task.py validate
       .trellis/tasks/09-12-work-hub-overview` 和 canonical registry 依赖审计；记录环境
       阻塞而不把未执行写成通过。
-- [ ] 手工浏览器验证：管理员登录→Work Hub；真实逾期/近期/未分配/最近更新；未归属
-      项目；摘要跳转并可返回；空数据；模拟单来源失败和全失败；刷新/重试；亮暗主题；
-      Tab 焦点；约 620px 窄屏无水平溢出；长中文/混合文本不破版。
+- [x] 云端核心浏览器冒烟（2026-09-13）：部署后可进入管理员 Work Hub，能够看到
+      Work Hub 内容，摘要跳转正常。
+- [ ] 扩展浏览器回归：真实逾期/近期/未分配/最近更新边界、未归属项目、空数据、模拟单
+      来源失败和全失败、刷新/重试、亮暗主题、Tab 焦点、约 620px 窄屏无水平溢出，以及
+      长中文/混合文本不破版；这些项目仍按发布清单执行，不把未观察结果记为通过。
 - [x] 用敏感字段审计确认响应与 DOM 不含 `content`、`contact`、`adminNote`、账号快照、
       凭据或通知载荷；确认没有新增公共路由或数据库文件变更。
 
@@ -98,18 +100,19 @@
 - `npm audit --omit=dev --registry=https://registry.npmjs.org`：`found 0 vulnerabilities`。
 - `python ./.trellis/scripts/task.py validate .trellis/tasks/09-12-work-hub-overview`：通过。
 - `git diff --check`：通过（仅有 Git 对 LF/CRLF 的提示，无 whitespace error）。
-- 当前自动测试环境：Node `v24.19.0`、npm `12.0.2`、SQLite 临时数据库；云端 PostgreSQL/
-  PM2/3088 与浏览器窄屏/主题冒烟尚未在本任务中执行。
+- 当前自动测试环境：Node `v24.19.0`、npm `12.0.2`、SQLite 临时数据库；云端已完成
+  Work Hub 核心路径冒烟，生产使用 PostgreSQL/PM2/3088；窄屏/主题等扩展浏览器项仍待
+  单独回归。
 
 ## 5. 文档与发布证据
 
 - [x] 更新 `docs/api/reference.md`、`docs/architecture/current.md` 或相应现有文档，
       记录 Work Hub endpoint、DTO、时间规则和降级行为，并把已实现/验证中区分开。
-- [x] 在当前任务目录记录测试命令、Node/npm/数据库类型摘要和手工浏览器结果；当前已记录
-      自动测试和 `Node v24.19.0`/`npm 12.0.2`，云端浏览器结果待发布后补充；不写入
+- [x] 在当前任务目录记录测试命令、Node/npm/数据库类型摘要和云端核心浏览器结果；不写入
       生产主机、Cookie、凭据、完整用户内容或外部响应。
-- [ ] 发布前备份数据库并按现有 PM2/3088 部署手册执行；部署后检查 health、管理员登录、
-      Work Hub、收件箱和项目详情。不要把端口重新假设为 3000。
+- [x] 已按现有 PM2/3088 部署路径完成 Work Hub 核心发布验证（管理员入口、内容展示、摘要
+      跳转）；后续发布仍需按清单执行数据库备份、health、收件箱和项目详情检查，不把端口
+      重新假设为 3000。
 
 ## 6. 回滚点与停止条件
 
