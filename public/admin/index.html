@@ -108,6 +108,7 @@
 
       <div class="card">
         <div class="tabs">
+          <button class="tab" id="tabWorkHub" type="button" aria-controls="moduleWorkHub" aria-selected="false">Work Hub</button>
           <button class="tab active" id="tabInbox" type="button" aria-controls="moduleInbox" aria-selected="true">工作收件箱</button>
           <button class="tab" id="tabFeedback" type="button" aria-controls="moduleFeedback" aria-selected="false">反馈管理</button>
           <button class="tab" id="tabWorktask" type="button" aria-controls="moduleWorktask" aria-selected="false">WorkTask 管理</button>
@@ -300,6 +301,46 @@
               <div id="projectKanbanBoard" class="project-kanban-board" aria-live="polite"></div>
             </section>
           </section>
+        </section>
+
+        <section id="moduleWorkHub" class="work-hub-shell hidden" aria-labelledby="workHubTitle">
+          <div class="work-hub-header">
+            <div>
+              <span class="work-hub-kicker">WORK HUB</span>
+              <h2 id="workHubTitle">工作总览</h2>
+              <p>聚合现有 Feedback 与 WorkTask，帮助你快速识别需要关注的事项。这里仅提供摘要与入口，处理操作仍在原有管理板块完成。</p>
+            </div>
+            <button id="workHubRefreshBtn" class="primary" type="button">刷新 Work Hub</button>
+          </div>
+          <div id="workHubMsg" class="msg" role="status" aria-live="polite"></div>
+          <div class="work-hub-rules" aria-label="Work Hub 规则">
+            <span>逾期：计划时间早于当前时刻</span>
+            <span>近期计划：未来 7 天</span>
+            <span>未分配：负责人为空</span>
+            <span>最近更新：最近 7 天</span>
+          </div>
+          <div class="work-hub-grid">
+            <section class="work-hub-section" aria-labelledby="workHubOverdueTitle">
+              <div class="work-hub-section-head"><div><h3 id="workHubOverdueTitle">逾期</h3><p>尚未完成且计划时间已过去</p></div><span id="workHubOverdueCount" class="badge">0</span></div>
+              <div id="workHubOverdueStatus" class="work-hub-status" role="status" aria-live="polite"></div>
+              <div id="workHubOverdue" class="work-hub-list" aria-live="polite" aria-busy="false"></div>
+            </section>
+            <section class="work-hub-section" aria-labelledby="workHubUpcomingTitle">
+              <div class="work-hub-section-head"><div><h3 id="workHubUpcomingTitle">近期计划</h3><p>未来 7 天内需要安排的事项</p></div><span id="workHubUpcomingCount" class="badge">0</span></div>
+              <div id="workHubUpcomingStatus" class="work-hub-status" role="status" aria-live="polite"></div>
+              <div id="workHubUpcoming" class="work-hub-list" aria-live="polite" aria-busy="false"></div>
+            </section>
+            <section class="work-hub-section" aria-labelledby="workHubUnassignedTitle">
+              <div class="work-hub-section-head"><div><h3 id="workHubUnassignedTitle">未分配</h3><p>尚未指定负责人的事项</p></div><span id="workHubUnassignedCount" class="badge">0</span></div>
+              <div id="workHubUnassignedStatus" class="work-hub-status" role="status" aria-live="polite"></div>
+              <div id="workHubUnassigned" class="work-hub-list" aria-live="polite" aria-busy="false"></div>
+            </section>
+            <section class="work-hub-section" aria-labelledby="workHubRecentTitle">
+              <div class="work-hub-section-head"><div><h3 id="workHubRecentTitle">最近更新</h3><p>最近 7 天更新的 Feedback 与 WorkTask</p></div><span id="workHubRecentCount" class="badge">0</span></div>
+              <div id="workHubRecentStatus" class="work-hub-status" role="status" aria-live="polite"></div>
+              <div id="workHubRecent" class="work-hub-list" aria-live="polite" aria-busy="false"></div>
+            </section>
+          </div>
         </section>
 
         <section id="moduleInbox" class="inbox-shell" aria-labelledby="inboxTitle">

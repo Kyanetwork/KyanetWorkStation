@@ -18,6 +18,7 @@ const {
   cleanupExpiredSessions,
   nowIso,
   getHealthCounts,
+  getWorkHubOverview,
   createFeedback,
   createWorktask,
   createWorktaskByAdmin,
@@ -717,6 +718,11 @@ app.get("/api/admin/me", requireAdminSession, (req, res) => {
     data: { username: req.adminUser.username }
   });
 });
+
+app.get("/api/admin/work-hub/overview", requireAdminSession, asyncHandler(async (req, res) => {
+  const data = await getWorkHubOverview();
+  return res.json({ ok: true, data });
+}));
 
 app.post("/api/admin/project/list", requireAdminSession, asyncHandler(async (req, res) => {
   const validation = validateProjectListPayload(req.body || {});

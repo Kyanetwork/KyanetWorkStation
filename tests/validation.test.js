@@ -22,7 +22,9 @@ const {
 const {
   validateFeedbackExportPayload,
   validateWorktaskExportPayload,
-  validateAuditListPayload
+  validateAuditListPayload,
+  validateListPayload,
+  validateWorktaskListPayload
 } = require("../server/validation");
 
 test("validateFeedbackPayload accepts valid payload", () => {
@@ -65,6 +67,22 @@ test("validateHomeDisplayPayload parses numeric boolean", () => {
   });
   assert.equal(result.valid, true);
   assert.equal(result.data.showOnHome, true);
+});
+
+test("admin list validators accept optional positive integer ids without changing defaults", () => {
+  const feedback = validateListPayload({ id: "42", status: "reviewed" });
+  const worktask = validateWorktaskListPayload({ id: 7, priority: "HIGH" });
+  const omitted = validateListPayload({});
+  const invalid = validateWorktaskListPayload({ id: "0" });
+
+  assert.equal(feedback.valid, true);
+  assert.equal(feedback.data.id, 42);
+  assert.equal(worktask.valid, true);
+  assert.equal(worktask.data.id, 7);
+  assert.equal(worktask.data.priority, "high");
+  assert.equal(omitted.valid, true);
+  assert.equal(Object.hasOwn(omitted.data, "id"), false);
+  assert.equal(invalid.valid, false);
 });
 
 test("validateSmtpTestPayload supports comma and semicolon split", () => {

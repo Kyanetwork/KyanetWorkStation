@@ -217,11 +217,32 @@ function validateAdminLoginPayload(payload) {
   return { valid: true, data: { username, password } };
 }
 
+function validateOptionalListId(payload) {
+  if (!hasOwn(payload, "id") || payload.id === undefined || payload.id === null || payload.id === "") {
+    return { valid: true, value: null };
+  }
+  if (typeof payload.id === "number") {
+    return Number.isSafeInteger(payload.id) && payload.id > 0
+      ? { valid: true, value: payload.id }
+      : { valid: false, message: "id 不合法" };
+  }
+  if (typeof payload.id !== "string" || !/^\d+$/u.test(payload.id.trim())) {
+    return { valid: false, message: "id 不合法" };
+  }
+  const parsed = Number(payload.id.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? { valid: true, value: parsed }
+    : { valid: false, message: "id 不合法" };
+}
+
 function validateListPayload(payload) {
+  const id = validateOptionalListId(payload);
   const status = normalizeString(payload.status);
   const keyword = normalizeString(payload.keyword);
   const page = Number.parseInt(payload.page, 10);
   const pageSize = Number.parseInt(payload.pageSize, 10);
+
+  if (!id.valid) return id;
 
   if (status && !ALLOWED_STATUS.has(status)) {
     return { valid: false, message: "status 不合法" };
@@ -231,23 +252,29 @@ function validateListPayload(payload) {
     return { valid: false, message: "keyword 过长" };
   }
 
+  const data = {
+    status,
+    keyword,
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20
+  };
+  if (id.value !== null) data.id = id.value;
+
   return {
     valid: true,
-    data: {
-      status,
-      keyword,
-      page: Number.isFinite(page) && page > 0 ? page : 1,
-      pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20
-    }
+    data
   };
 }
 
 function validateWorktaskListPayload(payload) {
+  const id = validateOptionalListId(payload);
   const status = normalizeString(payload.status);
   const keyword = normalizeString(payload.keyword);
   const priority = normalizeString(payload.priority).toLowerCase();
   const page = Number.parseInt(payload.page, 10);
   const pageSize = Number.parseInt(payload.pageSize, 10);
+
+  if (!id.valid) return id;
 
   if (status && !ALLOWED_WORKTASK_STATUS.has(status)) {
     return { valid: false, message: "worktask status 不合法" };
@@ -261,15 +288,18 @@ function validateWorktaskListPayload(payload) {
     return { valid: false, message: "keyword 过长" };
   }
 
+  const data = {
+    status,
+    keyword,
+    priority,
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20
+  };
+  if (id.value !== null) data.id = id.value;
+
   return {
     valid: true,
-    data: {
-      status,
-      keyword,
-      priority,
-      page: Number.isFinite(page) && page > 0 ? page : 1,
-      pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20
-    }
+    data
   };
 }
 

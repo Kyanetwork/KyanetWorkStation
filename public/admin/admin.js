@@ -42,6 +42,10 @@
   const projectKanbanViewBtn = document.getElementById("projectKanbanViewBtn");
   const projectKanbanBoard = document.getElementById("projectKanbanBoard");
   const projectModel = window.KwsProjectModel;
+  const workHubMsg = document.getElementById("workHubMsg");
+  const moduleWorkHub = document.getElementById("moduleWorkHub");
+  const tabWorkHub = document.getElementById("tabWorkHub");
+  const workHubRefreshBtn = document.getElementById("workHubRefreshBtn");
 
   const projectKanbanSourceLabels = Object.freeze({ feedback: "Feedback", worktask: "WorkTask" });
   const projectKanbanStatusLabels = Object.freeze({
@@ -68,6 +72,12 @@
 
   const state = {
     active: "inbox",
+    workHub: {
+      loaded: false,
+      loading: false,
+      requestId: 0,
+      data: null
+    },
     inbox: {
       loaded: false,
       loading: false,
@@ -76,8 +86,8 @@
       feedbackData: null,
       worktaskData: null
     },
-    feedback: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
-    worktask: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [] },
+    feedback: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [], focusId: null },
+    worktask: { page: 1, pageSize: 20, totalPages: 1, loaded: false, items: [], focusId: null },
     projects: {
       page: 1,
       pageSize: 20,
@@ -1017,7 +1027,7 @@
     }
 
     container.innerHTML = items.map((item) => `
-      <article class="item">
+      <article class="item" data-item-id="${escapeHtml(item.id)}" tabindex="-1">
         <h3>[反馈 #${item.id}] ${escapeHtml(item.title)}</h3>
         <div class="meta">类型：${escapeHtml(item.type)} | 状态：${feedbackStatusLabel(item.status)} | 首页展示状态：${homeDisplayLabel(Boolean(item.showOnHome))} | 联系方式：${escapeHtml(item.contact)} | 提交：${escapeHtml(formatDateTimeDisplay(item.createdAt))}</div>
         <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
@@ -1069,7 +1079,7 @@
     }
 
     container.innerHTML = items.map((item) => `
-      <article class="item">
+      <article class="item" data-item-id="${escapeHtml(item.id)}" tabindex="-1">
         <h3>[WorkTask #${item.id}] ${escapeHtml(item.title)}</h3>
         <div class="meta">类型：${escapeHtml(item.type)} | 来源：${item.createdByAdmin ? "本人添加" : "用户提交"} | 状态：${worktaskStatusLabel(item.status)} | 优先级：${worktaskPriorityLabel(item.priority)} | 首页展示状态：${homeDisplayLabel(Boolean(item.showOnHome))} | 联系方式：${escapeHtml(item.contact)}</div>
         <div class="meta">关联账号：${escapeHtml(accountSnapshotText(item))}</div>
@@ -1102,6 +1112,19 @@
         </div>
       </article>
     `).join("");
+  }
+
+  function focusAdminListItem(sourceType, id) {
+    if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
+    const listId = sourceType === "feedback" ? "feedbackList" : sourceType === "worktask" ? "worktaskList" : "";
+    if (!listId) return;
+    const item = document.querySelector(`#${listId} [data-item-id="${Number(id)}"]`);
+    if (!item) return;
+    item.classList.add("is-focused");
+    if (typeof item.scrollIntoView === "function") {
+      item.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (typeof item.focus === "function") item.focus({ preventScroll: true });
   }
 
   async function downloadServerCsv(pathname, payload) {
@@ -1142,6 +1165,7 @@
       page: state.feedback.page,
       pageSize: state.feedback.pageSize
     };
+    if (state.feedback.focusId !== null) payload.id = state.feedback.focusId;
     const data = await api("/api/admin/feedback/list", payload);
     state.feedback.items = data.items || [];
     state.feedback.totalPages = data.totalPages || 1;
@@ -1154,6 +1178,8 @@
 
     renderFeedbackStats(data.total || 0, data.summary || {});
     renderFeedbackList(state.feedback.items);
+    focusAdminListItem("feedback", state.feedback.focusId);
+    state.feedback.focusId = null;
     document.getElementById("feedbackPageText").textContent = `第 ${data.page} / ${data.totalPages} 页`;
     document.getElementById("feedbackPageSummary").textContent = `总计 ${data.total} 条，当前页 ${state.feedback.items.length} 条`;
     document.getElementById("feedbackPrevBtn").disabled = state.feedback.page <= 1;
@@ -1170,6 +1196,7 @@
       page: state.worktask.page,
       pageSize: state.worktask.pageSize
     };
+    if (state.worktask.focusId !== null) payload.id = state.worktask.focusId;
     const data = await api("/api/admin/worktask/list", payload);
     state.worktask.items = data.items || [];
     state.worktask.totalPages = data.totalPages || 1;
@@ -1182,6 +1209,8 @@
 
     renderWorktaskStats(data.total || 0, data.summary || {}, data.prioritySummary || {});
     renderWorktaskList(state.worktask.items);
+    focusAdminListItem("worktask", state.worktask.focusId);
+    state.worktask.focusId = null;
     document.getElementById("worktaskPageText").textContent = `第 ${data.page} / ${data.totalPages} 页`;
     document.getElementById("worktaskPageSummary").textContent = `总计 ${data.total} 条，当前页 ${state.worktask.items.length} 条`;
     document.getElementById("worktaskPrevBtn").disabled = state.worktask.page <= 1;
@@ -1270,6 +1299,207 @@
         state.inbox.loading = false;
         inboxList.setAttribute("aria-busy", "false");
       }
+    }
+  }
+
+  const workHubSections = Object.freeze([
+    { key: "overdue", listId: "workHubOverdue", statusId: "workHubOverdueStatus", countId: "workHubOverdueCount" },
+    { key: "upcoming", listId: "workHubUpcoming", statusId: "workHubUpcomingStatus", countId: "workHubUpcomingCount" },
+    { key: "unassigned", listId: "workHubUnassigned", statusId: "workHubUnassignedStatus", countId: "workHubUnassignedCount" },
+    { key: "recent", listId: "workHubRecent", statusId: "workHubRecentStatus", countId: "workHubRecentCount" }
+  ]);
+
+  function normalizeWorkHubItem(raw) {
+    const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const sourceType = value.sourceType === "feedback" || value.sourceType === "worktask" ? value.sourceType : "";
+    const sourceId = Number(value.sourceId);
+    if (!sourceType || !Number.isSafeInteger(sourceId) || sourceId <= 0) return null;
+    const project = value.project && typeof value.project === "object" && Number.isSafeInteger(Number(value.project.id)) && Number(value.project.id) > 0
+      ? { id: Number(value.project.id), name: typeof value.project.name === "string" ? value.project.name.slice(0, 120) : "" }
+      : null;
+    return {
+      sourceType,
+      sourceId,
+      title: typeof value.title === "string" ? value.title : "",
+      type: typeof value.type === "string" ? value.type : "",
+      status: typeof value.status === "string" ? value.status : "",
+      priority: typeof value.priority === "string" ? value.priority : "",
+      assignee: typeof value.assignee === "string" ? value.assignee : "",
+      scheduledAt: typeof value.scheduledAt === "string" ? value.scheduledAt : "",
+      updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+      project
+    };
+  }
+
+  function workHubSourceLabel(sourceType) {
+    return sourceType === "worktask" ? "WorkTask" : "反馈";
+  }
+
+  function workHubItemTime(item, sectionKey) {
+    if (sectionKey === "overdue" || sectionKey === "upcoming") {
+      return item.scheduledAt ? `计划：${formatDateTimeDisplay(item.scheduledAt)}` : "计划：未设置";
+    }
+    return item.updatedAt ? `更新：${formatDateTimeDisplay(item.updatedAt)}` : "更新：未知";
+  }
+
+  function renderWorkHubItem(item, sectionKey) {
+    const sourceType = escapeHtml(item.sourceType);
+    const sourceId = escapeHtml(item.sourceId);
+    const sourceLabel = escapeHtml(workHubSourceLabel(item.sourceType));
+    const project = item.project && item.project.id > 0 ? item.project : null;
+    const worktaskMeta = item.sourceType === "worktask"
+      ? `<span>优先级：${escapeHtml(worktaskPriorityLabel(item.priority))}</span><span>负责人：${escapeHtml(item.assignee || "未分配")}</span>`
+      : "";
+    return `<article class="work-hub-item">
+      <div class="work-hub-item-head"><span class="work-hub-source">${sourceLabel} #${sourceId}</span><span class="work-hub-native-status">${escapeHtml(item.sourceType === "worktask" ? worktaskStatusLabel(item.status) : feedbackStatusLabel(item.status))}</span></div>
+      <h4>${escapeHtml(item.title || "无标题")}</h4>
+      <div class="work-hub-item-meta"><span>类型：${escapeHtml(item.type || "未标注")}</span>${worktaskMeta}<span>${escapeHtml(workHubItemTime(item, sectionKey))}</span><span>项目：${escapeHtml(project ? project.name : "未归属")}</span></div>
+      <div class="work-hub-item-actions">
+        <button type="button" class="secondary" data-action="work-hub-open-item" data-source-type="${sourceType}" data-source-id="${sourceId}">查看条目</button>
+        ${project ? `<button type="button" class="secondary" data-action="work-hub-open-project" data-project-id="${escapeHtml(project.id)}">查看项目</button>` : ""}
+      </div>
+    </article>`;
+  }
+
+  function renderWorkHubSection(sectionConfig, rawSection) {
+    const list = document.getElementById(sectionConfig.listId);
+    const status = document.getElementById(sectionConfig.statusId);
+    const count = document.getElementById(sectionConfig.countId);
+    if (!list || !status || !count) return;
+    const section = rawSection && typeof rawSection === "object" ? rawSection : {};
+    const items = Array.isArray(section.items) ? section.items.map(normalizeWorkHubItem).filter(Boolean) : [];
+    count.textContent = String(items.length);
+    list.setAttribute("aria-busy", "false");
+    if (section.status === "error") {
+      status.className = "work-hub-status is-error";
+      status.innerHTML = '<span>该分区暂时无法加载。</span> <button type="button" class="secondary" data-action="work-hub-retry">重试 Work Hub</button>';
+      list.innerHTML = '<p class="empty-state">暂时没有可显示的记录。</p>';
+      return;
+    }
+    if (section.status === "partial") {
+      status.className = "work-hub-status is-partial";
+      status.textContent = "部分来源暂时不可用，以下为当前可用记录。";
+    } else {
+      status.className = "work-hub-status";
+      status.textContent = "";
+    }
+    list.innerHTML = items.length
+      ? items.map((item) => renderWorkHubItem(item, sectionConfig.key)).join("")
+      : '<p class="empty-state">当前没有符合条件的记录。</p>';
+  }
+
+  function renderWorkHubLoading() {
+    for (const section of workHubSections) {
+      const list = document.getElementById(section.listId);
+      const status = document.getElementById(section.statusId);
+      const count = document.getElementById(section.countId);
+      if (list) {
+        list.setAttribute("aria-busy", "true");
+        list.innerHTML = '<p class="empty-state">正在加载…</p>';
+      }
+      if (status) {
+        status.className = "work-hub-status";
+        status.textContent = "正在读取…";
+      }
+      if (count) count.textContent = "-";
+    }
+  }
+
+  function renderWorkHub(data) {
+    const value = data && typeof data === "object" ? data : {};
+    state.workHub.data = value;
+    for (const section of workHubSections) {
+      renderWorkHubSection(section, value.sections && value.sections[section.key]);
+    }
+    const sources = value.sources && typeof value.sources === "object" ? value.sources : {};
+    const allFailed = [sources.feedback, sources.worktask].every((source) => source && source.status === "error");
+    if (allFailed) {
+      showMessage(workHubMsg, "error", "Work Hub 暂时无法读取任何来源，请重试。 ");
+      workHubMsg.innerHTML = 'Work Hub 暂时无法读取任何来源，请重试。 <button type="button" class="secondary" data-action="work-hub-retry">重试 Work Hub</button>';
+    } else if (sources.feedback && sources.feedback.status === "error" || sources.worktask && sources.worktask.status === "error") {
+      showMessage(workHubMsg, "error", "部分来源暂时不可用，已在对应分区标注。 ");
+      workHubMsg.innerHTML = '部分来源暂时不可用，已在对应分区标注。 <button type="button" class="secondary" data-action="work-hub-retry">重试 Work Hub</button>';
+    } else {
+      clearMessage(workHubMsg);
+    }
+    if (value.generatedAt) {
+      document.getElementById("globalLoadTime").textContent = `最近加载：${formatDateTimeDisplay(value.generatedAt)}`;
+    }
+  }
+
+  async function loadWorkHub() {
+    if (!moduleWorkHub) return;
+    const requestId = state.workHub.requestId + 1;
+    state.workHub.requestId = requestId;
+    state.workHub.loading = true;
+    clearMessage(workHubMsg);
+    renderWorkHubLoading();
+    try {
+      const data = await api("/api/admin/work-hub/overview", null, { method: "GET" });
+      if (requestId !== state.workHub.requestId) return;
+      state.workHub.loaded = true;
+      renderWorkHub(data);
+    } catch (error) {
+      if (requestId !== state.workHub.requestId) return;
+      state.workHub.loaded = false;
+      for (const section of workHubSections) {
+        const list = document.getElementById(section.listId);
+        const status = document.getElementById(section.statusId);
+        if (list) {
+          list.setAttribute("aria-busy", "false");
+          list.innerHTML = '<p class="empty-state">Work Hub 请求失败。</p>';
+        }
+        if (status) {
+          status.className = "work-hub-status is-error";
+          status.textContent = "请求失败";
+        }
+      }
+      showMessage(workHubMsg, "error", "Work Hub 加载失败，请检查登录状态后重试。");
+      throw error;
+    } finally {
+      if (requestId === state.workHub.requestId) state.workHub.loading = false;
+    }
+  }
+
+  function openWorkHubItem(button) {
+    const sourceType = button.dataset.sourceType;
+    const sourceId = Number(button.dataset.sourceId);
+    if (!["feedback", "worktask"].includes(sourceType) || !Number.isSafeInteger(sourceId) || sourceId <= 0) return;
+    if (sourceType === "feedback") {
+      state.feedback.focusId = sourceId;
+      state.feedback.page = 1;
+      state.feedback.loaded = false;
+      document.getElementById("feedbackStatusFilter").value = "";
+      document.getElementById("feedbackKeyword").value = "";
+      switchModule("feedback");
+    } else {
+      state.worktask.focusId = sourceId;
+      state.worktask.page = 1;
+      state.worktask.loaded = false;
+      document.getElementById("worktaskStatusFilter").value = "";
+      document.getElementById("worktaskPriorityFilter").value = "";
+      document.getElementById("worktaskKeyword").value = "";
+      switchModule("worktask");
+    }
+  }
+
+  async function handleWorkHubAction(button) {
+    const action = button.dataset.action;
+    if (action === "work-hub-open-item") {
+      openWorkHubItem(button);
+      return;
+    }
+    if (action === "work-hub-open-project") {
+      const id = Number(button.dataset.projectId);
+      if (!Number.isSafeInteger(id) || id <= 0) return;
+      window.location.hash = projectModel.projectHash(id).slice(1);
+      switchModule("projects");
+      try { await loadProjectDetail(id); } catch (error) { notify(projectMsg, "error", error.message); }
+      return;
+    }
+    if (action === "work-hub-retry") {
+      state.workHub.loaded = false;
+      try { await loadWorkHub(); } catch (error) { notify(workHubMsg, "error", error.message); }
     }
   }
 
@@ -1927,6 +2157,7 @@
     const isInbox = module === "inbox";
     const isFeedback = module === "feedback";
     const isWorktask = module === "worktask";
+    const isWorkHub = module === "workHub";
     const isWorktaskCreate = module === "worktaskCreate";
     const isProjects = module === "projects";
     const isKnowledge = module === "knowledge";
@@ -1934,6 +2165,7 @@
     tabInbox.classList.toggle("active", isInbox);
     tabFeedback.classList.toggle("active", isFeedback);
     tabWorktask.classList.toggle("active", isWorktask);
+    tabWorkHub.classList.toggle("active", isWorkHub);
     tabWorktaskCreate.classList.toggle("active", isWorktaskCreate);
     tabProjects.classList.toggle("active", isProjects);
     tabKnowledge.classList.toggle("active", isKnowledge);
@@ -1941,6 +2173,7 @@
     tabInbox.setAttribute("aria-selected", String(isInbox));
     tabFeedback.setAttribute("aria-selected", String(isFeedback));
     tabWorktask.setAttribute("aria-selected", String(isWorktask));
+    tabWorkHub.setAttribute("aria-selected", String(isWorkHub));
     tabWorktaskCreate.setAttribute("aria-selected", String(isWorktaskCreate));
     tabProjects.setAttribute("aria-selected", String(isProjects));
     tabKnowledge.setAttribute("aria-selected", String(isKnowledge));
@@ -1948,6 +2181,7 @@
     moduleInbox.classList.toggle("hidden", !isInbox);
     moduleFeedback.classList.toggle("hidden", !isFeedback);
     moduleWorktask.classList.toggle("hidden", !isWorktask);
+    moduleWorkHub.classList.toggle("hidden", !isWorkHub);
     moduleWorktaskCreate.classList.toggle("hidden", !isWorktaskCreate);
     moduleProjects.classList.toggle("hidden", !isProjects);
     moduleKnowledge.classList.toggle("hidden", !isKnowledge);
@@ -1961,6 +2195,9 @@
     }
     if (isWorktask && !state.worktask.loaded) {
       loadWorktask().catch((err) => showMessage(globalMsg, "error", err.message));
+    }
+    if (isWorkHub && !state.workHub.loaded && !state.workHub.loading) {
+      loadWorkHub().catch((err) => showMessage(workHubMsg, "error", err.message));
     }
     if (isProjects && !state.projects.loaded && !state.projects.loading) {
       state.projects.loading = true;
@@ -2037,7 +2274,13 @@
       state.inbox.feedbackData = null;
       state.inbox.worktaskData = null;
       state.feedback.loaded = false;
+      state.feedback.focusId = null;
       state.worktask.loaded = false;
+      state.worktask.focusId = null;
+      state.workHub.loaded = false;
+      state.workHub.loading = false;
+      state.workHub.requestId += 1;
+      state.workHub.data = null;
       state.projects.loaded = false;
       state.projects.items = [];
       state.projects.detail = null;
@@ -2088,6 +2331,10 @@
         await loadInbox();
       } else if (state.active === "feedback") await loadFeedback();
       else if (state.active === "worktask") await loadWorktask();
+      else if (state.active === "workHub") {
+        state.workHub.loaded = false;
+        await loadWorkHub();
+      }
       else if (state.active === "projects") {
         state.projects.loaded = false;
         await loadProjects();
@@ -2176,6 +2423,7 @@
   tabInbox.addEventListener("click", () => switchModule("inbox"));
   tabFeedback.addEventListener("click", () => switchModule("feedback"));
   tabWorktask.addEventListener("click", () => switchModule("worktask"));
+  tabWorkHub.addEventListener("click", () => switchModule("workHub"));
   tabWorktaskCreate.addEventListener("click", () => switchModule("worktaskCreate"));
   tabProjects.addEventListener("click", () => {
     window.location.hash = "projects";
@@ -2408,7 +2656,7 @@
   });
 
   document.getElementById("feedbackSearchBtn").addEventListener("click", async () => {
-    try { state.feedback.page = 1; await loadFeedback(); } catch (error) { notify(feedbackMsg, "error", error.message); }
+    try { state.feedback.page = 1; state.feedback.focusId = null; await loadFeedback(); } catch (error) { notify(feedbackMsg, "error", error.message); }
   });
   document.getElementById("feedbackPrevBtn").addEventListener("click", async () => {
     if (state.feedback.page <= 1) return;
@@ -2433,7 +2681,7 @@
   });
 
   document.getElementById("worktaskSearchBtn").addEventListener("click", async () => {
-    try { state.worktask.page = 1; await loadWorktask(); } catch (error) { notify(worktaskMsg, "error", error.message); }
+    try { state.worktask.page = 1; state.worktask.focusId = null; await loadWorktask(); } catch (error) { notify(worktaskMsg, "error", error.message); }
   });
   document.getElementById("worktaskPrevBtn").addEventListener("click", async () => {
     if (state.worktask.page <= 1) return;
@@ -2730,6 +2978,29 @@
 
   document.getElementById("feedbackList").addEventListener("change", handleProjectSourceChange);
   document.getElementById("worktaskList").addEventListener("change", handleProjectSourceChange);
+
+  if (workHubRefreshBtn) {
+    workHubRefreshBtn.addEventListener("click", async () => {
+      try {
+        state.workHub.loaded = false;
+        await withButtonBusy(workHubRefreshBtn, "刷新中…", loadWorkHub);
+      } catch (error) {
+        notify(workHubMsg, "error", error.message);
+      }
+    });
+  }
+
+  if (moduleWorkHub) {
+    moduleWorkHub.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button || !moduleWorkHub.contains(button)) return;
+      try {
+        await handleWorkHubAction(button);
+      } catch (error) {
+        notify(workHubMsg, "error", error.message || "Work Hub 操作失败");
+      }
+    });
+  }
 
   (async () => {
     resetWorktaskCreateForm();

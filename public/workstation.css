@@ -1152,6 +1152,219 @@ textarea {
   background: var(--ws-warning-soft) !important;
 }
 
+/* Work Hub: a compact, square overview that keeps the four attention areas
+   visually separate without introducing a second card/component system. */
+.admin-page .work-hub-shell {
+  display: grid;
+  gap: var(--ws-space-4);
+}
+
+.admin-page .work-hub-header,
+.admin-page .work-hub-section-head,
+.admin-page .work-hub-item-head,
+.admin-page .work-hub-item-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ws-space-3);
+}
+
+.admin-page .work-hub-header h2,
+.admin-page .work-hub-header p,
+.admin-page .work-hub-section-head h3,
+.admin-page .work-hub-section-head p,
+.admin-page .work-hub-item h4 {
+  margin: 0;
+}
+
+.admin-page .work-hub-header p,
+.admin-page .work-hub-section-head p,
+.admin-page .work-hub-status,
+.admin-page .work-hub-item-meta {
+  color: var(--ws-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.admin-page .work-hub-header p {
+  max-width: 72ch;
+  margin-top: 5px;
+}
+
+.admin-page .work-hub-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ws-accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.admin-page .work-hub-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ws-space-2);
+  border-block: 1px solid var(--ws-border);
+  padding: var(--ws-space-3) 0;
+  color: var(--ws-muted);
+  font-size: 12px;
+}
+
+.admin-page .work-hub-rules span {
+  border-left: 2px solid var(--ws-accent);
+  padding-left: 8px;
+}
+
+.admin-page .work-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ws-space-4);
+}
+
+.admin-page .work-hub-section {
+  display: grid;
+  align-content: start;
+  gap: var(--ws-space-2);
+  min-width: 0;
+  border: 1px solid var(--ws-border);
+  border-top: 3px solid var(--ws-accent);
+  padding: var(--ws-space-4);
+  background: var(--ws-surface-alt);
+}
+
+.admin-page .work-hub-section-head {
+  align-items: center;
+}
+
+.admin-page .work-hub-section-head h3 {
+  font-size: 16px;
+}
+
+.admin-page .work-hub-section-head p {
+  margin-top: 3px;
+}
+
+.admin-page .work-hub-section-head .badge {
+  flex: 0 0 auto;
+}
+
+.admin-page .work-hub-list {
+  display: grid;
+  gap: var(--ws-space-2);
+  min-width: 0;
+}
+
+.admin-page .work-hub-item {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--ws-border-strong);
+  border-left: 3px solid var(--ws-accent);
+  padding: var(--ws-space-3);
+  background: var(--ws-surface);
+}
+
+.admin-page .work-hub-item-head {
+  align-items: center;
+}
+
+.admin-page .work-hub-source,
+.admin-page .work-hub-native-status {
+  color: var(--ws-accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.admin-page .work-hub-native-status {
+  color: var(--ws-muted);
+  font-weight: 600;
+}
+
+.admin-page .work-hub-item h4 {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.admin-page .work-hub-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  overflow-wrap: anywhere;
+}
+
+.admin-page .work-hub-item-actions {
+  align-items: center;
+  justify-content: flex-start;
+  border-top: 1px solid var(--ws-border);
+  padding-top: 8px;
+}
+
+.admin-page .work-hub-item-actions button {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.admin-page .work-hub-status:empty {
+  display: none;
+}
+
+.admin-page .work-hub-status.is-error {
+  color: var(--ws-danger);
+}
+
+.admin-page .work-hub-status.is-partial {
+  color: var(--ws-warning);
+}
+
+.admin-page .work-hub-status button {
+  min-height: 30px;
+  margin-left: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.admin-page #workHubMsg button {
+  margin-left: 5px;
+}
+
+.admin-page .work-hub-item.is-focused {
+  outline: 3px solid color-mix(in srgb, var(--ws-focus) 58%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .admin-page .work-hub-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-page .work-hub-header {
+    flex-direction: column;
+  }
+
+  .admin-page .work-hub-header > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-page .work-hub-section {
+    padding: var(--ws-space-3);
+  }
+
+  .admin-page .work-hub-item-head,
+  .admin-page .work-hub-item-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-page .work-hub-item-actions button {
+    width: 100%;
+  }
+}
+
 @keyframes ws-spin {
   to { transform: rotate(360deg); }
 }

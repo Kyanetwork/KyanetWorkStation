@@ -1983,10 +1983,15 @@ async function touchAccountSessionLastSeen(sessionId, isoTime) {
   await execute(`UPDATE account_session SET last_seen_at = ${p1} WHERE id = ${p2}`, [isoTime, sessionId]);
 }
 
-function buildFeedbackFilter(status, keyword) {
+function buildFeedbackFilter(status, keyword, id) {
   const conditions = [];
   const params = [];
   let idx = 1;
+
+  if (id !== undefined && id !== null && id !== "") {
+    conditions.push(`id = ${placeholder(idx++)}`);
+    params.push(id);
+  }
 
   if (status) {
     conditions.push(`status = ${placeholder(idx++)}`);
@@ -2008,10 +2013,15 @@ function buildFeedbackFilter(status, keyword) {
   };
 }
 
-function buildWorktaskFilter(status, keyword, priority) {
+function buildWorktaskFilter(status, keyword, priority, id) {
   const conditions = [];
   const params = [];
   let idx = 1;
+
+  if (id !== undefined && id !== null && id !== "") {
+    conditions.push(`id = ${placeholder(idx++)}`);
+    params.push(id);
+  }
 
   if (status) {
     conditions.push(`status = ${placeholder(idx++)}`);
@@ -2087,6 +2097,232 @@ function mapWorktaskRow(row) {
     accountDisplayNameSnapshot: row.account_display_name_snapshot || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+const WORK_HUB_WINDOW_DAYS = 7;
+const WORK_HUB_LIMIT = 10;
+const WORK_HUB_TERMINAL_STATUSES = ["completed", "cancelled"];
+
+function normalizeWorkHubText(value, maxLength) {
+  return Array.from(value == null ? "" : String(value).trim()).slice(0, maxLength).join("");
+}
+
+function workHubTimestamp(value) {
+  const normalized = normalizeWorkHubText(value, 64);
+  if (!normalized || Number.isNaN(Date.parse(normalized))) return "";
+  return normalized;
+}
+
+function mapWorkHubProject(row) {
+  const id = toNumber(row.project_id);
+  // LEFT JOIN returns a null project name when a stale/orphaned relation
+  // points at a project that no longer exists. Keep that item unassigned in
+  // the overview rather than exposing an unusable empty project context.
+  if (!id || row.project_name == null) return null;
+  return {
+    id,
+    name: normalizeWorkHubText(row.project_name, 120)
+  };
+}
+
+function mapWorkHubFeedbackRow(row) {
+  const sourceId = toNumber(row.id);
+  if (!sourceId) return null;
+  return {
+    sourceType: "feedback",
+    sourceId,
+    title: normalizeWorkHubText(row.title, 255),
+    type: normalizeWorkHubText(row.type, 80),
+    status: normalizeWorkHubText(row.status, 32),
+    updatedAt: workHubTimestamp(row.updated_at),
+    project: mapWorkHubProject(row)
+  };
+}
+
+function mapWorkHubWorktaskRow(row) {
+  const sourceId = toNumber(row.id);
+  if (!sourceId) return null;
+  const item = {
+    sourceType: "worktask",
+    sourceId,
+    title: normalizeWorkHubText(row.title, 255),
+    type: normalizeWorkHubText(row.type, 80),
+    status: normalizeWorkHubText(row.status, 32),
+    priority: normalizeWorkHubText(row.priority, 16),
+    assignee: normalizeWorkHubText(row.assignee, 100),
+    updatedAt: workHubTimestamp(row.updated_at),
+    project: mapWorkHubProject(row)
+  };
+  const scheduledAt = workHubTimestamp(row.scheduled_at);
+  if (scheduledAt) item.scheduledAt = scheduledAt;
+  return item;
+}
+
+function compareWorkHubItems(left, right, timeField) {
+  const rightTime = Date.parse(right[timeField] || "");
+  const leftTime = Date.parse(left[timeField] || "");
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  const sourceOrder = String(left.sourceType).localeCompare(String(right.sourceType));
+  if (sourceOrder !== 0) return sourceOrder;
+  return left.sourceId - right.sourceId;
+}
+
+function workHubSection(status, items, errorCode = "") {
+  const section = { status, items };
+  if (errorCode) section.errorCode = errorCode;
+  return section;
+}
+
+async function readWorkHubFeedback(generatedAt, windowStart) {
+  const params = [];
+  const bind = (value) => {
+    params.push(value);
+    return placeholder(params.length);
+  };
+  const sourceType = bind("feedback");
+  const from = bind(windowStart);
+  const to = bind(generatedAt);
+  const limit = bind(WORK_HUB_LIMIT);
+  const rows = await queryAll(
+    `SELECT f.id, f.type, f.title, f.status, f.updated_at,
+            pi.project_id, p.name AS project_name
+     FROM feedback f
+     LEFT JOIN project_item pi ON pi.source_type = ${sourceType} AND pi.source_id = f.id
+     LEFT JOIN project p ON p.id = pi.project_id
+     WHERE f.updated_at >= ${from} AND f.updated_at <= ${to}
+     ORDER BY f.updated_at DESC, f.id DESC
+     LIMIT ${limit}`,
+    params
+  );
+  return rows.map(mapWorkHubFeedbackRow).filter(Boolean);
+}
+
+async function readWorkHubWorktask(generatedAt, windowStart, windowEnd) {
+  const readPartition = async (partition) => {
+    const params = [];
+    const bind = (value) => {
+      params.push(value);
+      return placeholder(params.length);
+    };
+    const sourceType = bind("worktask");
+    const completedStatus = bind(WORK_HUB_TERMINAL_STATUSES[0]);
+    const cancelledStatus = bind(WORK_HUB_TERMINAL_STATUSES[1]);
+    const conditions = [`w.status NOT IN (${completedStatus}, ${cancelledStatus})`];
+    const orderField = partition === "upcoming" || partition === "overdue" ? "w.scheduled_at" : "w.updated_at";
+
+    if (partition === "overdue") {
+      const now = bind(generatedAt);
+      conditions.push(`w.scheduled_at IS NOT NULL AND TRIM(w.scheduled_at) <> '' AND w.scheduled_at < ${now}`);
+    } else if (partition === "upcoming") {
+      const from = bind(generatedAt);
+      const to = bind(windowEnd);
+      conditions.push(`w.scheduled_at IS NOT NULL AND TRIM(w.scheduled_at) <> '' AND w.scheduled_at >= ${from} AND w.scheduled_at < ${to}`);
+    } else if (partition === "unassigned") {
+      conditions.push("(w.assignee IS NULL OR TRIM(w.assignee) = '')");
+    } else {
+      const from = bind(windowStart);
+      const to = bind(generatedAt);
+      conditions.push(`w.updated_at >= ${from} AND w.updated_at <= ${to}`);
+    }
+
+    const limit = bind(WORK_HUB_LIMIT);
+    const rows = await queryAll(
+      `SELECT w.id, w.type, w.title, w.priority, w.status, w.assignee, w.scheduled_at, w.updated_at,
+              pi.project_id, p.name AS project_name
+       FROM worktask w
+       LEFT JOIN project_item pi ON pi.source_type = ${sourceType} AND pi.source_id = w.id
+       LEFT JOIN project p ON p.id = pi.project_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY ${orderField} DESC, w.id DESC
+       LIMIT ${limit}`,
+      params
+    );
+    return rows.map(mapWorkHubWorktaskRow).filter((item) => {
+      if (!item) return false;
+      if (partition === "overdue") return Boolean(item.scheduledAt) && Date.parse(item.scheduledAt) < Date.parse(generatedAt);
+      if (partition === "upcoming") {
+        const scheduledAt = Date.parse(item.scheduledAt || "");
+        return Number.isFinite(scheduledAt) && scheduledAt >= Date.parse(generatedAt) && scheduledAt < Date.parse(windowEnd);
+      }
+      if (partition === "recent") {
+        const updatedAt = Date.parse(item.updatedAt || "");
+        return Number.isFinite(updatedAt) && updatedAt >= Date.parse(windowStart) && updatedAt <= Date.parse(generatedAt);
+      }
+      return true;
+    });
+  };
+
+  const [overdue, upcoming, unassigned, recent] = await Promise.all([
+    readPartition("overdue"),
+    readPartition("upcoming"),
+    readPartition("unassigned"),
+    readPartition("recent")
+  ]);
+  return { overdue, upcoming, unassigned, recent };
+}
+
+async function getWorkHubOverview(options = {}) {
+  const requestedNow = options && typeof options === "object" ? options.now : "";
+  const requestedTime = typeof requestedNow === "string" ? Date.parse(requestedNow) : NaN;
+  const generatedAt = Number.isFinite(requestedTime) ? new Date(requestedTime).toISOString() : nowIso();
+  const generatedTime = Date.parse(generatedAt);
+  const windowStart = new Date(generatedTime - WORK_HUB_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const windowEnd = new Date(generatedTime + WORK_HUB_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const [feedbackResult, worktaskResult] = await Promise.allSettled([
+    readWorkHubFeedback(generatedAt, windowStart),
+    readWorkHubWorktask(generatedAt, windowStart, windowEnd)
+  ]);
+  const sourceResult = (sourceType, result) => {
+    if (result.status === "fulfilled") return { status: "ok" };
+    const errorCode = "WORK_HUB_SOURCE_UNAVAILABLE";
+    logger.warn({ event: "work_hub.source.unavailable", sourceType, errorCode }, "work hub source read failed");
+    return { status: "error", errorCode };
+  };
+  const feedbackSource = sourceResult("feedback", feedbackResult);
+  const worktaskSource = sourceResult("worktask", worktaskResult);
+  const feedbackItems = feedbackResult.status === "fulfilled" ? feedbackResult.value : [];
+  const worktaskItems = worktaskResult.status === "fulfilled" ? worktaskResult.value : null;
+  const recentItems = [
+    ...feedbackItems,
+    ...(worktaskItems ? worktaskItems.recent : [])
+  ];
+  const recentUnique = new Map();
+  for (const item of recentItems) {
+    const key = `${item.sourceType}:${item.sourceId}`;
+    if (!recentUnique.has(key)) recentUnique.set(key, item);
+  }
+  const recent = Array.from(recentUnique.values())
+    .filter((item) => item.updatedAt && Date.parse(item.updatedAt) >= generatedTime - WORK_HUB_WINDOW_DAYS * 24 * 60 * 60 * 1000 && Date.parse(item.updatedAt) <= generatedTime)
+    .sort((left, right) => compareWorkHubItems(left, right, "updatedAt"))
+    .slice(0, WORK_HUB_LIMIT);
+  const recentStatus = feedbackSource.status === "ok" && worktaskSource.status === "ok"
+    ? "ok"
+    : feedbackSource.status === "error" && worktaskSource.status === "error" ? "error" : "partial";
+  const sourceErrorCode = "WORK_HUB_SOURCE_UNAVAILABLE";
+
+  return {
+    generatedAt,
+    windowDays: WORK_HUB_WINDOW_DAYS,
+    limit: WORK_HUB_LIMIT,
+    sources: {
+      feedback: feedbackSource,
+      worktask: worktaskSource
+    },
+    sections: {
+      overdue: worktaskSource.status === "ok"
+        ? workHubSection("ok", worktaskItems.overdue.sort((left, right) => compareWorkHubItems(left, right, "scheduledAt")).slice(0, WORK_HUB_LIMIT))
+        : workHubSection("error", [], sourceErrorCode),
+      upcoming: worktaskSource.status === "ok"
+        ? workHubSection("ok", worktaskItems.upcoming.sort((left, right) => compareWorkHubItems(left, right, "scheduledAt")).slice(0, WORK_HUB_LIMIT))
+        : workHubSection("error", [], sourceErrorCode),
+      unassigned: worktaskSource.status === "ok"
+        ? workHubSection("ok", worktaskItems.unassigned.sort((left, right) => compareWorkHubItems(left, right, "updatedAt")).slice(0, WORK_HUB_LIMIT))
+        : workHubSection("error", [], sourceErrorCode),
+      recent: recentStatus === "error"
+        ? workHubSection("error", [], sourceErrorCode)
+        : workHubSection(recentStatus, recent)
+    }
   };
 }
 
@@ -2478,8 +2714,8 @@ function mapAccountWorktaskRow(row) {
   };
 }
 
-async function listFeedback({ status, keyword, page, pageSize }) {
-  const { whereClause, params, nextIndex } = buildFeedbackFilter(status, keyword);
+async function listFeedback({ id, status, keyword, page, pageSize }) {
+  const { whereClause, params, nextIndex } = buildFeedbackFilter(status, keyword, id);
   const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM feedback ${whereClause}`, params);
   const total = toNumber(totalRow && totalRow.count);
 
@@ -2585,8 +2821,8 @@ async function deleteFeedback(id) {
   return result.changes;
 }
 
-async function listWorktask({ status, keyword, priority, page, pageSize }) {
-  const { whereClause, params, nextIndex } = buildWorktaskFilter(status, keyword, priority);
+async function listWorktask({ id, status, keyword, priority, page, pageSize }) {
+  const { whereClause, params, nextIndex } = buildWorktaskFilter(status, keyword, priority, id);
   const totalRow = await queryOne(`SELECT COUNT(*) AS count FROM worktask ${whereClause}`, params);
   const total = toNumber(totalRow && totalRow.count);
 
@@ -3571,6 +3807,7 @@ module.exports = {
   cleanupExpiredSessions,
   nowIso,
   getHealthCounts,
+  getWorkHubOverview,
   createFeedback,
   createWorktask,
   createWorktaskByAdmin,
