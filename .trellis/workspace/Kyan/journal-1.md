@@ -314,3 +314,25 @@ Established backend and frontend development guidelines for the current Node.js 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: Work Hub 云端验证与归档
+
+**Date**: 2026-09-13
+**Task**: Work Hub 云端验证与归档
+**Branch**: `main`
+
+### Summary
+
+完成管理员 Work Hub 总览：逾期、近期计划、未分配、最近更新四个分区，安全聚合 API、精确跳转、降级与测试。云端 PostgreSQL/PM2/3088 部署后已确认 Work Hub 内容可见且摘要跳转正常；扩展主题、窄屏、键盘、空/失败重试项目保留在发布清单。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `19dee71` | (see git log) |
+| `d53d8ec` | (see git log) |
+
+### Status
+
+[OK] **Completed**
