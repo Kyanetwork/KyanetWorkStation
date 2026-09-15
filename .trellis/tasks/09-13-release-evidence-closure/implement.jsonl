@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"发布证据执行需要遵守后端数据库、错误边界、日志和质量门禁的总则。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"隔离 PostgreSQL 恢复、关键表核对和三数据库兼容检查必须沿用现有数据库边界。"}
+{"file":".trellis/spec/backend/external-boundaries.md","reason":"通知 outbox/handoff、AI 指标、Provider 脱敏和备份隔离恢复的操作证据遵循此边界契约。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"发布记录与日志采集需要遵守 request ID、字段白名单和敏感信息脱敏规则。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"最终自动门禁、Node 24 原生模块检查和未改业务代码的验证依据。"}

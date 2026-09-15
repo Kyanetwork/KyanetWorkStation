@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"检查发布证据任务是否越过后端数据访问、错误处理和质量边界。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 PostgreSQL custom dump 恢复只作用于唯一临时库，且没有业务 schema/数据变更。"}
+{"file":".trellis/spec/backend/external-boundaries.md","reason":"复核通知失败演练、handoff、AI 指标和敏感字段没有泄露或改变主流程。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"检查私有证据与日志摘要不包含凭据、正文、完整 URL 或无界错误文本。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行 npm test、audit、diff check、node check，并确认工作树只含本任务工件。"}

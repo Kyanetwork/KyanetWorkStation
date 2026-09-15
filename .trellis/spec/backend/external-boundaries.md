@@ -6,6 +6,11 @@
 发布前隔离备份验证和管理员 AI Provider。它们同时跨越外部输入、文件/数据库、API
 和静态前端，必须在边界处限制大小、字段和错误可见性。
 
+> **发布检查提示**：HTTPS 响应中的 HSTS 只能证明浏览器被要求优先使用 HTTPS，不能证明
+> HTTP 入口会返回 301/302。发布证据必须分别请求 HTTP 入口并检查状态码、`Location` 和
+> 最终 URL；若边缘/CDN 或应用有意返回 HTTP 200，应记录为策略差异并由代理维护者复核，
+> 不得把 HSTS 或 HTTPS health 单独当作 HTTP→HTTPS 重定向证据。
+
 ## 2. Signatures
 
 - `fetchMeowStatusDashboard({ baseUrl, timeoutMs }) -> Promise<DashboardProjection>`
